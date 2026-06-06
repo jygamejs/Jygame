@@ -3,14 +3,13 @@
 A lightweight 2D game framework for the browser.
 
 ```js
-import { Game, Scene, Sprite } from "jygame";
+import { Game, Scene, Sprite, Input } from "jygame";
 
 class MyScene extends Scene {
   constructor() {
     super();
     this.player = new Sprite(100, 100, 32, 32);
     this.player.style.fill = "#ff6600";
-    this.root.appendChild(this.player.rect);
   }
 
   update(dt) {
@@ -43,17 +42,18 @@ npm install jygame
 | Import | Description |
 |---|---|
 | `Game` | Main game loop with fixed timestep, canvas setup, UI layer, and scene management |
-| `Scene` | Lifecycle hooks: `enter`, `exit`, `pause`, `resume`, `update`, `render`, `renderUI` |
+| `Scene` | Lifecycle hooks (`enter`, `exit`, `pause`, `resume`, `update`, `render`, `renderUI`) plus auto-cleaned event helpers (`on`, `onSwipe`, `onTap`, `cleanup`) |
 | `Sprite` | Drawable with position, velocity, angle, scale, images, and shape styles |
 | `Group` | Collection of sprites with batch update/render/collision methods |
 | `Vec2` | 2D vector with add, sub, scale, dot, normalize, rotate, lerp |
 | `Rect` | AABB rectangle with collision, containment, overlap, and anchor helpers |
 | `Clock` | Fixed-timestep accumulator for deterministic updates |
 | `Timer` | Countdown timer with optional looping |
-| `Input` | Keyboard (WASD/arrows) and touch (swipe/tap) input handling |
+| `Input` | Keyboard (`isDown`, `justPressed`, `justReleased`) and touch (swipe/tap) input handling |
 | `Collision` | AABB, circle, point-rect, rect-circle, and group collision detection |
 | `State` | Observable state container with subscribe/unsubscribe |
 | `Storage` | `localStorage` wrapper with JSON serialization |
+| `Color`, `Colors` | Color class with parsing, manipulation, and a palette of named colors |
 | `ImageLoader` | Image preloading with in-memory cache |
 | `FontLoader` | FontFace loading for custom web fonts |
 
