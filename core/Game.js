@@ -2,7 +2,7 @@ import { Clock } from "../time/Clock.js";
 import { Input } from "../input/Input.js";
 
 export class Game {
-  constructor({ parent, width, height, fps = 60 }) {
+  constructor({ parent, width, height, fps = 60, scaleToFit = null }) {
     const container = typeof parent === "string"
       ? document.querySelector(parent)
       : parent;
@@ -38,6 +38,52 @@ export class Game {
     this.fps = 60;
 
     Input.init();
+
+    if (scaleToFit) {
+      const vp = scaleToFit === true
+        ? { width, height, padding: 0, element: undefined }
+        : scaleToFit;
+      const vpW = vp.width ?? width;
+      const vpH = vp.height ?? height;
+      const pad = vp.padding ?? 0;
+      const target = typeof vp.element === "string"
+        ? document.querySelector(vp.element) || document.documentElement
+        : vp.element || document.documentElement;
+      this._viewport = { width: vpW, height: vpH, padding: pad, target };
+      this._applyViewport();
+      this._resizeObserver = new ResizeObserver(() => this._applyViewport());
+      this._resizeObserver.observe(document.documentElement);
+      this._resizeHandler = () => this._applyViewport();
+      window.addEventListener("resize", this._resizeHandler);
+    }
+  }
+
+  _applyViewport() {
+    const { target } = this._viewport;
+    const doc = document.documentElement;
+    const style = getComputedStyle(doc);
+    const cssScale = style.getPropertyValue("--jygame-scale").trim();
+    if (cssScale) {
+      const s = parseFloat(cssScale);
+      const mv = style.getPropertyValue("--jygame-margin-v").trim();
+      target.style.transform = `scale(${s})`;
+      target.style.marginTop = mv;
+      target.style.marginBottom = mv;
+      doc.style.removeProperty("--jygame-scale");
+      doc.style.removeProperty("--jygame-margin-v");
+      return;
+    }
+    const { width: vpW, height: vpH, padding: pad } = this._viewport;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const availW = vw - pad * 2;
+    const availH = vh - pad * 2;
+    const scale = Math.min(1, availW / vpW, availH / vpH);
+    const visualH = vpH * scale;
+    const marginV = ((vpH - visualH) / 2) * -1;
+    target.style.transform = `scale(${scale})`;
+    target.style.marginTop = marginV + "px";
+    target.style.marginBottom = marginV + "px";
   }
 
   get isPaused() {
@@ -141,6 +187,8 @@ export class Game {
   destroy() {
     this._running = false;
     if (this._rafId) cancelAnimationFrame(this._rafId);
+    if (this._resizeHandler) window.removeEventListener("resize", this._resizeHandler);
+    if (this._resizeObserver) this._resizeObserver.disconnect();
     this.scene.exit();
     Input.destroy();
   }
