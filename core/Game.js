@@ -2,7 +2,7 @@ import { Clock } from "../time/Clock.js";
 import { Input } from "../input/Input.js";
 
 export class Game {
-  constructor({ parent, width, height, fps = 60, scaleToFit = null }) {
+  constructor({ parent, width, height, fps = 60, maxTicks = 5, scaleToFit = null }) {
     const container = typeof parent === "string"
       ? document.querySelector(parent)
       : parent;
@@ -29,7 +29,7 @@ export class Game {
     this.ctx = this.canvas.getContext("2d");
     this.width = width;
     this.height = height;
-    this.clock = new Clock(fps);
+    this.clock = new Clock(fps, maxTicks);
     this.scene = null;
     this._running = false;
     this._paused = false;
@@ -170,11 +170,11 @@ export class Game {
         if (this._paused) break;
         this.scene.update(this.clock.fixedDt);
       }
-    } else {
-      this.scene.update(0);
     }
 
     Input.updateFrame();
+
+    this.scene.interpolate?.(this.clock.alpha);
 
     this.fps += ((1 / Math.max(realDt, 0.001)) - this.fps) * 0.05;
 

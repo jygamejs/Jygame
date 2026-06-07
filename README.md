@@ -46,7 +46,7 @@ Full API reference, guides, and examples: [jygame-documentation.vercel.app](http
 | Import | Description |
 |---|---|
 | `Game` | Main game loop with fixed timestep, canvas setup, UI layer, and scene management |
-| `Scene` | Lifecycle hooks (`enter`, `exit`, `pause`, `resume`, `update`, `render`, `renderUI`) plus auto-cleaned event helpers (`on`, `onSwipe`, `onTap`, `cleanup`) |
+| `Scene` | Lifecycle hooks (`enter`, `exit`, `pause`, `resume`, `update`, `interpolate`, `render`, `renderUI`) plus auto-cleaned event helpers (`on`, `onSwipe`, `onTap`, `cleanup`) |
 | `Sprite` | Drawable with position, velocity, angle, scale, images, and shape styles |
 | `Group` | Collection of sprites with batch update/render/collision methods |
 | `Vec2` | 2D vector with add, sub, scale, dot, normalize, rotate, lerp |

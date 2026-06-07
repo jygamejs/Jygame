@@ -34,6 +34,7 @@ export class Scene {
   pause() {}
   resume() {}
   update(dt) {}
+  interpolate(alpha) {}
   render(ctx) {}
   renderUI() {}
 
