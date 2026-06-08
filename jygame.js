@@ -1,4 +1,5 @@
 export { Vec2 } from "./math/Vec2.js";
+export { Renderable } from "./components/Renderable.js";
 export { Rect } from "./geometry/Rect.js";
 export { Clock } from "./time/Clock.js";
 export { Timer } from "./time/Timer.js";
@@ -9,6 +10,7 @@ export { SpatialHash } from "./collision/SpatialHash.js";
 export { Sprite } from "./display/Sprite.js";
 export { Group } from "./display/Group.js";
 export { Input, InputContext } from "./input/Input.js";
+export { LoadingTask } from "./assets/LoadingTask.js";
 export { ImageLoader } from "./assets/ImageLoader.js";
 export { FontLoader } from "./assets/FontLoader.js";
 export { Scene } from "./core/Scene.js";

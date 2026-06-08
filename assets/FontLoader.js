@@ -1,3 +1,5 @@
+import { LoadingTask } from "./LoadingTask.js";
+
 const _loaded = new Set();
 
 export const FontLoader = {
@@ -10,11 +12,18 @@ export const FontLoader = {
     _loaded.add(family);
   },
 
-  async loadAll(map) {
+  loadAll(map) {
     const entries = Object.entries(map);
-    await Promise.all(
-      entries.map(([family, path]) => this.load(family, path))
-    );
+    const task = new LoadingTask();
+    task.expect(entries.length);
+
+    for (const [family, path] of entries) {
+      this.load(family, path).then(() => {
+        task.done();
+      }).catch((err) => task.fail(err));
+    }
+
+    return task;
   },
 
   isLoaded(family) {

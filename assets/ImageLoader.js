@@ -1,3 +1,5 @@
+import { LoadingTask } from "./LoadingTask.js";
+
 const _cache = new Map();
 
 async function _decode(img, path) {
@@ -29,14 +31,19 @@ export const ImageLoader = {
 
   loadAll(map, options) {
     const entries = Object.entries(map);
-    return Promise.all(
-      entries.map(([key, path]) =>
-        this.load(path, options).then((img) => {
-          _cache.set(key, img);
-          return [key, img];
-        })
-      )
-    ).then((results) => Object.fromEntries(results));
+    const results = {};
+    const task = new LoadingTask(() => results);
+    task.expect(entries.length);
+
+    for (const [key, path] of entries) {
+      this.load(path, options).then((img) => {
+        results[key] = img;
+        _cache.set(key, img);
+        task.done();
+      }).catch((err) => task.fail(err));
+    }
+
+    return task;
   },
 
   get(key) {
