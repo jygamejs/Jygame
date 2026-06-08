@@ -18,6 +18,8 @@ export { Scene } from "./core/Scene.js";
 export { Game } from "./core/Game.js";
 export { Color, Colors } from "./color/Colors.js";
 export { Pool } from "./memory/Pool.js";
+export { Animation } from "./components/Animation.js";
+export { AnimationSystem, animationSystem } from "./systems/AnimationSystem.js";
 export { MovementSystem, movementSystem } from "./systems/MovementSystem.js";
 export { RenderSystem, renderSystem } from "./systems/RenderSystem.js";
 export { CollisionSystem, collisionSystem } from "./systems/CollisionSystem.js";

@@ -2,6 +2,7 @@ import { Vec2 } from "../math/Vec2.js";
 import { Transform } from "../components/Transform.js";
 import { Collider } from "../components/Collider.js";
 import { Renderable } from "../components/Renderable.js";
+import { Animation } from "../components/Animation.js";
 
 export class Sprite {
   constructor(x, y, w, h) {
@@ -11,6 +12,7 @@ export class Sprite {
     this.visible = true;
     this.groups = [];
     this.renderable = new Renderable();
+    this.animation = new Animation();
   }
 
   get x() { return this.transform.x - this.collider.width / 2; }

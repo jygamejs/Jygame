@@ -11,7 +11,8 @@ entities that expose the required components — no type checking, no base class
 |---|---|---|
 | `Transform` | `x`, `y`, `rotation`, `scale` | MovementSystem, RenderSystem, CollisionSystem, SpatialHash |
 | `Collider` | `width`, `height` | CollisionSystem, SpatialHash, RenderSystem (culling) |
-| `Renderable` | `image`, `style`, `draw()` | RenderSystem |
+| `Renderable` | `image`, `style`, `draw()` | RenderSystem, AnimationSystem |
+| `Animation` | `animations`, `current`, `frame`, `elapsed`, `playing` | AnimationSystem |
 | `Velocity` | `x`, `y` (Vec2) | MovementSystem |
 | `Visible` | `visible` (boolean) | RenderSystem, CollisionSystem, SpatialHash |
 
@@ -19,6 +20,7 @@ entities that expose the required components — no type checking, no base class
 
 | System | Reads | Writes | Singleton |
 |---|---|---|---|
+| `AnimationSystem` | `animation`, `renderable` | `renderable.image`, `animation.frame`, `animation.elapsed`, `animation.playing` | `animationSystem` |
 | `MovementSystem` | `velocity`, `transform` | `transform.x`, `transform.y` | `movementSystem` |
 | `RenderSystem` | `transform`, `collider`, `renderable`, `visible` | canvas (side effect) | `renderSystem` |
 | `CollisionSystem` | `transform`, `collider`, `visible` | none | `collisionSystem` |
@@ -31,6 +33,8 @@ entities that expose the required components — no type checking, no base class
 | Position, rotation, scale | `Transform` — authoritative | Single source of truth |
 | Entity size (AABB) | `Collider` — authoritative | Separate from visual bounds |
 | Visual appearance | `Renderable` — authoritative | Image or shape style |
+| Animation state | `Animation` — authoritative | `current`, `frame`, `elapsed`, `playing` |
+| Frame advancement | `AnimationSystem` | Writes `renderable.image`, advances `Animation` state |
 | Speed and direction | `Velocity` — authoritative | Consumed by MovementSystem |
 | Entity membership | `Group._sprites` | Private array, iterable |
 | SpatialHash lifecycle | `CollisionSystem` | `beginFrame()` → all rebuilds |
@@ -72,13 +76,30 @@ Sprite (data entity)
 ├── Collider
 ├── Velocity (Vec2)
 ├── Renderable
+├── Animation
 ├── visible: boolean
 └── groups: Group[]
 ```
 
-- No `update()`, no `render()` — systems handle behavior
+- No `update()`, no `render()`, no animation logic — systems handle behavior
 - `kill()` removes from all groups
 - Public getters (`x`, `y`, `width`, `height`, `image`, `style`, `angle`, `scale`) are convenience shorthands over components
+
+### AnimationSystem
+
+```
+AnimationSystem
+├── update(entities, dt)    batch frame advancement
+├── updateOne(entity, dt)   single entity
+└── no per-frame allocations
+```
+
+- Operates on any entity with `animation` + `renderable`
+- `while (elapsed >= frameTime)` loop — catches up frames after spikes
+- Per-clip FPS (no global animation speed)
+- Non-looping clips stop on last frame, fire callback once
+- Writes `entity.renderable.image` directly — RenderSystem is unaware of AnimationSystem
+- Future sprite sheet support: `clip.frames[n]` can be metadata without changing the system
 
 ### CollisionSystem
 
@@ -121,6 +142,7 @@ Game._loop(time)
 │
 ├── scene.update(fixedDt)
 │   ├── user input handling
+│   ├── animationSystem.update(group, dt)
 │   ├── movementSystem.update(group, dt)
 │   ├── collisionSystem.beginFrame()
 │   ├── collisionSystem.collideXxx(...)
@@ -137,6 +159,7 @@ Game._loop(time)
 
 | Operation | Allocation |
 |---|---|
+| `AnimationSystem.update` | 0 |
 | `RenderSystem.render` | 0 |
 | `MovementSystem.update` | 0 |
 | `CollisionSystem.beginFrame()` | 0 (cells cleared + reused) |
@@ -157,6 +180,10 @@ Any object with the following properties works with the engine:
 // Required by MovementSystem
 entity.transform   // { x, y }
 entity.velocity    // { x, y }
+
+// Additional requirement for AnimationSystem
+entity.animation   // { animations, current, frame, elapsed, playing }
+entity.renderable  // { draw(ctx, w, h) }
 
 // Additional requirement for RenderSystem
 entity.visible     // boolean
