@@ -5,6 +5,7 @@ export { Timer } from "./time/Timer.js";
 export { State } from "./state/State.js";
 export { Storage } from "./storage/Storage.js";
 export { Collision } from "./collision/Collision.js";
+export { SpatialHash } from "./collision/SpatialHash.js";
 export { Sprite } from "./display/Sprite.js";
 export { Group } from "./display/Group.js";
 export { Input } from "./input/Input.js";

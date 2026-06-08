@@ -1,6 +1,14 @@
+import { SpatialHash } from "../collision/SpatialHash.js";
+
 export class Group {
   constructor() {
     this._sprites = [];
+    this._spatial = null;
+  }
+
+  useSpatialHash(cellSize = 64) {
+    this._spatial = new SpatialHash(cellSize);
+    return this;
   }
 
   add(sprite) {
@@ -74,6 +82,10 @@ export class Group {
 
   collideRect(rect, out) {
     const hits = out || [];
+    if (this._spatial) {
+      this._spatial.rebuild(this._sprites);
+      return this._spatial.collideRect(rect, hits);
+    }
     for (const sprite of this._sprites) {
       if (!sprite.visible) continue;
       if (sprite.rect.collides(rect)) {
@@ -85,6 +97,10 @@ export class Group {
 
   collidePoint(point, out) {
     const hits = out || [];
+    if (this._spatial) {
+      this._spatial.rebuild(this._sprites);
+      return this._spatial.collidePoint(point, hits);
+    }
     for (const sprite of this._sprites) {
       if (!sprite.visible) continue;
       if (sprite.rect.contains(point)) {
@@ -96,6 +112,11 @@ export class Group {
 
   collideGroup(other, out) {
     const pairs = out || [];
+    if (this._spatial && other._spatial) {
+      this._spatial.rebuild(this._sprites);
+      other._spatial.rebuild(other._sprites);
+      return this._spatial.collideGroup(other._spatial, pairs);
+    }
     for (const sa of this._sprites) {
       if (!sa.visible) continue;
       for (const sb of other._sprites) {
@@ -111,6 +132,10 @@ export class Group {
   collideSprite(sprite, out) {
     const hits = out || [];
     if (!sprite.visible) return hits;
+    if (this._spatial) {
+      this._spatial.rebuild(this._sprites);
+      return this._spatial.collideSprite(sprite, hits);
+    }
     for (const s of this._sprites) {
       if (!s.visible) continue;
       if (s.rect.collides(sprite.rect)) {
