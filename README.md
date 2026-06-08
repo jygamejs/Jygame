@@ -48,7 +48,7 @@ Full API reference, guides, and examples: [jygame-documentation.vercel.app](http
 | `Game` | Main game loop with fixed timestep, canvas setup, UI layer, and scene management |
 | `Scene` | Lifecycle hooks (`enter`, `exit`, `pause`, `resume`, `update`, `interpolate`, `render`, `renderUI`) plus auto-cleaned event helpers (`on`, `onSwipe`, `onTap`, `cleanup`) |
 | `Sprite` | Entity with `Transform`, `Collider`, `Velocity`, `Renderable`, and `Visibility` components. Exposes `x`, `y`, `width`, `height`, `angle`, `scale`, `velocity`, `image`, `style` shorthands. |
-| `Group` | Collection of sprites with batch update/render via `MovementSystem`/`RenderSystem`. Built-in AABB collision. Optional `SpatialHash` acceleration. |
+| `Group` | Entity container with batch render via `RenderSystem`. Iterable (`for...of`). Collision queries delegate to `CollisionSystem`. Optional `SpatialHash` acceleration. |
 | `Transform` | Position (`x`, `y`), rotation, and scale — the single source of truth for world position |
 | `Collider` | AABB dimensions (`width`, `height`) with static collision helpers (`checkAABB`, `checkRect`, `containsPoint`) |
 | `Renderable` | Image or shape style with cached `Path2D` for circle/ellipse/rect |
@@ -57,7 +57,6 @@ Full API reference, guides, and examples: [jygame-documentation.vercel.app](http
 | `Clock` | Fixed-timestep accumulator for deterministic updates |
 | `Timer` | Countdown timer with optional looping |
 | `Input` | Keyboard (`isDown`, `justPressed`, `justReleased`) and touch (swipe/tap) input handling |
-| `Collision` | AABB, circle, point-rect, rect-circle, and group collision detection |
 | `SpatialHash` | Spatial partitioning for broad-phase collision acceleration |
 | `State` | Observable state container with subscribe/unsubscribe |
 | `Storage` | `localStorage` wrapper with JSON serialization |
@@ -70,6 +69,8 @@ Full API reference, guides, and examples: [jygame-documentation.vercel.app](http
 | `RenderSystem` | Batch rendering with viewport culling, rotation, and scale |
 | `movementSystem` | Shared singleton instance of `MovementSystem` |
 | `renderSystem` | Shared singleton instance of `RenderSystem` |
+| `CollisionSystem` | Collision queries, broad-phase selection, and `SpatialHash` lifecycle |
+| `collisionSystem` | Shared singleton instance of `CollisionSystem` |
 
 ## Architecture
 
@@ -87,19 +88,47 @@ Sprite
 Behavior lives in stateless systems:
 
 ```
-MovementSystem   →  updates Transform from Velocity
-RenderSystem     →  draws Renderable at Transform with viewport culling
+MovementSystem    →  updates Transform from Velocity
+RenderSystem      →  draws Renderable at Transform with viewport culling
+CollisionSystem   →  collision queries with SpatialHash broad-phase
 ```
 
-`Group.update(dt)` delegates to `MovementSystem` for batch movement.
-`Group.render(ctx, viewport)` delegates to `RenderSystem` for batch rendering.
-`Group.collideRect/Point/Group/Sprite` use brute-force AABB checks, or
-`SpatialHash` for broad-phase acceleration (enable via `group.useSpatialHash()`).
+`Group.render(ctx, viewport)` delegates to `RenderSystem`.
+Collision queries (`collideRect`, `collidePoint`, `collideGroup`,
+`collideSprite`) are thin wrappers that delegate to `CollisionSystem`.
 
-When using `SpatialHash`, call `group.update(dt)` once per frame — it
-rebuilds the spatial partition automatically. Structural changes
-(`add`/`remove`/`clear`) trigger a rebuild on the next collision query.
-For manual control, call `group.rebuildSpatialHash()`.
+`Group` no longer owns an `update()` method. Systems execute at the scene
+level — `Group` is a pure container with iteration (`for...of`, `forEach`,
+`filter`, `map`) and membership management (`add`, `remove`, `clear`, `has`).
+
+`CollisionSystem` owns the full `SpatialHash` lifecycle:
+
+- **`collisionSystem.beginFrame()`** rebuilds every registered `SpatialHash`
+  once. Call once per frame after all movement is done.
+- **`collisionSystem.removeGroup(group)`** unregisters a group when it is
+  no longer needed (e.g., `Scene.exit()`).
+- `SpatialHash` is rebuilt every frame — no stale state, no dirty flags.
+  Rebuilding a dynamic spatial hash once per frame is standard practice.
+
+The internal sweep is safe with no groups registered (no-op).
+
+Typical per-frame usage:
+
+```javascript
+movementSystem.update(enemies, dt);        // batch movement
+
+collisionSystem.beginFrame();              // rebuild all spatial hashes
+
+collisionSystem.collidePoint(enemies, mouse);
+collisionSystem.collideRect(enemies, explosion);
+collisionSystem.collideSprite(enemies, player);
+```
+
+→ 1 rebuild (across all groups), N lookups.
+
+`CollisionSystem` is designed to support future broad-phase strategies.
+Swapping `SpatialHash` for `SweepAndPrune` or another strategy happens in
+one place — the system, not in each group or query method.
 
 ## License
 
