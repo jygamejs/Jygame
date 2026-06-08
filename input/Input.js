@@ -40,4 +40,9 @@ export const Input = {
   onTap(cb) { return _default.onTap(cb); },
   removeSwipe(cb) { _default.removeSwipe(cb); },
   removeTap(cb) { _default.removeTap(cb); },
+
+  bind(action, input) { _default.bind(action, input); },
+  unbind(action, input) { _default.unbind(action, input); },
+  getBindings(action) { return _default.getBindings(action); },
+  clearBindings(action) { _default.clearBindings(action); },
 };

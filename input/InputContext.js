@@ -22,12 +22,13 @@ export class InputContext {
     this._justPressed = new Map();
     this._justReleased = new Map();
     this._pointers = new Map();
+    this._actions = new Map();
     this._pointerX = 0;
     this._pointerY = 0;
     this._target = null;
-    this._swipeListeners = [];
-    this._tapListeners = [];
-    this._keyMap = { ...DEFAULT_KEY_MAP };
+    this._swipeListeners = new Set();
+    this._tapListeners = new Set();
+    this._keyMap = new Map(Object.entries(DEFAULT_KEY_MAP));
     this.buffer = [];
 
     this.swipeThreshold = options.swipeThreshold ?? 30;
@@ -72,8 +73,9 @@ export class InputContext {
     this._pressed.clear();
     this._justPressed.clear();
     this._justReleased.clear();
-    this._swipeListeners = [];
-    this._tapListeners = [];
+    this._actions.clear();
+    this._swipeListeners.clear();
+    this._tapListeners.clear();
     this._target = null;
     this.buffer = [];
   }
@@ -88,35 +90,68 @@ export class InputContext {
   }
 
   mapKey(rawKey, alias) {
-    this._keyMap[rawKey] = alias;
+    this._keyMap.set(rawKey, alias);
   }
 
   unmapKey(rawKey) {
-    delete this._keyMap[rawKey];
+    this._keyMap.delete(rawKey);
   }
 
   setKeyMap(map) {
-    this._keyMap = { ...map };
+    this._keyMap = new Map(Object.entries(map));
   }
 
   resetKeyMap() {
-    this._keyMap = { ...DEFAULT_KEY_MAP };
+    this._keyMap = new Map(Object.entries(DEFAULT_KEY_MAP));
   }
 
   getKeyMap() {
-    return { ...this._keyMap };
+    return Object.fromEntries(this._keyMap);
+  }
+
+  bind(action, input) {
+    let inputs = this._actions.get(action);
+    if (!inputs) {
+      inputs = new Set();
+      this._actions.set(action, inputs);
+    }
+    inputs.add(input);
+  }
+
+  unbind(action, input) {
+    const inputs = this._actions.get(action);
+    if (inputs) inputs.delete(input);
+  }
+
+  getBindings(action) {
+    const inputs = this._actions.get(action);
+    return inputs ? [...inputs] : [];
+  }
+
+  clearBindings(action) {
+    this._actions.delete(action);
+  }
+
+  _resolve(name, map) {
+    if (map.get(name)) return true;
+    const inputs = this._actions.get(name);
+    if (!inputs) return false;
+    for (const input of inputs) {
+      if (map.get(input)) return true;
+    }
+    return false;
   }
 
   isDown(key) {
-    return !!this._pressed.get(key);
+    return this._resolve(key, this._pressed);
   }
 
   justPressed(key) {
-    return !!this._justPressed.get(key);
+    return this._resolve(key, this._justPressed);
   }
 
   justReleased(key) {
-    return !!this._justReleased.get(key);
+    return this._resolve(key, this._justReleased);
   }
 
   consumeBuffer() {
@@ -134,7 +169,7 @@ export class InputContext {
   }
 
   getPointers() {
-    return [...this._pointers.values()];
+    return this._pointers.values();
   }
 
   forEachPointer(fn) {
@@ -142,25 +177,25 @@ export class InputContext {
   }
 
   onSwipe(cb) {
-    this._swipeListeners.push(cb);
+    this._swipeListeners.add(cb);
     return () => {
-      this._swipeListeners = this._swipeListeners.filter(l => l !== cb);
+      this._swipeListeners.delete(cb);
     };
   }
 
   onTap(cb) {
-    this._tapListeners.push(cb);
+    this._tapListeners.add(cb);
     return () => {
-      this._tapListeners = this._tapListeners.filter(l => l !== cb);
+      this._tapListeners.delete(cb);
     };
   }
 
   removeSwipe(cb) {
-    this._swipeListeners = this._swipeListeners.filter(l => l !== cb);
+    this._swipeListeners.delete(cb);
   }
 
   removeTap(cb) {
-    this._tapListeners = this._tapListeners.filter(l => l !== cb);
+    this._tapListeners.delete(cb);
   }
 
   _handleKeyDown(e) {
@@ -168,7 +203,7 @@ export class InputContext {
     if (!this._pressed.get(raw)) this._justPressed.set(raw, true);
     this._pressed.set(raw, true);
 
-    const alias = this._keyMap[raw];
+    const alias = this._keyMap.get(raw);
     if (alias) {
       if (!this._pressed.get(alias)) this._justPressed.set(alias, true);
       this._pressed.set(alias, true);
@@ -184,7 +219,7 @@ export class InputContext {
     if (this._pressed.get(raw)) this._justReleased.set(raw, true);
     this._pressed.set(raw, false);
 
-    const alias = this._keyMap[raw];
+    const alias = this._keyMap.get(raw);
     if (alias) {
       if (this._pressed.get(alias)) this._justReleased.set(alias, true);
       this._pressed.set(alias, false);

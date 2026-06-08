@@ -41,6 +41,8 @@ npm install jygame
 
 Full API reference, guides, and examples: [jygame-documentation.vercel.app](https://jygame-documentation.vercel.app/)
 
+Note: `getPointers()` now returns an iterator (not an array). Use `for...of` or `forEachPointer()` to iterate. `getPointer(id)` and `forEachPointer(fn)` remain unchanged.
+
 ## API
 
 | Import | Description |
@@ -58,7 +60,7 @@ Full API reference, guides, and examples: [jygame-documentation.vercel.app](http
 | `Rect` | AABB rectangle utility with collision, containment, overlap, and anchor helpers |
 | `Clock` | Fixed-timestep accumulator for deterministic updates |
 | `Timer` | Countdown timer with optional looping |
-| `Input` | Keyboard (`isDown`, `justPressed`, `justReleased`) and touch (swipe/tap) input handling |
+| `Input` | Keyboard (`isDown`, `justPressed`, `justReleased`), action bindings (`bind`/`unbind`), and touch (swipe/tap) input handling |
 | `SpatialHash` | Spatial partitioning for broad-phase collision acceleration. Stamp-based single-entity dedup; reusable scratch `Set` for pair dedup. |
 | `State` | Observable state container with subscribe/unsubscribe |
 | `Storage` | `localStorage` wrapper with JSON serialization |
@@ -105,6 +107,23 @@ renderSystem.render(ctx, enemies);
 `collisionSystem.beginFrame()` rebuilds all registered broad-phase
 strategies. Default is `SpatialHash`. Strategies are pluggable via the
 same interface.
+
+### Action Bindings
+
+Actions decouple gameplay logic from physical keys:
+
+```js
+Input.bind("JUMP", "SPACE");
+Input.bind("JUMP", "W");
+
+// Later: key mapping resolves W → UP, bindings resolve UP → JUMP
+if (Input.justPressed("JUMP")) {
+  player.jump();
+}
+```
+
+Resolution order: `Physical Key → Key Alias → Action`. `isDown`,
+`justPressed`, and `justReleased` all follow this chain automatically.
 
 ## License
 

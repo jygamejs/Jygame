@@ -115,6 +115,39 @@ Camera (transform)
 - Future features (shake, smoothing, parallax, dead zones) go in
   camera controllers, not in Camera itself
 
+### Input
+
+```
+Input (facade) → InputContext (implementation)
+├── _pressed, _justPressed, _justReleased    Map<name, bool>
+├── _keyMap      Map<physicalKey, alias>      alias resolution
+├── _actions     Map<action, Set<input>>     action resolution
+├── _pointers    Map<pointerId, data>
+├── _swipeListeners / _tapListeners          Set<callback>
+├── isDown / justPressed / justReleased       key → alias → action
+├── mapKey / unmapKey / setKeyMap / resetKeyMap
+├── bind / unbind / getBindings / clearBindings
+├── getPointers()                             returns iterator (no alloc)
+├── forEachPointer(fn)
+├── getPointer(id)
+├── onSwipe / onTap                           return unsubscribe fn (no alloc)
+├── removeSwipe / removeTap                   O(1) Set.delete
+└── consumeBuffer / peekBuffer
+```
+
+Resolution chain: `Physical Key → Key Alias → Action`
+
+All three query methods (`isDown`, `justPressed`, `justReleased`) follow the
+same chain via `_resolve(name, map)` — no duplicated lookup logic.
+
+Listeners use `Set` (O(1) add/delete). Unsubscribe functions capture the
+callback and call `Set.delete()` — no array allocation on removal.
+
+`getPointers()` returns `Map.values()` iterator directly — no array copy.
+
+The `Input` facade delegates every method to the default `InputContext`
+singleton, including the new `bind`/`unbind`/`getBindings`/`clearBindings`.
+
 ### AnimationSystem
 
 ```
