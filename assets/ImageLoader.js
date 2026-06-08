@@ -34,4 +34,12 @@ export const ImageLoader = {
   has(key) {
     return _cache.has(key);
   },
+
+  unload(key) {
+    return _cache.delete(key);
+  },
+
+  clear() {
+    _cache.clear();
+  },
 };

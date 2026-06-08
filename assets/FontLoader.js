@@ -20,4 +20,12 @@ export const FontLoader = {
   isLoaded(family) {
     return _loaded.has(family);
   },
+
+  unload(family) {
+    return _loaded.delete(family);
+  },
+
+  clear() {
+    _loaded.clear();
+  },
 };
