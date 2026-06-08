@@ -41,6 +41,51 @@ export class Rect {
   get center()    { return { x: this.centerx, y: this.centery }; }
   set center(p)   { this.centerx = p.x; this.centery = p.y; }
 
+  getCenter(out) {
+    if (out) { out.x = this.centerx; out.y = this.centery; return out; }
+    return { x: this.centerx, y: this.centery };
+  }
+
+  getTopLeft(out) {
+    if (out) { out.x = this.x; out.y = this.y; return out; }
+    return { x: this.x, y: this.y };
+  }
+
+  getTopRight(out) {
+    if (out) { out.x = this.right; out.y = this.y; return out; }
+    return { x: this.right, y: this.y };
+  }
+
+  getBottomLeft(out) {
+    if (out) { out.x = this.x; out.y = this.bottom; return out; }
+    return { x: this.x, y: this.bottom };
+  }
+
+  getBottomRight(out) {
+    if (out) { out.x = this.right; out.y = this.bottom; return out; }
+    return { x: this.right, y: this.bottom };
+  }
+
+  getMidTop(out) {
+    if (out) { out.x = this.centerx; out.y = this.y; return out; }
+    return { x: this.centerx, y: this.y };
+  }
+
+  getMidLeft(out) {
+    if (out) { out.x = this.x; out.y = this.centery; return out; }
+    return { x: this.x, y: this.centery };
+  }
+
+  getMidBottom(out) {
+    if (out) { out.x = this.centerx; out.y = this.bottom; return out; }
+    return { x: this.centerx, y: this.bottom };
+  }
+
+  getMidRight(out) {
+    if (out) { out.x = this.right; out.y = this.centery; return out; }
+    return { x: this.right, y: this.centery };
+  }
+
   collides(other) {
     return (
       this.left < other.right &&
