@@ -1,6 +1,6 @@
-const _pressed = {};
-const _justPressed = {};
-const _justReleased = {};
+const _pressed = new Map();
+const _justPressed = new Map();
+const _justReleased = new Map();
 
 const DEFAULT_KEY_MAP = Object.freeze({
   ArrowUp: "UP",
@@ -22,24 +22,25 @@ const DEFAULT_KEY_MAP = Object.freeze({
 
 let _keyMap = { ...DEFAULT_KEY_MAP };
 
+const _pointers = new Map();
+let _pointerX = 0;
+let _pointerY = 0;
+let _target = null;
+
 let _swipeListeners = [];
 let _tapListeners = [];
-let _trackingTouch = false;
-let _touchStartX = 0;
-let _touchStartY = 0;
-let _touchStartTime = 0;
 const MIN_SWIPE = 30;
 const TAP_TIMEOUT = 300;
 
 function handleKeyDown(e) {
   const raw = e.key;
-  if (!_pressed[raw]) _justPressed[raw] = true;
-  _pressed[raw] = true;
+  if (!_pressed.get(raw)) _justPressed.set(raw, true);
+  _pressed.set(raw, true);
 
   const alias = _keyMap[raw];
   if (alias) {
-    if (!_pressed[alias]) _justPressed[alias] = true;
-    _pressed[alias] = true;
+    if (!_pressed.get(alias)) _justPressed.set(alias, true);
+    _pressed.set(alias, true);
   }
 
   if (raw.startsWith("Arrow") || raw === " ") {
@@ -49,93 +50,120 @@ function handleKeyDown(e) {
 
 function handleKeyUp(e) {
   const raw = e.key;
-  if (_pressed[raw]) _justReleased[raw] = true;
-  _pressed[raw] = false;
+  if (_pressed.get(raw)) _justReleased.set(raw, true);
+  _pressed.set(raw, false);
 
   const alias = _keyMap[raw];
   if (alias) {
-    if (_pressed[alias]) _justReleased[alias] = true;
-    _pressed[alias] = false;
+    if (_pressed.get(alias)) _justReleased.set(alias, true);
+    _pressed.set(alias, false);
   }
 }
 
-function handleTouchStart(e) {
-  _trackingTouch = true;
-  const t = e.touches[0];
-  _touchStartX = t.clientX;
-  _touchStartY = t.clientY;
-  _touchStartTime = Date.now();
-  e.preventDefault();
+function handlePointerDown(e) {
+  _pointers.set(e.pointerId, {
+    id: e.pointerId,
+    x: e.clientX,
+    y: e.clientY,
+    startX: e.clientX,
+    startY: e.clientY,
+    startTime: performance.now(),
+    pointerType: e.pointerType,
+    isDown: true,
+  });
+  _pointerX = e.clientX;
+  _pointerY = e.clientY;
+  if (e.cancelable) e.preventDefault();
 }
 
-function handleTouchMove(e) {
-  if (!_trackingTouch) return;
-  e.preventDefault();
+function handlePointerMove(e) {
+  const p = _pointers.get(e.pointerId);
+  if (!p) return;
+  p.x = e.clientX;
+  p.y = e.clientY;
+  _pointerX = e.clientX;
+  _pointerY = e.clientY;
+  if (e.cancelable) e.preventDefault();
 }
 
-function handleTouchEnd(e) {
-  if (!_trackingTouch) return;
-  _trackingTouch = false;
+function handlePointerUp(e) {
+  const p = _pointers.get(e.pointerId);
+  if (!p || !p.isDown) return;
+  p.x = e.clientX;
+  p.y = e.clientY;
+  p.isDown = false;
 
-  const t = e.changedTouches[0];
-  const deltaX = t.clientX - _touchStartX;
-  const deltaY = t.clientY - _touchStartY;
-  const absDx = Math.abs(deltaX);
-  const absDy = Math.abs(deltaY);
-  const elapsed = Date.now() - _touchStartTime;
+  const dx = p.x - p.startX;
+  const dy = p.y - p.startY;
+  const absDx = Math.abs(dx);
+  const absDy = Math.abs(dy);
+  const elapsed = performance.now() - p.startTime;
 
   if (absDx < MIN_SWIPE && absDy < MIN_SWIPE && elapsed < TAP_TIMEOUT) {
     for (const cb of _tapListeners) {
-      cb({ x: t.clientX, y: t.clientY });
+      cb({ x: p.x, y: p.y, pointerId: p.id });
     }
-    return;
+  } else if (absDx >= MIN_SWIPE || absDy >= MIN_SWIPE) {
+    const dir = absDx > absDy
+      ? (dx > 0 ? "RIGHT" : "LEFT")
+      : (dy > 0 ? "DOWN" : "UP");
+    for (const cb of _swipeListeners) cb(dir);
   }
 
-  if (absDx < MIN_SWIPE && absDy < MIN_SWIPE) return;
+  _pointers.delete(e.pointerId);
+  if (e.cancelable) e.preventDefault();
+}
 
-  let dir;
-  if (absDx > absDy) {
-    dir = deltaX > 0 ? "RIGHT" : "LEFT";
-  } else {
-    dir = deltaY > 0 ? "DOWN" : "UP";
-  }
-
-  for (const cb of _swipeListeners) {
-    cb(dir);
-  }
+function handlePointerCancel(e) {
+  _pointers.delete(e.pointerId);
 }
 
 export const Input = {
   buffer: [],
 
+  get x() { return _pointerX; },
+  get y() { return _pointerY; },
+  get isPointerDown() { return _pointers.size > 0; },
+  get pointerCount() { return _pointers.size; },
+
   init(target) {
     const el = target || document;
+    _target = el;
     el.addEventListener("keydown", handleKeyDown);
     el.addEventListener("keyup", handleKeyUp);
-    el.addEventListener("touchstart", handleTouchStart, { passive: false });
-    el.addEventListener("touchmove", handleTouchMove, { passive: false });
-    el.addEventListener("touchend", handleTouchEnd, { passive: false });
+    el.addEventListener("pointerdown", handlePointerDown, { passive: false });
+    el.addEventListener("pointermove", handlePointerMove, { passive: false });
+    el.addEventListener("pointerup", handlePointerUp, { passive: false });
+    el.addEventListener("pointercancel", handlePointerCancel, { passive: false });
+    el.style.touchAction = "none";
   },
 
   destroy(target) {
-    const el = target || document;
+    const el = target || _target || document;
     el.removeEventListener("keydown", handleKeyDown);
     el.removeEventListener("keyup", handleKeyUp);
-    el.removeEventListener("touchstart", handleTouchStart);
-    el.removeEventListener("touchmove", handleTouchMove);
-    el.removeEventListener("touchend", handleTouchEnd);
+    el.removeEventListener("pointerdown", handlePointerDown);
+    el.removeEventListener("pointermove", handlePointerMove);
+    el.removeEventListener("pointerup", handlePointerUp);
+    el.removeEventListener("pointercancel", handlePointerCancel);
+    el.style.touchAction = "";
+    _pointers.clear();
+    _pressed.clear();
+    _justPressed.clear();
+    _justReleased.clear();
     _swipeListeners = [];
     _tapListeners = [];
+    _target = null;
     this.buffer = [];
   },
 
   updateFrame() {
-    for (const key in _justPressed) delete _justPressed[key];
-    for (const key in _justReleased) delete _justReleased[key];
+    _justPressed.clear();
+    _justReleased.clear();
   },
 
   clearJustPressed() {
-    for (const key in _justPressed) delete _justPressed[key];
+    _justPressed.clear();
   },
 
   mapKey(rawKey, alias) {
@@ -159,15 +187,15 @@ export const Input = {
   },
 
   isDown(key) {
-    return !!_pressed[key];
+    return !!_pressed.get(key);
   },
 
   justPressed(key) {
-    return !!_justPressed[key];
+    return !!_justPressed.get(key);
   },
 
   justReleased(key) {
-    return !!_justReleased[key];
+    return !!_justReleased.get(key);
   },
 
   consumeBuffer() {
@@ -178,6 +206,18 @@ export const Input = {
   peekBuffer() {
     if (this.buffer.length === 0) return null;
     return this.buffer[0];
+  },
+
+  getPointer(id) {
+    return _pointers.get(id) || null;
+  },
+
+  getPointers() {
+    return [..._pointers.values()];
+  },
+
+  forEachPointer(fn) {
+    for (const p of _pointers.values()) fn(p);
   },
 
   onSwipe(cb) {
