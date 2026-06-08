@@ -1,12 +1,24 @@
 const _cache = new Map();
 
+async function _decode(img, path) {
+  if (typeof img.decode !== "function") return;
+  try {
+    await img.decode();
+  } catch (err) {
+    console.warn(`Image decode failed for ${path}, rendering may be deferred:`, err);
+  }
+}
+
 export const ImageLoader = {
-  load(path) {
+  load(path, options = {}) {
+    const decode = options.decode !== false;
+
     if (_cache.has(path)) return Promise.resolve(_cache.get(path));
 
     return new Promise((resolve, reject) => {
       const img = new Image();
-      img.onload = () => {
+      img.onload = async () => {
+        if (decode) await _decode(img, path);
         _cache.set(path, img);
         resolve(img);
       };
@@ -15,11 +27,11 @@ export const ImageLoader = {
     });
   },
 
-  loadAll(map) {
+  loadAll(map, options) {
     const entries = Object.entries(map);
     return Promise.all(
       entries.map(([key, path]) =>
-        this.load(path).then((img) => {
+        this.load(path, options).then((img) => {
           _cache.set(key, img);
           return [key, img];
         })
