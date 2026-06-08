@@ -3,7 +3,7 @@
 A lightweight 2D game framework for the browser.
 
 ```js
-import { Game, Scene, Sprite, Input } from "jygame";
+import { Game, Scene, Sprite, Input, movementSystem, renderSystem } from "jygame";
 
 class MyScene extends Scene {
   constructor() {
@@ -19,11 +19,11 @@ class MyScene extends Scene {
     if (Input.isDown("LEFT")) this.player.velocity.x = -200;
     if (Input.isDown("UP")) this.player.velocity.y = -200;
     if (Input.isDown("DOWN")) this.player.velocity.y = 200;
-    this.player.update(dt);
+    movementSystem.updateOne(this.player, dt);
   }
 
   render(ctx) {
-    this.player.render(ctx);
+    renderSystem.renderOne(ctx, this.player);
   }
 }
 
@@ -48,7 +48,7 @@ Full API reference, guides, and examples: [jygame-documentation.vercel.app](http
 | `Game` | Main game loop with fixed timestep, canvas setup, UI layer, and scene management |
 | `Scene` | Lifecycle hooks (`enter`, `exit`, `pause`, `resume`, `update`, `interpolate`, `render`, `renderUI`) plus auto-cleaned event helpers (`on`, `onSwipe`, `onTap`, `cleanup`) |
 | `Sprite` | Entity with `Transform`, `Collider`, `Velocity`, `Renderable`, and `Visibility` components. Exposes `x`, `y`, `width`, `height`, `angle`, `scale`, `velocity`, `image`, `style` shorthands. |
-| `Group` | Entity container with batch render via `RenderSystem`. Iterable (`for...of`). Collision queries delegate to `CollisionSystem`. Optional `SpatialHash` acceleration. |
+| `Group` | Entity container. Iterable (`for...of`). Collision queries delegate to `CollisionSystem`. Optional `SpatialHash` acceleration. `dispose()` for cleanup. |
 | `Transform` | Position (`x`, `y`), rotation, and scale — the single source of truth for world position |
 | `Collider` | AABB dimensions (`width`, `height`) with static collision helpers (`checkAABB`, `checkRect`, `containsPoint`) |
 | `Renderable` | Image or shape style with cached `Path2D` for circle/ellipse/rect |
@@ -57,7 +57,7 @@ Full API reference, guides, and examples: [jygame-documentation.vercel.app](http
 | `Clock` | Fixed-timestep accumulator for deterministic updates |
 | `Timer` | Countdown timer with optional looping |
 | `Input` | Keyboard (`isDown`, `justPressed`, `justReleased`) and touch (swipe/tap) input handling |
-| `SpatialHash` | Spatial partitioning for broad-phase collision acceleration |
+| `SpatialHash` | Spatial partitioning for broad-phase collision acceleration. Stamp-based single-entity dedup; reusable scratch `Set` for pair dedup. |
 | `State` | Observable state container with subscribe/unsubscribe |
 | `Storage` | `localStorage` wrapper with JSON serialization |
 | `Color`, `Colors` | Color class with parsing, manipulation, and a palette of named colors |
@@ -65,70 +65,42 @@ Full API reference, guides, and examples: [jygame-documentation.vercel.app](http
 | `FontLoader` | FontFace loading for custom web fonts |
 | `LoadingTask` | Async loading tracker for preload progress |
 | `Pool` | Object pool for allocation-free reuse |
-| `MovementSystem` | Batch movement logic — operates on `velocity` + `transform` pairs |
-| `RenderSystem` | Batch rendering with viewport culling, rotation, and scale |
+| `MovementSystem` | Batch movement logic. Accepts any iterable of entities with `velocity` + `transform`. |
+| `RenderSystem` | Batch rendering with viewport culling, rotation, and scale. Accepts any iterable. |
 | `movementSystem` | Shared singleton instance of `MovementSystem` |
-| `renderSystem` | Shared singleton instance of `RenderSystem` |
-| `CollisionSystem` | Collision queries, broad-phase selection, and `SpatialHash` lifecycle |
 | `collisionSystem` | Shared singleton instance of `CollisionSystem` |
+| `renderSystem` | Shared singleton instance of `RenderSystem` |
+| `CollisionSystem` | Collision queries with broad-phase strategy lifecycle. Supports array-out and callback modes. |
 
 ## Architecture
 
-Entities are composed from lightweight components:
+See [`docs/architecture.md`](docs/architecture.md) for the full design.
 
-```
-Sprite
-├── Transform      (position, rotation, scale)
-├── Collider       (width, height)
-├── Velocity       (Vec2)
-├── Renderable     (image, style)
-└── Visibility     (boolean)
-```
+**Quick summary:** Entity-Component-System model. Stateless systems operate
+on entities with required components — no type checking. `Sprite` is the
+built-in entity (bundles `Transform` + `Collider` + `Renderable` + `Velocity`).
+`Group` is a pure iterable container. Systems accept any iterable.
 
-Behavior lives in stateless systems:
-
-```
-MovementSystem    →  updates Transform from Velocity
-RenderSystem      →  draws Renderable at Transform with viewport culling
-CollisionSystem   →  collision queries with SpatialHash broad-phase
-```
-
-`Group.render(ctx, viewport)` delegates to `RenderSystem`.
-Collision queries (`collideRect`, `collidePoint`, `collideGroup`,
-`collideSprite`) are thin wrappers that delegate to `CollisionSystem`.
-
-`Group` no longer owns an `update()` method. Systems execute at the scene
-level — `Group` is a pure container with iteration (`for...of`, `forEach`,
-`filter`, `map`) and membership management (`add`, `remove`, `clear`, `has`).
-
-`CollisionSystem` owns the full `SpatialHash` lifecycle:
-
-- **`collisionSystem.beginFrame()`** rebuilds every registered `SpatialHash`
-  once. Call once per frame after all movement is done.
-- **`collisionSystem.removeGroup(group)`** unregisters a group when it is
-  no longer needed (e.g., `Scene.exit()`).
-- `SpatialHash` is rebuilt every frame — no stale state, no dirty flags.
-  Rebuilding a dynamic spatial hash once per frame is standard practice.
-
-The internal sweep is safe with no groups registered (no-op).
+| Component | Fields | System |
+|---|---|---|
+| `Transform` | `x`, `y`, `rotation`, `scale` | Movement, Render, Collision |
+| `Collider` | `width`, `height` | Collision, Render (culling) |
+| `Renderable` | `image`, `style`, `draw()` | Render |
+| `Velocity` | Vec2 `x`, `y` | Movement |
+| `visible` | boolean | Render, Collision, SpatialHash |
 
 Typical per-frame usage:
 
 ```javascript
-movementSystem.update(enemies, dt);        // batch movement
-
-collisionSystem.beginFrame();              // rebuild all spatial hashes
-
-collisionSystem.collidePoint(enemies, mouse);
-collisionSystem.collideRect(enemies, explosion);
-collisionSystem.collideSprite(enemies, player);
+movementSystem.update(enemies, dt);
+collisionSystem.beginFrame();
+const hits = collisionSystem.collidePoint(enemies, mouse);
+renderSystem.render(ctx, enemies, viewport);
 ```
 
-→ 1 rebuild (across all groups), N lookups.
-
-`CollisionSystem` is designed to support future broad-phase strategies.
-Swapping `SpatialHash` for `SweepAndPrune` or another strategy happens in
-one place — the system, not in each group or query method.
+`collisionSystem.beginFrame()` rebuilds all registered broad-phase
+strategies. Default is `SpatialHash`. Strategies are pluggable via the
+same interface.
 
 ## License
 

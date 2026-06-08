@@ -2,8 +2,6 @@ import { Vec2 } from "../math/Vec2.js";
 import { Transform } from "../components/Transform.js";
 import { Collider } from "../components/Collider.js";
 import { Renderable } from "../components/Renderable.js";
-import { movementSystem } from "../systems/MovementSystem.js";
-import { renderSystem } from "../systems/RenderSystem.js";
 
 export class Sprite {
   constructor(x, y, w, h) {
@@ -33,14 +31,6 @@ export class Sprite {
   set angle(v) { this.transform.rotation = v; }
   get scale() { return this.transform.scale; }
   set scale(v) { this.transform.scale = v; }
-
-  update(dt) {
-    movementSystem.updateOne(this, dt);
-  }
-
-  render(ctx) {
-    renderSystem.renderOne(ctx, this);
-  }
 
   kill() {
     for (const group of this.groups) {

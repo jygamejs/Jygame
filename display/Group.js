@@ -1,4 +1,3 @@
-import { renderSystem } from "../systems/RenderSystem.js";
 import { collisionSystem } from "../systems/CollisionSystem.js";
 
 export class Group {
@@ -45,8 +44,9 @@ export class Group {
     return this._sprites.length;
   }
 
-  render(ctx, viewport) {
-    renderSystem.render(ctx, this._sprites, viewport);
+  dispose() {
+    collisionSystem.removeGroup(this);
+    this.clear();
   }
 
   forEach(fn) {

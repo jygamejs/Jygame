@@ -4,23 +4,26 @@ export class SpatialHash {
   constructor(cellSize = 64) {
     this.cellSize = cellSize;
     this.cells = new Map();
+    this._seen = new Set();
   }
 
-  rebuild(sprites) {
+  rebuild(entities) {
     this.cells.clear();
-    for (let i = 0; i < sprites.length; i++) {
-      const s = sprites[i];
-      if (!s.visible) continue;
-      s.__shId = i;
-      this._insert(s);
+    this._queryStamp = 0;
+    for (let i = 0; i < entities.length; i++) {
+      const e = entities[i];
+      if (!e.visible) continue;
+      e.__shId = i;
+      e.__shStamp = 0;
+      this._insert(e);
     }
   }
 
-  _insert(sprite) {
-    const cx = sprite.transform.x;
-    const cy = sprite.transform.y;
-    const hw = sprite.collider.width / 2;
-    const hh = sprite.collider.height / 2;
+  _insert(entity) {
+    const cx = entity.transform.x;
+    const cy = entity.transform.y;
+    const hw = entity.collider.width / 2;
+    const hh = entity.collider.height / 2;
     const left = Math.floor((cx - hw) / this.cellSize);
     const right = Math.floor((cx + hw) / this.cellSize);
     const top = Math.floor((cy - hh) / this.cellSize);
@@ -34,14 +37,15 @@ export class SpatialHash {
           cell = [];
           this.cells.set(key, cell);
         }
-        cell.push(sprite);
+        cell.push(entity);
       }
     }
   }
 
-  collideGroup(other, out) {
-    const pairs = out || [];
-    const seen = new Set();
+  collideGroup(other, cbOrOut) {
+    const isCallback = typeof cbOrOut === 'function';
+    const pairs = isCallback ? null : (cbOrOut || []);
+    this._seen.clear();
 
     for (const [key, aList] of this.cells) {
       const bList = other.cells.get(key);
@@ -52,9 +56,12 @@ export class SpatialHash {
           const ka = sa.__shId;
           const kb = sb.__shId;
           const seenKey = ka < kb ? (ka << 16) | kb : (kb << 16) | ka;
-          if (seen.has(seenKey)) continue;
-          seen.add(seenKey);
-          if (Collider.checkAABB(sa.transform, sa.collider, sb.transform, sb.collider)) {
+          if (this._seen.has(seenKey)) continue;
+          this._seen.add(seenKey);
+          if (!Collider.checkAABB(sa.transform, sa.collider, sb.transform, sb.collider)) continue;
+          if (isCallback) {
+            cbOrOut(sa, sb);
+          } else {
             pairs.push([sa, sb]);
           }
         }
@@ -64,8 +71,8 @@ export class SpatialHash {
   }
 
   collideRect(rect, out) {
+    this._queryStamp++;
     const hits = out || [];
-    const seen = new Set();
 
     const left = Math.floor(rect.left / this.cellSize);
     const right = Math.floor(rect.right / this.cellSize);
@@ -76,11 +83,11 @@ export class SpatialHash {
       for (let y = top; y <= bottom; y++) {
         const cell = this.cells.get(`${x}:${y}`);
         if (!cell) continue;
-        for (const sprite of cell) {
-          if (seen.has(sprite.__shId)) continue;
-          seen.add(sprite.__shId);
-          if (Collider.checkRect(sprite.transform, sprite.collider, rect)) {
-            hits.push(sprite);
+        for (const entity of cell) {
+          if (entity.__shStamp === this._queryStamp) continue;
+          entity.__shStamp = this._queryStamp;
+          if (Collider.checkRect(entity.transform, entity.collider, rect)) {
+            hits.push(entity);
           }
         }
       }
@@ -93,37 +100,36 @@ export class SpatialHash {
     const key = `${Math.floor(point.x / this.cellSize)}:${Math.floor(point.y / this.cellSize)}`;
     const cell = this.cells.get(key);
     if (!cell) return hits;
-    for (const sprite of cell) {
-      if (Collider.containsPoint(sprite.transform, sprite.collider, point)) {
-        hits.push(sprite);
+    for (const entity of cell) {
+      if (Collider.containsPoint(entity.transform, entity.collider, point)) {
+        hits.push(entity);
       }
     }
     return hits;
   }
 
-  collideSprite(sprite, out) {
+  collideSprite(entity, out) {
+    this._queryStamp++;
     const hits = out || [];
-    const sx = sprite.transform.x;
-    const sy = sprite.transform.y;
-    const shw = sprite.collider.width / 2;
-    const shh = sprite.collider.height / 2;
+    const sx = entity.transform.x;
+    const sy = entity.transform.y;
+    const shw = entity.collider.width / 2;
+    const shh = entity.collider.height / 2;
 
     const left = Math.floor((sx - shw) / this.cellSize);
     const right = Math.floor((sx + shw) / this.cellSize);
     const top = Math.floor((sy - shh) / this.cellSize);
     const bottom = Math.floor((sy + shh) / this.cellSize);
 
-    const seen = new Set();
-
     for (let x = left; x <= right; x++) {
       for (let y = top; y <= bottom; y++) {
         const cell = this.cells.get(`${x}:${y}`);
         if (!cell) continue;
         for (const s of cell) {
-          if (s.__shId === sprite.__shId) continue;
-          if (seen.has(s.__shId)) continue;
-          seen.add(s.__shId);
-          if (Collider.checkAABB(s.transform, s.collider, sprite.transform, sprite.collider)) {
+          if (s.__shId === entity.__shId) continue;
+          if (s.__shStamp === this._queryStamp) continue;
+          s.__shStamp = this._queryStamp;
+          if (Collider.checkAABB(s.transform, s.collider, entity.transform, entity.collider)) {
             hits.push(s);
           }
         }
