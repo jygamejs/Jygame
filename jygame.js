@@ -22,4 +22,5 @@ export { Animation } from "./components/Animation.js";
 export { AnimationSystem, animationSystem } from "./systems/AnimationSystem.js";
 export { MovementSystem, movementSystem } from "./systems/MovementSystem.js";
 export { RenderSystem, renderSystem } from "./systems/RenderSystem.js";
+export { Camera } from "./camera/Camera.js";
 export { CollisionSystem, collisionSystem } from "./systems/CollisionSystem.js";

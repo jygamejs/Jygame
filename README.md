@@ -53,6 +53,7 @@ Full API reference, guides, and examples: [jygame-documentation.vercel.app](http
 | `Collider` | AABB dimensions (`width`, `height`) with static collision helpers (`checkAABB`, `checkRect`, `containsPoint`) |
 | `Animation` | State container for animation playback — `animations` (Map), `current`, `frame`, `elapsed`, `playing` |
 | `Renderable` | Image or shape style with cached `Path2D` for circle/ellipse/rect |
+| `Camera` | View abstraction — world position, zoom, rotation, coordinate conversion. `Camera.main` auto-set on first construction. `Camera.setMain()` for explicit assignment. |
 | `Vec2` | 2D vector with add, sub, scale, dot, normalize, rotate, lerp |
 | `Rect` | AABB rectangle utility with collision, containment, overlap, and anchor helpers |
 | `Clock` | Fixed-timestep accumulator for deterministic updates |
@@ -68,7 +69,7 @@ Full API reference, guides, and examples: [jygame-documentation.vercel.app](http
 | `Pool` | Object pool for allocation-free reuse |
 | `MovementSystem` | Batch movement logic. Accepts any iterable of entities with `velocity` + `transform`. |
 | `AnimationSystem` | Batch frame advancement with per-clip FPS, `while` catch-up, looping, and completion callbacks. Zero allocations. |
-| `RenderSystem` | Batch rendering with viewport culling, rotation, and scale. Accepts any iterable. |
+| `RenderSystem` | Batch rendering with camera culling, rotation, and scale. Camera is optional — no camera needed for simple games. |
 | `animationSystem` | Shared singleton instance of `AnimationSystem` |
 | `movementSystem` | Shared singleton instance of `MovementSystem` |
 | `collisionSystem` | Shared singleton instance of `CollisionSystem` |
@@ -98,7 +99,7 @@ Typical per-frame usage:
 movementSystem.update(enemies, dt);
 collisionSystem.beginFrame();
 const hits = collisionSystem.collidePoint(enemies, mouse);
-renderSystem.render(ctx, enemies, viewport);
+renderSystem.render(ctx, enemies);
 ```
 
 `collisionSystem.beginFrame()` rebuilds all registered broad-phase

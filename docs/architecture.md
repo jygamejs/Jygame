@@ -37,6 +37,8 @@ entities that expose the required components — no type checking, no base class
 | Frame advancement | `AnimationSystem` | Writes `renderable.image`, advances `Animation` state |
 | Speed and direction | `Velocity` — authoritative | Consumed by MovementSystem |
 | Entity membership | `Group._sprites` | Private array, iterable |
+| World-to-screen transform | `Camera` — authoritative | Position, zoom, rotation applied by RenderSystem |
+| Visible world region | `Camera` — derived from position + zoom + size | Used for culling |
 | SpatialHash lifecycle | `CollisionSystem` | `beginFrame()` → all rebuilds |
 | Broad-phase strategy | `CollisionSystem` + strategy instance | Pluggable via `useSpatialHash()` |
 
@@ -47,7 +49,8 @@ entities that expose the required components — no type checking, no base class
 | Sprite `x`, `y`, `width`, `height` | `Transform + Collider` (center → top-left) | Public convenience getters |
 | `Rect` from entity | `Transform + Collider` | SpatialHash cell calculation |
 | Entity center | `Transform.x`, `Transform.y` | Collision checks, rendering |
-| World-space AABB | `Transform + Collider + scale` | Viewport culling |
+| World-space AABB | `Transform + Collider + scale` | Camera culling |
+| Visible world bounds | `Camera (x, y, width, height, zoom)` | Culling, worldToScreen, screenToWorld |
 
 ## Ownership Boundaries
 
@@ -85,6 +88,33 @@ Sprite (data entity)
 - `kill()` removes from all groups
 - Public getters (`x`, `y`, `width`, `height`, `image`, `style`, `angle`, `scale`) are convenience shorthands over components
 
+### Camera
+
+```
+Camera (transform)
+├── x, y              center of view in world space
+├── width, height     viewport size in pixels
+├── zoom              scale factor (higher = zoomed in)
+├── rotation get/set  world rotation with cached cos/sin
+├── static main       first created Camera becomes default
+├── static setMain()  explicit main camera assignment
+├── _cos, _sin        cached trig values (updated on rotation set)
+├── apply(ctx)        one-shot canvas transform
+├── worldToScreen()   world → pixel coords (uses cached cos/sin)
+├── screenToWorld()  pixel → world coords (uses cached cos/sin)
+└── follow(entity)    snap to entity.transform
+```
+
+- `Camera.main` is auto-set in constructor if no main exists
+- `Camera.setMain(camera)` for explicit transitions (scene changes)
+- `IDENTITY` (internal to RenderSystem, width=0) disables transform
+  and culling when no camera exists — `render(ctx, entities)` works
+  without any camera setup
+- `_cos`/`_sin` cached on rotation set — no trig per query
+- Not a System, not a Component — it is a standalone view abstraction
+- Future features (shake, smoothing, parallax, dead zones) go in
+  camera controllers, not in Camera itself
+
 ### AnimationSystem
 
 ```
@@ -100,6 +130,28 @@ AnimationSystem
 - Non-looping clips stop on last frame, fire callback once
 - Writes `entity.renderable.image` directly — RenderSystem is unaware of AnimationSystem
 - Future sprite sheet support: `clip.frames[n]` can be metadata without changing the system
+
+### RenderSystem
+
+```
+RenderSystem
+├── render(ctx, entities, camera?)       batch render (camera optional)
+├── renderOne(ctx, entity, camera?)      single entity
+├── _getViewBounds(camera) → bounds|null shared bounds computation
+├── _isVisible(entity, bounds) → bool    shared culling (bounds=null → true)
+├── _drawEntity(ctx, entity)             shared entity transform + draw
+└── camera ??= Camera.main ?? IDENTITY
+```
+
+- Camera transform applied once per batch (not per entity)
+- `_getViewBounds`: returns null when `camera.width === 0` (no culling) —
+  avoids `Infinity` arithmetic
+- `_isVisible`: single culling implementation used by both `render`
+  and `renderOne`
+- `_drawEntity`: single entity-drawing implementation used by both
+- `IDENTITY` sentinel (width=0, plain object) disables both transform
+  and culling — no camera setup required for simple games
+- Accepts any iterable of entities
 
 ### CollisionSystem
 
@@ -151,7 +203,7 @@ Game._loop(time)
 ├── scene.interpolate(alpha)
 │
 └── scene.render(ctx)
-    ├── renderSystem.render(ctx, group, viewport)
+    ├── renderSystem.render(ctx, group, camera?)
     └── scene-specific rendering
 ```
 
@@ -160,8 +212,12 @@ Game._loop(time)
 | Operation | Allocation |
 |---|---|
 | `AnimationSystem.update` | 0 |
-| `RenderSystem.render` | 0 |
 | `MovementSystem.update` | 0 |
+| `RenderSystem.render` (no camera) | 0 (IDENTITY sentinel, width=0 → no culling, no transform) |
+| `RenderSystem.render` (with camera) | 0 (one `ctx.save/restore`, bounds computed once) |
+| `Camera.apply` | 0 |
+| `Camera.worldToScreen` | 0 (writes to user-provided `out`) |
+| `Camera.screenToWorld` | 0 (writes to user-provided `out`) |
 | `CollisionSystem.beginFrame()` | 0 (cells cleared + reused) |
 | `SpatialHash.collideRect` / `collideSprite` | 0 (stamp++) |
 | `SpatialHash.collideGroup` (with callback) | 0 (reused scratch Set) |

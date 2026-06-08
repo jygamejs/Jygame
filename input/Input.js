@@ -1,5 +1,5 @@
-export { InputContext } from "./InputContext.js";
 import { InputContext } from "./InputContext.js";
+export { InputContext };
 
 let _default = new InputContext();
 
