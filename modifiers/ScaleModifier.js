@@ -1,7 +1,9 @@
 import { EASINGS } from "./easing.js";
 
 export class ScaleModifier {
-  constructor({ mode, from, to, min, max, easing = "linear" } = {}) {
+  constructor({ mode, from, to, min, max, easing = "linear", priority } = {}) {
+    this.enabled = true;
+    this.priority = priority;
     if (mode === "in-out") {
       this._min = min !== undefined ? min : 0;
       this._max = max !== undefined ? max : 1;

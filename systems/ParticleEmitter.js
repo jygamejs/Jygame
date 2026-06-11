@@ -11,6 +11,7 @@ export class ParticleEmitter {
     this._emittedCount = 0;
     this._active = false;
     this._paused = false;
+    this._destroyed = false;
     this._target = null;
     this._followGetter = null;
 
@@ -72,6 +73,7 @@ export class ParticleEmitter {
   }
 
   start() {
+    if (this._destroyed) return;
     this._active = true;
   }
 
@@ -97,6 +99,7 @@ export class ParticleEmitter {
   }
 
   emit(count) {
+    if (this._destroyed) return;
     this._system.emit(count, this._emitWrapper, this);
     this._emittedCount += count;
   }
@@ -139,7 +142,7 @@ export class ParticleEmitter {
   }
 
   update(dt) {
-    if (!this._active || this._paused) return;
+    if (this._destroyed || !this._active || this._paused) return;
     if (this._target) {
       const pos = this._followGetter(this._target);
       this.x = pos.x;
@@ -161,9 +164,12 @@ export class ParticleEmitter {
   destroy() {
     this.stop();
     this.reset();
+    this.clearFollow();
     this._paused = false;
+    this._destroyed = true;
     this._target = null;
     this._followGetter = null;
     this._initializer = null;
+    this._emitWrapper = null;
   }
 }

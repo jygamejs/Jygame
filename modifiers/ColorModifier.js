@@ -11,7 +11,9 @@ const _toStop = ([pos, hex]) => {
 };
 
 export class ColorModifier {
-  constructor({ from, to, stops } = {}) {
+  constructor({ from, to, stops, priority } = {}) {
+    this.enabled = true;
+    this.priority = priority;
     if (stops) {
       if (stops.length < 2) throw new Error("ColorModifier requires at least 2 color stops");
       this._stops = stops.map(_toStop).sort((a, b) => a.pos - b.pos);

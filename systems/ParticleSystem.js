@@ -22,6 +22,15 @@ const _resetParticle = p => {
   p.__jygameColorSegment = 0;
 };
 
+const _hasLifecycleMethods = mod =>
+  typeof mod.beginFrame === 'function' ||
+  typeof mod.update === 'function' ||
+  typeof mod.onEmit === 'function' ||
+  typeof mod.onDeath === 'function' ||
+  typeof mod.endFrame === 'function';
+
+const _createEntry = (modifier, priority) => ({ modifier, priority });
+
 export class ParticleSystem {
   constructor({ renderParticle } = {}) {
     this._renderParticle = renderParticle;
@@ -30,34 +39,87 @@ export class ParticleSystem {
       reset: _resetParticle,
     });
     this._modifiers = [];
+    this._updateModifiers = [];
+    this._emitModifiers = [];
+    this._deathModifiers = [];
+    this._beginFrameModifiers = [];
+    this._endFrameModifiers = [];
+    this._modifierContext = { system: this, activeParticles: this._pool.activeObjects };
   }
 
-  addModifier(modifier) {
-    this._modifiers.push(modifier);
+  _rebuildCaches() {
+    this._beginFrameModifiers.length = 0;
+    this._updateModifiers.length = 0;
+    this._emitModifiers.length = 0;
+    this._deathModifiers.length = 0;
+    this._endFrameModifiers.length = 0;
+    const mods = this._modifiers;
+    for (let i = 0; i < mods.length; i++) {
+      const mod = mods[i].modifier;
+      if (typeof mod.beginFrame === 'function') this._beginFrameModifiers.push(mod);
+      if (typeof mod.update === 'function') this._updateModifiers.push(mod);
+      if (typeof mod.onEmit === 'function') this._emitModifiers.push(mod);
+      if (typeof mod.onDeath === 'function') this._deathModifiers.push(mod);
+      if (typeof mod.endFrame === 'function') this._endFrameModifiers.push(mod);
+    }
+  }
+
+  addModifier(modifier, priority) {
+    if (!_hasLifecycleMethods(modifier)) {
+      throw new Error('Modifier must implement at least one lifecycle method (beginFrame, update, onEmit, onDeath, or endFrame)');
+    }
+    if (priority === undefined) priority = modifier.priority ?? 0;
+    const entry = _createEntry(modifier, priority);
+    this._modifiers.push(entry);
+    this._modifiers.sort((a, b) => a.priority - b.priority);
+    this._rebuildCaches();
   }
 
   removeModifier(modifier) {
-    const idx = this._modifiers.indexOf(modifier);
-    if (idx !== -1) {
-      const last = this._modifiers.pop();
-      if (idx < this._modifiers.length) {
-        this._modifiers[idx] = last;
+    const mods = this._modifiers;
+    for (let i = 0; i < mods.length; i++) {
+      if (mods[i].modifier === modifier) {
+        mods[i].modifier.destroy?.();
+        mods.splice(i, 1);
+        this._rebuildCaches();
+        return;
       }
     }
   }
 
   clearModifiers() {
+    const mods = this._modifiers;
+    for (let i = 0; i < mods.length; i++) {
+      mods[i].modifier.destroy?.();
+    }
     this._modifiers.length = 0;
+    this._beginFrameModifiers.length = 0;
+    this._updateModifiers.length = 0;
+    this._emitModifiers.length = 0;
+    this._deathModifiers.length = 0;
+    this._endFrameModifiers.length = 0;
+  }
+
+  destroy() {
+    this.clear();
+    this.clearModifiers();
+    this._renderParticle = null;
+    this._modifierContext.system = null;
+    this._modifierContext.activeParticles = null;
   }
 
   emit(count, initializer, emitter) {
-    const modifiers = this._modifiers;
-    const modCount = modifiers.length;
+    const emitMods = this._emitModifiers;
+    const emLen = emitMods.length;
+    const ctx = this._modifierContext;
     for (let i = 0; i < count; i++) {
       const p = this._pool.acquire();
       if (initializer) initializer(p, i, emitter);
-      for (let m = 0; m < modCount; m++) {
-        modifiers[m].onEmit?.(p);
+      for (let m = 0; m < emLen; m++) {
+        const mod = emitMods[m];
+        if (mod.enabled !== false) {
+          mod.onEmit(p, ctx);
+        }
       }
     }
   }
@@ -65,9 +127,13 @@ export class ParticleSystem {
   emitOne(initializer) {
     const p = this._pool.acquire();
     if (initializer) initializer(p, 0);
-    const modifiers = this._modifiers;
-    for (let m = 0; m < modifiers.length; m++) {
-      modifiers[m].onEmit?.(p);
+    const emitMods = this._emitModifiers;
+    const ctx = this._modifierContext;
+    for (let m = 0; m < emitMods.length; m++) {
+      const mod = emitMods[m];
+      if (mod.enabled !== false) {
+        mod.onEmit(p, ctx);
+      }
     }
     return p;
   }
@@ -75,13 +141,20 @@ export class ParticleSystem {
   update(dt) {
     const active = this._pool.activeObjects;
     const pool = this._pool;
-    const modifiers = this._modifiers;
-    const modCount = modifiers.length;
-    const hasModifiers = modCount > 0;
+    const ctx = this._modifierContext;
+    const beginFrameMods = this._beginFrameModifiers;
+    const updateMods = this._updateModifiers;
+    const deathMods = this._deathModifiers;
+    const endFrameMods = this._endFrameModifiers;
+    const bfLen = beginFrameMods.length;
+    const upLen = updateMods.length;
+    const dLen = deathMods.length;
+    const efLen = endFrameMods.length;
 
-    if (hasModifiers) {
-      for (let m = 0; m < modCount; m++) {
-        modifiers[m].prepare?.(dt);
+    for (let m = 0; m < bfLen; m++) {
+      const mod = beginFrameMods[m];
+      if (mod.enabled !== false) {
+        mod.beginFrame(dt, ctx);
       }
     }
 
@@ -98,19 +171,28 @@ export class ParticleSystem {
         ? Math.max(0, Math.min(1, 1 - p.life / p.maxLife))
         : 0;
 
-      if (hasModifiers) {
-        for (let m = 0; m < modCount; m++) {
-          modifiers[m].update?.(p, dt);
+      for (let m = 0; m < upLen; m++) {
+        const mod = updateMods[m];
+        if (mod.enabled !== false) {
+          mod.update(p, dt, ctx);
         }
       }
 
       if (p.life <= 0) {
-        if (hasModifiers) {
-          for (let m = 0; m < modCount; m++) {
-            modifiers[m].onDeath?.(p);
+        for (let m = 0; m < dLen; m++) {
+          const mod = deathMods[m];
+          if (mod.enabled !== false) {
+            mod.onDeath(p, ctx);
           }
         }
         pool.release(p);
+      }
+    }
+
+    for (let m = 0; m < efLen; m++) {
+      const mod = endFrameMods[m];
+      if (mod.enabled !== false) {
+        mod.endFrame(dt, ctx);
       }
     }
   }
@@ -177,5 +259,9 @@ export class ParticleSystem {
 
   get hasParticles() {
     return this.activeCount > 0;
+  }
+
+  get modifierCount() {
+    return this._modifiers.length;
   }
 }

@@ -1,7 +1,9 @@
 import { EASINGS } from "./easing.js";
 
 export class FadeModifier {
-  constructor({ mode = "out", easing = "linear" } = {}) {
+  constructor({ mode = "out", easing = "linear", priority } = {}) {
+    this.enabled = true;
+    this.priority = priority;
     this._mode = mode;
     this._ease = EASINGS[easing] || EASINGS.linear;
   }
