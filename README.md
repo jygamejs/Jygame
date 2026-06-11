@@ -70,6 +70,9 @@ Note: `getPointers()` now returns an iterator (not an array). Use `for...of` or 
 | `LoadingTask` | Async loading tracker for preload progress |
 | `Pool` | Low-level object pool for allocation-free reuse. Tracks free objects and capacity. |
 | `ActivePool` | Lifecycle-aware object pool built on `Pool`. Tracks active/inactive objects, O(1) acquire/release via index-tagged objects, batch operations (`acquireMany`, `releaseMany`, `releaseInactive`, `clearActive`, `warmup`), and full statistics (`activeCount`, `freeCount`, `capacity`, `peakActive`, `peakFree`, `peakCapacity`, `totalCreated`). |
+| `Particle` | Lightweight data container for particle effects. Fields: `x`, `y`, `vx`, `vy`, `ax`, `ay`, `life`, `maxLife`, `size`, `rotation`, `rotationSpeed`, `alpha`, `color`. |
+| `ParticleSystem` | ActivePool-backed particle lifecycle. `emit(count, init)` for spawning, `update(dt)` with O(n) auto-release, `render(ctx)` with optional custom renderer, `clear()`, `warmup(count)`. Statistics: `activeCount`, `freeCount`, `capacity`, `peakActive`, `peakCapacity`, `peakFree`, `totalCreated`. Convenience helpers: `isEmpty`, `hasParticles`, `particles` (read-only). |
+| `ParticleEmitter` | Thin automated spawner on top of `ParticleSystem`. Constructor takes `system`, `rate` (particles/sec), `initializer`. API: `start()`, `stop()`, `toggle()`, `emit(n)`, `burst(n)`, `update(dt)`, `reset()`. Properties: `active`, `emittedCount`. Frame-rate independent via accumulator. Zero per-frame allocations. |
 | `MovementSystem` | Batch movement logic. Accepts any iterable of entities with `velocity` + `transform`. |
 | `AnimationSystem` | Batch frame advancement with per-clip FPS, `while` catch-up, looping, and completion callbacks. Zero allocations. |
 | `RenderSystem` | Batch rendering with camera culling, rotation, and scale. Camera is optional — no camera needed for simple games. |
