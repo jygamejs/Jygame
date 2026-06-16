@@ -85,7 +85,7 @@ export class AudioScene {
           maxDistance: 512,
         });
       }
-    }
+    });
   }
 
   restore() {
