@@ -8,7 +8,7 @@ export class AudioDefinition {
     this.group = config.group || "master";
     this.volume = config.volume ?? 1;
     this.loop = config.loop ?? false;
-    this.maxInstances = config.maxInstances ?? Infinity;
+    this.maxInstances = config.maxInstances ?? 32;
     this.spatial = config.spatial ?? false;
     this.minDistance = config.minDistance ?? 32;
     this.maxDistance = config.maxDistance ?? 512;

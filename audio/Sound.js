@@ -1,6 +1,7 @@
 import { AudioInstance } from "./AudioInstance.js";
-import { ATTENUATION_LINEAR, ATTENUATION_QUADRATIC, ATTENUATION_INVERSE } from "./AudioManager.js";
-import { HtmlAudioBackend } from "./backends/HtmlAudioBackend.js";
+import { ATTENUATION_LINEAR, ATTENUATION_QUADRATIC, ATTENUATION_INVERSE } from "./attenuation.js";
+import { EffectChain } from "./effects/EffectChain.js";
+import { ObjectPool } from "./ObjectPool.js";
 
 export class Sound {
   constructor(asset, manager, options = {}) {
@@ -8,16 +9,30 @@ export class Sound {
 
     this._asset = asset;
     this._manager = manager;
-    this._backend = options.backend || (manager && manager._backend) || new HtmlAudioBackend();
-    this._freeInstances = [];
+    this._backend = options.backend || (manager && manager._backend);
+    if (!this._backend) {
+      throw new Error("Sound requires an AudioBackend (provide options.backend or a manager)");
+    }
+    this._ownsBackend = !!options.backend && !manager;
+    this._pool = new ObjectPool(() => {
+      const playback = this._backend.createPlayback(this._asset, this._effectChain, this._groupName);
+      return new AudioInstance(playback, this);
+    }, { maxSize: options.maxPoolSize ?? 64 });
     this._activeInstances = [];
     this._volume = 1;
     this._groupName = "master";
     this._destroyed = false;
-    this._maxInstances = options.maxInstances ?? Infinity;
+    this._maxInstances = options.maxInstances ?? 32;
     this._overflowPolicy = options.overflowPolicy || "drop-new";
     this._attenuation = null;
+    this._persistent = false;
+    this._effectChain = new EffectChain();
   }
+
+  get persistent() { return this._persistent; }
+  set persistent(value) { this._persistent = value; }
+
+  get effects() { return this._effectChain; }
 
   get volume() { return this._destroyed ? 0 : this._volume; }
   set volume(value) {
@@ -47,10 +62,16 @@ export class Sound {
 
     if (this._activeInstances.length >= this._maxInstances) {
       if (this._overflowPolicy === "drop-new") return null;
+      if (this._overflowPolicy === "replace-oldest") {
+        const oldest = this._activeInstances[0];
+        oldest.stop();
+        this._returnInstance(oldest);
+      }
     }
 
     const instance = this._getInstance();
     instance._returned = false;
+    instance._poolIndex = this._activeInstances.length;
     this._activeInstances.push(instance);
 
     if (options.x !== undefined) instance._x = options.x;
@@ -65,11 +86,11 @@ export class Sound {
   }
 
   _getInstance() {
-    if (this._freeInstances.length > 0) {
-      return this._freeInstances.pop();
-    }
-    const playback = this._backend.createPlayback(this._asset);
-    return new AudioInstance(playback, this);
+    return this._pool.acquire();
+  }
+
+  returnInstance(instance) {
+    this._returnInstance(instance);
   }
 
   _returnInstance(instance) {
@@ -77,14 +98,22 @@ export class Sound {
     instance._returned = true;
     instance._reset();
 
-    const idx = this._activeInstances.indexOf(instance);
-    if (idx !== -1) {
-      const last = this._activeInstances.length - 1;
-      if (idx !== last) this._activeInstances[idx] = this._activeInstances[last];
-      this._activeInstances.pop();
+    let idx = instance._poolIndex;
+    if (idx < 0 || idx >= this._activeInstances.length || this._activeInstances[idx] !== instance) {
+      idx = this._activeInstances.indexOf(instance);
+      if (idx === -1) return;
     }
 
-    this._freeInstances.push(instance);
+    const last = this._activeInstances.length - 1;
+    if (idx !== last) {
+      this._activeInstances[idx] = this._activeInstances[last];
+      this._activeInstances[idx]._poolIndex = idx;
+    }
+    this._activeInstances.pop();
+
+    if (this._pool.release(instance)) {
+      instance.destroy();
+    }
   }
 
   _updateAllVolumes() {
@@ -99,12 +128,14 @@ export class Sound {
 
   _getVolumeForGroup(groupName) {
     if (!this._manager) return 1;
-    const group = this._manager._groups.get(groupName);
-    return group ? (group._muted ? 0 : group._volume) : 1;
+    if (this._backend && this._backend.supportsGroupGain) return 1;
+    return this._manager.getVolumeForGroup(groupName);
   }
 
   _getMasterVolume() {
-    return this._manager ? this._manager._effectiveMasterVolume : 1;
+    if (!this._manager) return 1;
+    if (this._backend && this._backend.supportsGroupGain) return 1;
+    return this._manager.effectiveMasterVolume;
   }
 
   _checkNotDestroyed() {
@@ -133,10 +164,10 @@ export class Sound {
   }
 
   _stopAll() {
-    const snapshot = this._activeInstances.slice();
-    for (let i = 0; i < snapshot.length; i++) {
-      snapshot[i].stop();
-      this._returnInstance(snapshot[i]);
+    while (this._activeInstances.length > 0) {
+      const inst = this._activeInstances[this._activeInstances.length - 1];
+      inst.stop();
+      this._returnInstance(inst);
     }
   }
 
@@ -144,10 +175,10 @@ export class Sound {
     if (this._destroyed) return;
     this._destroyed = true;
     this._stopAll();
-    for (let i = 0; i < this._freeInstances.length; i++) {
-      this._freeInstances[i].destroy();
+    this._pool.drain();
+    if (this._ownsBackend && this._backend) {
+      this._backend.destroy();
     }
-    this._freeInstances.length = 0;
     this._asset = null;
     this._manager = null;
   }

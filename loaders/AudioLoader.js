@@ -1,6 +1,7 @@
 import { LoadingTask } from "../core/LoadingTask.js";
 
 const _cache = new Map();
+const _bufferCache = new Map();
 
 export const AudioLoader = {
   load(path) {
@@ -45,10 +46,31 @@ export const AudioLoader = {
   },
 
   unload(key) {
+    _bufferCache.delete(key);
     return _cache.delete(key);
   },
 
   clear() {
     _cache.clear();
+    _bufferCache.clear();
+  },
+
+  loadBuffer(path, audioContext) {
+    if (_bufferCache.has(path)) return Promise.resolve(_bufferCache.get(path));
+
+    return fetch(path)
+      .then(r => {
+        if (!r.ok) throw new Error(`Failed to load audio buffer: ${path}`);
+        return r.arrayBuffer();
+      })
+      .then(arrayBuffer => audioContext.decodeAudioData(arrayBuffer))
+      .then(audioBuffer => {
+        _bufferCache.set(path, audioBuffer);
+        return audioBuffer;
+      });
+  },
+
+  getBuffer(key) {
+    return _bufferCache.get(key) || null;
   },
 };

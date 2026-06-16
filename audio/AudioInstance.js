@@ -1,4 +1,4 @@
-import { computeAttenuation, ATTENUATION_LINEAR, ATTENUATION_QUADRATIC, ATTENUATION_INVERSE } from "./AudioManager.js";
+import { computeAttenuation, ATTENUATION_LINEAR, ATTENUATION_QUADRATIC, ATTENUATION_INVERSE } from "./attenuation.js";
 
 export class AudioInstance {
   constructor(playback, sound) {
@@ -7,6 +7,7 @@ export class AudioInstance {
     this._volume = 1;
     this._destroyed = false;
     this._returned = false;
+    this._poolIndex = -1;
     this._pausedByManager = false;
     this._overrideSoundVolume = null;
     this._overrideGroup = null;
@@ -50,7 +51,10 @@ export class AudioInstance {
   set x(value) {
     if (!this._destroyed) {
       this._x = value;
-      if (this._spatial) this._applyVolume();
+      if (this._spatial) {
+        this._applyVolume();
+        if (this._playback.setPosition) this._playback.setPosition(this._x, this._y);
+      }
     }
   }
 
@@ -58,7 +62,10 @@ export class AudioInstance {
   set y(value) {
     if (!this._destroyed) {
       this._y = value;
-      if (this._spatial) this._applyVolume();
+      if (this._spatial) {
+        this._applyVolume();
+        if (this._playback.setPosition) this._playback.setPosition(this._x, this._y);
+      }
     }
   }
 
@@ -68,6 +75,7 @@ export class AudioInstance {
   set minDistance(value) {
     if (!this._destroyed) {
       this._minDistance = Math.max(0, value);
+      if (this._minDistance > this._maxDistance) this._maxDistance = this._minDistance;
       if (this._spatial) this._applyVolume();
     }
   }
@@ -76,6 +84,7 @@ export class AudioInstance {
   set maxDistance(value) {
     if (!this._destroyed) {
       this._maxDistance = Math.max(0, value);
+      if (this._minDistance > this._maxDistance) this._minDistance = this._maxDistance;
       if (this._spatial) this._applyVolume();
     }
   }
@@ -112,8 +121,8 @@ export class AudioInstance {
     const listener = this._sound._manager._listener;
     if (!listener) return 1;
 
-    const dx = this._x - listener.x;
-    const dy = this._y - listener.y;
+    const dx = isFinite(this._x) && isFinite(listener.x) ? this._x - listener.x : 0;
+    const dy = isFinite(this._y) && isFinite(listener.y) ? this._y - listener.y : 0;
     const distSq = dx * dx + dy * dy;
 
     if (distSq >= this._maxDistance * this._maxDistance) return 0;
@@ -127,10 +136,15 @@ export class AudioInstance {
   _applyVolume() {
     const spatialVol = this._computeSpatialVolume();
     const soundVol = this._overrideSoundVolume !== null ? this._overrideSoundVolume : this._sound._volume;
+    const effectiveGroup = this._overrideGroup !== null ? this._overrideGroup : this._sound._groupName;
     const groupVol = this._overrideGroup !== null
       ? this._sound._getVolumeForGroup(this._overrideGroup)
       : this._sound._getGroupVolume();
-    this._playback.volume = this._volume * spatialVol * soundVol * groupVol * this._sound._getMasterVolume();
+    const transitionVol = this._sound._manager ? this._sound._manager._transitionVolume : 1;
+    this._playback.volume = this._volume * spatialVol * soundVol * groupVol * this._sound._getMasterVolume() * transitionVol;
+    if (this._playback.setGroup) {
+      this._playback.setGroup(effectiveGroup);
+    }
   }
 
   _reset() {
@@ -139,6 +153,7 @@ export class AudioInstance {
     this._playback.loop = false;
     this._playback.muted = false;
     this._volume = 1;
+    this._poolIndex = -1;
     this._pausedByManager = false;
     this._overrideSoundVolume = null;
     this._overrideGroup = null;
