@@ -124,6 +124,7 @@ class WebAudioPlayback {
       this._source = this._createSource();
       this._source.start(0, this._offset);
       this._startedAt = this._context.currentTime;
+      this._stopRequested = false;
     }
   }
 

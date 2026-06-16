@@ -122,7 +122,7 @@ export class Music {
 
   _updateVolume() {
     if (!this._playback) return;
-    const transitionVol = this._manager ? this._manager._transitionVolume : 1;
+    const transitionVol = this._manager ? this._manager.transitionVolume : 1;
     const groupVol = this._backend.supportsGroupGain ? 1 : (this._manager ? this._getGroupVolume() : 1);
     const masterVol = this._backend.supportsGroupGain ? 1 : (this._manager ? this._manager.effectiveMasterVolume : 1);
     this._playback.volume = this._volume * this._fadeVolume * groupVol * masterVol * transitionVol;

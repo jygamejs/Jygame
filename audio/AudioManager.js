@@ -79,6 +79,32 @@ export class AudioManager {
     this._groups.forEach(fn);
   }
 
+  get masterMuted() { return this._masterMuted; }
+  set masterMuted(value) {
+    this._masterMuted = !!value;
+    if (this._backend.supportsGroupGain) this._backend.setMasterVolume(this.effectiveMasterVolume);
+    this._notifyAllSoundsVolumeChange();
+  }
+
+  get supportsGroupGain() { return this._backend.supportsGroupGain; }
+
+  forEachSound(fn) {
+    for (const [key, sound] of this._sounds) fn(sound, key);
+    for (const [key, sound] of this._soundsByDefinition) fn(sound, key);
+  }
+
+  forEachMusic(fn) {
+    this._musicCache.forEach(fn);
+  }
+
+  getMusic(key) {
+    return this._musicCache.get(key) || null;
+  }
+
+  getSound(key) {
+    return this._sounds.get(key) || this._soundsByDefinition.get(key) || null;
+  }
+
   _createGroup(name) {
     const group = new AudioGroup(name, this);
     this._groups.set(name, group);
@@ -337,6 +363,8 @@ export class AudioManager {
     this._notifyAllSoundsVolumeChange();
   }
 
+  get transitionVolume() { return this._transitionVolume; }
+
   get masterVolume() { return this._masterVolume; }
   set masterVolume(value) {
     this._masterVolume = Math.max(0, Math.min(1, value));
@@ -372,6 +400,8 @@ export class AudioManager {
     const duration = options.duration != null ? options.duration : 1;
 
     if (type === "cut") {
+      this._transition = null;
+      this._transitionVolume = 1;
       scene.restore();
       return this;
     }

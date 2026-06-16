@@ -17,13 +17,13 @@ export class AudioGroup {
   get volume() { return this._volume; }
   set volume(value) {
     this._volume = Math.max(0, Math.min(1, value));
-    this._manager._onGroupVolumeChange(this._name);
+    if (this._manager) this._manager._onGroupVolumeChange(this._name);
   }
 
   get muted() { return this._muted; }
   set muted(value) {
     this._muted = value;
-    this._manager._onGroupVolumeChange(this._name);
+    if (this._manager) this._manager._onGroupVolumeChange(this._name);
   }
 
   get effects() { return this._effectChain; }

@@ -2,6 +2,7 @@ import { AudioBackend } from "./AudioBackend.js";
 
 class HtmlPlayback {
   constructor(audio) {
+    this._destroyed = false;
     this._audio = audio;
     this._onEnded = null;
     this._handleEnded = () => {
@@ -46,6 +47,8 @@ class HtmlPlayback {
   }
 
   destroy() {
+    if (this._destroyed) return;
+    this._destroyed = true;
     this._onEnded = null;
     this._audio.removeEventListener("ended", this._handleEnded);
     this._audio.pause();

@@ -118,7 +118,7 @@ export class AudioInstance {
 
   _computeSpatialVolume() {
     if (!this._spatial || !this._sound || !this._sound._manager) return 1;
-    const listener = this._sound._manager._listener;
+    const listener = this._sound._manager.listener;
     if (!listener) return 1;
 
     const dx = isFinite(this._x) && isFinite(listener.x) ? this._x - listener.x : 0;
@@ -129,8 +129,8 @@ export class AudioInstance {
     if (distSq <= this._minDistance * this._minDistance) return 1;
 
     const dist = Math.sqrt(distSq);
-    const model = this._sound._attenuation || this._sound._manager._attenuation || ATTENUATION_LINEAR;
-    return computeAttenuation(dist, this._minDistance, this._maxDistance, model, this._sound._manager._inverseRolloff);
+    const model = this._sound._attenuation || this._sound._manager.attenuation || ATTENUATION_LINEAR;
+    return computeAttenuation(dist, this._minDistance, this._maxDistance, model, this._sound._manager.inverseRolloff);
   }
 
   _applyVolume() {
@@ -140,7 +140,7 @@ export class AudioInstance {
     const groupVol = this._overrideGroup !== null
       ? this._sound._getVolumeForGroup(this._overrideGroup)
       : this._sound._getGroupVolume();
-    const transitionVol = this._sound._manager ? this._sound._manager._transitionVolume : 1;
+    const transitionVol = this._sound._manager ? this._sound._manager.transitionVolume : 1;
     this._playback.volume = this._volume * spatialVol * soundVol * groupVol * this._sound._getMasterVolume() * transitionVol;
     if (this._playback.setGroup) {
       this._playback.setGroup(effectiveGroup);
