@@ -1,17 +1,62 @@
 import { EmitterShape } from "./EmitterShape.js";
 
+const RECT_ANGLES = {
+  up: -Math.PI / 2,
+  down: Math.PI / 2,
+  left: Math.PI,
+  right: 0
+};
+
 export class RectangleShape extends EmitterShape {
-  constructor(width, height) {
+  constructor(param1, param2) {
     super();
-    if (width <= 0 || height <= 0) {
-      throw new Error("RectangleShape width and height must be > 0");
+
+    let width, height, direction, speed, spread;
+
+    if (typeof param1 === "object" && param1 !== null) {
+      width = param1.width;
+      height = param1.height;
+      direction = param1.direction;
+      speed = param1.speed;
+      spread = param1.spread;
+    } else {
+      width = param1;
+      height = param2;
     }
+
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+      throw new Error("RectangleShape width and height must be finite numbers > 0");
+    }
+
     this._width = width;
     this._height = height;
+    this._halfWidth = width * 0.5;
+    this._halfHeight = height * 0.5;
+
+    if (direction !== undefined) {
+      this._setDirection(
+        ["up", "down", "left", "right"],
+        direction,
+        speed,
+        spread
+      );
+    }
+  }
+
+  get width() {
+    return this._width;
+  }
+
+  get height() {
+    return this._height;
   }
 
   sample(particle) {
-    particle.x = Math.random() * this._width - this._width / 2 + this.x;
-    particle.y = Math.random() * this._height - this._height / 2 + this.y;
+    particle.x = Math.random() * this._width - this._halfWidth + this._x;
+    particle.y = Math.random() * this._height - this._halfHeight + this._y;
+
+    if (this._direction) {
+      this._writeVelocity(particle, RECT_ANGLES[this._direction]);
+    }
   }
 }
