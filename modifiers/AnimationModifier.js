@@ -33,8 +33,6 @@ const VALID_PROPERTIES = new Set([
   "originX", "originY", "width", "height"
 ]);
 
-let _nextId = 0;
-
 export class AnimationModifier {
   constructor({ property, keyframes, easing = "linear", priority } = {}) {
     if (!property || !VALID_PROPERTIES.has(property)) {
@@ -44,7 +42,6 @@ export class AnimationModifier {
       );
     }
 
-    this._id = _nextId++;
     this._track = new KeyframeTrack(keyframes, easing);
     this._property = property;
     this._keyframes = keyframes;
@@ -53,21 +50,18 @@ export class AnimationModifier {
     this.priority = priority;
   }
 
-  onEmit(particle) {
-    if (!particle.__jygameAnimSegments) {
-      particle.__jygameAnimSegments = [];
-    }
-    particle.__jygameAnimSegments[this._id] = 0;
+  onEmit(particle, ctx) {
+    const state = ctx.stateManager.ensure(particle, this, () => ({ segment: 0 }));
+    state.segment = 0;
     particle[this._property] = this._track.evaluate(0, 0);
   }
 
-  update(particle) {
-    const t = particle.__jygameAnimSegments;
-    if (!t) return;
-    let seg = t[this._id];
-    if (seg === undefined) return;
+  update(particle, dt, ctx) {
+    const state = ctx.stateManager.get(particle, this);
+    if (!state) return;
+    let seg = state.segment;
     seg = this._track.advance(particle.ageRatio, seg);
-    t[this._id] = seg;
+    state.segment = seg;
     particle[this._property] = this._track.evaluate(particle.ageRatio, seg);
   }
 

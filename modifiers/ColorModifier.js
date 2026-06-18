@@ -31,13 +31,14 @@ export class ColorModifier {
     this._count = this._stops.length;
   }
 
-  update(particle, dt) {
+  update(particle, dt, ctx) {
+    const state = ctx.stateManager.ensure(particle, this, () => ({ segment: 0 }));
     const stops = this._stops;
-    let seg = particle.__jygameColorSegment;
+    let seg = state.segment;
     while (seg < this._count - 2 && particle.ageRatio >= stops[seg + 1].pos) {
       seg++;
     }
-    particle.__jygameColorSegment = seg;
+    state.segment = seg;
 
     if (seg >= this._count - 1) {
       particle.r = stops[this._count - 1].r;

@@ -86,27 +86,33 @@ export class AnimatedSpriteModifier {
     return index;
   }
 
-  onEmit(particle) {
-    particle.__jygameAnimOffset = this._randomStart
+  onEmit(particle, ctx) {
+    const state = ctx.stateManager.ensure(particle, this, () => ({
+      offset: 0,
+      prevFrame: -1,
+      loopCount: 0,
+    }));
+    state.offset = this._randomStart
       ? (Math.random() * this._count) | 0
       : 0;
-
-    particle.__jygameAnimPrevFrame = -1;
-    particle.__jygameAnimLoopCount = 0;
-
-    this._applyFrame(particle, this._frames[particle.__jygameAnimOffset]);
+    state.prevFrame = -1;
+    state.loopCount = 0;
+    this._applyFrame(particle, this._frames[state.offset]);
   }
 
-  update(particle) {
+  update(particle, dt, ctx) {
+    const state = ctx.stateManager.get(particle, this);
+    if (!state) return;
+
     const t = this._animationDuration != null
       ? Math.min(1, particle.ageRatio * particle.maxLife / this._animationDuration)
       : particle.ageRatio;
 
-    const idx = this._getFrameIndex(t, particle.__jygameAnimOffset || 0);
+    const idx = this._getFrameIndex(t, state.offset);
     this._applyFrame(particle, this._frames[idx]);
 
     if (this._hasCallbacks) {
-      const prev = particle.__jygameAnimPrevFrame;
+      const prev = state.prevFrame;
       if (prev < 0) {
         this._onAnimationStart?.(particle);
       } else if (idx !== prev) {
@@ -115,15 +121,15 @@ export class AnimatedSpriteModifier {
 
       if (this._mode !== "once") {
         const cycles = (t * this._loops) | 0;
-        if (cycles > particle.__jygameAnimLoopCount) {
-          particle.__jygameAnimLoopCount = cycles;
+        if (cycles > state.loopCount) {
+          state.loopCount = cycles;
           this._onAnimationLoop?.(particle, cycles);
         }
       } else if (idx === this._count - 1 && prev !== idx) {
         this._onAnimationComplete?.(particle);
       }
 
-      particle.__jygameAnimPrevFrame = idx;
+      state.prevFrame = idx;
     }
   }
 

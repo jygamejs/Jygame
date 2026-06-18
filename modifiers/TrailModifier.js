@@ -1,6 +1,4 @@
 export class TrailModifier {
-  static _nextId = 0;
-
   constructor({
     mode = "distance",
     every,
@@ -10,8 +8,6 @@ export class TrailModifier {
     maxDistance = Infinity,
     priority
   } = {}) {
-    this._id = TrailModifier._nextId++;
-
     if (mode !== "distance" && mode !== "interval") {
       throw new Error('TrailModifier mode must be "distance" or "interval"');
     }
@@ -45,29 +41,19 @@ export class TrailModifier {
     this.priority = priority;
   }
 
-  _ensureState(particle) {
-    if (!particle.__trailStates) particle.__trailStates = {};
-    let state = particle.__trailStates[this._id];
-    if (!state) {
-      state = { x: 0, y: 0, timer: 0 };
-      particle.__trailStates[this._id] = state;
-    }
-    return state;
-  }
-
   beginFrame() {
     this._spawnedThisFrame = 0;
   }
 
-  onEmit(particle) {
-    const state = this._ensureState(particle);
+  onEmit(particle, ctx) {
+    const state = ctx.stateManager.ensure(particle, this, () => ({ x: 0, y: 0, timer: 0 }));
     state.x = particle.x;
     state.y = particle.y;
     state.timer = 0;
   }
 
   update(particle, dt, ctx) {
-    const state = this._ensureState(particle);
+    const state = ctx.stateManager.ensure(particle, this, () => ({ x: 0, y: 0, timer: 0 }));
     const system = ctx.system;
     const prevX = state.x;
     const prevY = state.y;

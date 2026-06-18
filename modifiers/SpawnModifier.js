@@ -1,6 +1,4 @@
 export class SpawnModifier {
-  static _nextId = 0;
-
   constructor({
     mode,
     every,
@@ -11,8 +9,6 @@ export class SpawnModifier {
     maxPerFrame = Infinity,
     priority
   } = {}) {
-    this._id = SpawnModifier._nextId++;
-
     if (mode !== "interval" && mode !== "death") {
       throw new Error('SpawnModifier mode must be "interval" or "death"');
     }
@@ -51,30 +47,21 @@ export class SpawnModifier {
     this.priority = priority;
   }
 
-  _ensureState(particle) {
-    if (!particle.__spawnStates) particle.__spawnStates = {};
-    let state = particle.__spawnStates[this._id];
-    if (!state) {
-      state = { timer: 0 };
-      particle.__spawnStates[this._id] = state;
-    }
-    return state;
-  }
-
   beginFrame() {
     this._spawnedThisFrame = 0;
   }
 
-  onEmit(particle) {
+  onEmit(particle, ctx) {
     if (this._mode === "interval") {
-      this._ensureState(particle).timer = 0;
+      const state = ctx.stateManager.ensure(particle, this, () => ({ timer: 0 }));
+      state.timer = 0;
     }
   }
 
   update(particle, dt, ctx) {
     if (this._mode !== "interval") return;
 
-    const state = this._ensureState(particle);
+    const state = ctx.stateManager.ensure(particle, this, () => ({ timer: 0 }));
     state.timer += dt;
 
     if (state.timer < this._every) return;

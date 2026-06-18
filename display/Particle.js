@@ -48,14 +48,6 @@ export class Particle {
     this.restitution = 1;
     this.collisionLayer = "default";
     this.onCollision = null;
-    this.__jygameAnimOffset = 0;
-    this.__jygameAnimPrevFrame = -1;
-    this.__jygameAnimLoopCount = 0;
-    this.__jygameColorSegment = 0;
-    this.__jygameAnimSegments = null;
-    this.__turbulenceStates = null;
-    this.__spawnStates = null;
-    this.__trailStates = null;
   }
 
   setFrame(x, y, width, height) {

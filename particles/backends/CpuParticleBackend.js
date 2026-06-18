@@ -1,52 +1,6 @@
-import { ActivePool } from "../../memory/ActivePool.js";
-import { Particle } from "../../display/Particle.js";
 import { hasLifecycleMethods } from "../../modifiers/ModifierUtils.js";
-
-const _resetParticle = p => {
-  p.x = 0;
-  p.y = 0;
-  p.vx = 0;
-  p.vy = 0;
-  p.ax = 0;
-  p.ay = 0;
-  p.life = 0;
-  p.maxLife = 0;
-  p.size = 1;
-  p.rotation = 0;
-  p.rotationSpeed = 0;
-  p.alpha = 1;
-  p.r = 255;
-  p.g = 255;
-  p.b = 255;
-  p.color = "#ffffff";
-  p.depth = 0;
-  p.ageRatio = 0;
-  p.collides = false;
-  p.radius = 1;
-  p.collisionResponse = "bounce";
-  p.restitution = 1;
-  p.collisionLayer = "default";
-  p.onCollision = null;
-  p.texture = null;
-  p.originX = 0.5;
-  p.originY = 0.5;
-  p.width = 0;
-  p.height = 0;
-  p.frameX = 0;
-  p.frameY = 0;
-  p.frameWidth = 0;
-  p.frameHeight = 0;
-  p.userData = null;
-  p.__jygameSortOrder = 0;
-  p.__jygameAnimOffset = 0;
-  p.__jygameAnimPrevFrame = -1;
-  p.__jygameAnimLoopCount = 0;
-  p.__jygameColorSegment = 0;
-  p.__jygameAnimSegments = null;
-  p.__turbulenceStates = null;
-  p.__spawnStates = null;
-  p.__trailStates = null;
-};
+import { ObjectParticleStorage } from "../storage/ObjectParticleStorage.js";
+import { ParticleStateManager } from "../ParticleStateManager.js";
 
 const _createEntry = (modifier, priority) => ({ modifier, priority });
 
@@ -70,17 +24,15 @@ export class CpuParticleBackend {
   constructor({ renderParticle, system } = {}) {
     this._system = system;
     this._renderParticle = renderParticle;
-    this._pool = new ActivePool({
-      create: () => new Particle(),
-      reset: _resetParticle,
-    });
+    this._storage = new ObjectParticleStorage();
+    this._stateManager = new ParticleStateManager();
     this._modifiers = [];
     this._updateModifiers = [];
     this._emitModifiers = [];
     this._deathModifiers = [];
     this._beginFrameModifiers = [];
     this._endFrameModifiers = [];
-    this._modifierContext = { system: this._system, activeParticles: this._pool.activeObjects };
+    this._modifierContext = { system: this._system, activeParticles: this._storage.activeParticles, stateManager: this._stateManager };
     this._isUpdating = false;
     this._pendingRemove = null;
     this._sortMode = "none";
@@ -167,6 +119,8 @@ export class CpuParticleBackend {
     this._modifierContext.activeParticles = null;
     this._sortedParticles = null;
     this._sortFunction = null;
+    this._storage = null;
+    this._stateManager = null;
   }
 
   get sortMode() {
@@ -271,7 +225,7 @@ export class CpuParticleBackend {
     }
     if (!this._sortDirty) return;
 
-    const active = this._pool.activeObjects;
+    const active = this._storage.activeParticles;
     const count = active.length;
 
     this._ensureSortBuffer(count);
@@ -299,7 +253,7 @@ export class CpuParticleBackend {
     const emLen = emitMods.length;
     const ctx = this._modifierContext;
     for (let i = 0; i < count; i++) {
-      const p = this._pool.acquire();
+      const p = this._storage.acquire();
       p.__jygameSortOrder = this._sortCounter++;
       if (initializer) initializer(p, i, emitter);
       for (let m = 0; m < emLen; m++) {
@@ -313,7 +267,7 @@ export class CpuParticleBackend {
   }
 
   emitOne(initializer) {
-    const p = this._pool.acquire();
+    const p = this._storage.acquire();
     p.__jygameSortOrder = this._sortCounter++;
     if (initializer) initializer(p, 0);
     const emitMods = this._emitModifiers;
@@ -332,8 +286,7 @@ export class CpuParticleBackend {
     if (!Number.isFinite(dt) || dt < 0) return;
     this._isUpdating = true;
 
-    const active = this._pool.activeObjects;
-    const pool = this._pool;
+    const active = this._storage.activeParticles;
     const ctx = this._modifierContext;
     const beginFrameMods = this._beginFrameModifiers;
     const updateMods = this._updateModifiers;
@@ -378,7 +331,8 @@ export class CpuParticleBackend {
             mod.onDeath(p, ctx);
           }
         }
-        pool.release(p);
+        this._storage.release(p);
+        this._stateManager.release(p);
       }
     }
 
@@ -398,7 +352,7 @@ export class CpuParticleBackend {
   }
 
   render(ctx) {
-    const active = this._pool.activeObjects;
+    const active = this._storage.activeParticles;
     const count = active.length;
 
     ctx.save();
@@ -451,43 +405,44 @@ export class CpuParticleBackend {
   }
 
   clear() {
-    this._pool.clearActive();
+    this._storage.clear();
+    this._stateManager.releaseAll();
   }
 
   get particles() {
-    return this._pool.activeObjects;
+    return this._storage.activeParticles;
   }
 
   warmup(count) {
-    this._pool.warmup(count);
+    this._storage.warmup(count);
   }
 
   get activeCount() {
-    return this._pool.activeCount;
+    return this._storage.activeCount;
   }
 
   get freeCount() {
-    return this._pool.freeCount;
+    return this._storage.freeCount;
   }
 
   get capacity() {
-    return this._pool.capacity;
+    return this._storage.capacity;
   }
 
   get peakActive() {
-    return this._pool.peakActive;
+    return this._storage.peakActive;
   }
 
   get peakCapacity() {
-    return this._pool.peakCapacity;
+    return this._storage.peakCapacity;
   }
 
   get peakFree() {
-    return this._pool.peakFree;
+    return this._storage.peakFree;
   }
 
   get totalCreated() {
-    return this._pool.totalCreated;
+    return this._storage.totalCreated;
   }
 
   get isEmpty() {
