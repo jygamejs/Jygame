@@ -17,6 +17,7 @@ export class ParticleLayerManager {
     const layer = new ParticleLayer(name, { order }, () => {
       this._markDirty();
     });
+    layer._manager = this;
 
     this._layers.set(name, layer);
     this._sortedLayers.push(layer);
@@ -37,6 +38,7 @@ export class ParticleLayerManager {
     const layer = this._layers.get(name);
     if (!layer) return;
     this._layers.delete(name);
+    layer._manager = null;
     this._markDirty();
   }
 
@@ -50,8 +52,10 @@ export class ParticleLayerManager {
   destroy() {
     if (this._destroyed) return;
     this._destroyed = true;
-    for (const layer of this._layers.values()) {
-      layer.destroy();
+    const layers = Array.from(this._layers.values());
+    for (let i = 0; i < layers.length; i++) {
+      layers[i]._manager = null;
+      layers[i].destroy();
     }
     this._layers.clear();
     this._sortedLayers.length = 0;

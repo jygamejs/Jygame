@@ -19,6 +19,7 @@ const _resetParticle = p => {
   p.g = 255;
   p.b = 255;
   p.color = "#ffffff";
+  p.depth = 0;
   p.ageRatio = 0;
   p.texture = null;
   p.originX = 0.5;
@@ -30,6 +31,7 @@ const _resetParticle = p => {
   p.frameWidth = 0;
   p.frameHeight = 0;
   p.userData = null;
+  p.__jygameSortOrder = 0;
   p.__jygameAnimOffset = 0;
   p.__jygameAnimPrevFrame = -1;
   p.__jygameAnimLoopCount = 0;
@@ -41,6 +43,22 @@ const _resetParticle = p => {
 };
 
 const _createEntry = (modifier, priority) => ({ modifier, priority });
+
+const SORT_MODES = new Set([
+  "none", "age", "reverseAge", "size", "reverseSize",
+  "depth", "reverseDepth", "custom",
+]);
+
+function _finiteCompare(a, b, field) {
+  const va = a[field];
+  const vb = b[field];
+  if (!Number.isFinite(va) || !Number.isFinite(vb)) {
+    throw new Error(
+      `ParticleSystem: particle.${field} must be finite, got ${va} and ${vb}`
+    );
+  }
+  return va - vb;
+}
 
 export class ParticleSystem {
   constructor({ renderParticle } = {}) {
@@ -58,6 +76,12 @@ export class ParticleSystem {
     this._modifierContext = { system: this, activeParticles: this._pool.activeObjects };
     this._isUpdating = false;
     this._pendingRemove = null;
+    this._sortMode = "none";
+    this._sortFunction = null;
+    this.sortEveryFrame = false;
+    this._sortDirty = false;
+    this._sortedParticles = null;
+    this._sortCounter = 0;
   }
 
   _flushPendingRemovals() {
@@ -133,6 +157,133 @@ export class ParticleSystem {
     this._renderParticle = null;
     this._modifierContext.system = null;
     this._modifierContext.activeParticles = null;
+    this._sortedParticles = null;
+    this._sortFunction = null;
+  }
+
+  get sortMode() {
+    return this._sortMode;
+  }
+
+  set sortMode(value) {
+    if (!SORT_MODES.has(value)) {
+      throw new Error(
+        `ParticleSystem.sortMode: unknown mode "${value}". ` +
+        `Valid modes: ${Array.from(SORT_MODES).join(", ")}`
+      );
+    }
+    if (value === this._sortMode) return;
+    this._sortMode = value;
+    this._sortDirty = true;
+    if (value !== "custom") {
+      this._sortFunction = null;
+    }
+  }
+
+  get sortFunction() {
+    return this._sortFunction;
+  }
+
+  set sortFunction(value) {
+    if (this._sortMode === "custom" && typeof value !== "function") {
+      throw new Error(
+        "ParticleSystem.sortFunction: must be a function when sortMode is \"custom\""
+      );
+    }
+    this._sortFunction = value;
+    this._sortDirty = true;
+  }
+
+  get sortedParticleCount() {
+    return this._sortMode !== "none" ? this.activeCount : 0;
+  }
+
+  _ensureSortBuffer(minSize) {
+    if (!this._sortedParticles || this._sortedParticles.length < minSize) {
+      this._sortedParticles = new Array(minSize);
+    }
+  }
+
+  _getComparator() {
+    const tie = (a, b) => a.__jygameSortOrder - b.__jygameSortOrder;
+
+    switch (this._sortMode) {
+      case "age":
+        return (a, b) => {
+          const d = a.ageRatio - b.ageRatio;
+          return d !== 0 ? d : tie(a, b);
+        };
+      case "reverseAge":
+        return (a, b) => {
+          const d = b.ageRatio - a.ageRatio;
+          return d !== 0 ? d : tie(a, b);
+        };
+      case "size":
+        return (a, b) => {
+          const d = _finiteCompare(a, b, "size");
+          return d !== 0 ? d : tie(a, b);
+        };
+      case "reverseSize":
+        return (a, b) => {
+          const d = _finiteCompare(b, a, "size");
+          return d !== 0 ? d : tie(a, b);
+        };
+      case "depth":
+        return (a, b) => {
+          const d = _finiteCompare(a, b, "depth");
+          return d !== 0 ? d : tie(a, b);
+        };
+      case "reverseDepth":
+        return (a, b) => {
+          const d = _finiteCompare(b, a, "depth");
+          return d !== 0 ? d : tie(a, b);
+        };
+      case "custom":
+        return (a, b) => {
+          const d = this._sortFunction(a, b);
+          if (typeof d !== "number" || !Number.isFinite(d)) {
+            throw new Error(
+              `ParticleSystem custom sortFunction returned invalid value ${d}. Must return a finite number.`
+            );
+          }
+          return d !== 0 ? d : tie(a, b);
+        };
+      default:
+        return null;
+    }
+  }
+
+  _markSortDirty() {
+    this._sortDirty = true;
+  }
+
+  _sortParticles() {
+    if (this.sortEveryFrame) {
+      this._sortDirty = true;
+    }
+    if (!this._sortDirty) return;
+
+    const active = this._pool.activeObjects;
+    const count = active.length;
+
+    this._ensureSortBuffer(count);
+    const buf = this._sortedParticles;
+
+    for (let i = 0; i < count; i++) {
+      buf[i] = active[i];
+    }
+
+    if (count > 1) {
+      const cmp = this._getComparator();
+      if (cmp) {
+        const savedLen = buf.length;
+        buf.length = count;
+        buf.sort(cmp);
+        buf.length = savedLen;
+      }
+    }
+
+    this._sortDirty = false;
   }
 
   emit(count, initializer, emitter) {
@@ -141,6 +292,7 @@ export class ParticleSystem {
     const ctx = this._modifierContext;
     for (let i = 0; i < count; i++) {
       const p = this._pool.acquire();
+      p.__jygameSortOrder = this._sortCounter++;
       if (initializer) initializer(p, i, emitter);
       for (let m = 0; m < emLen; m++) {
         const mod = emitMods[m];
@@ -149,10 +301,12 @@ export class ParticleSystem {
         }
       }
     }
+    if (this._sortMode !== "none") this._markSortDirty();
   }
 
   emitOne(initializer) {
     const p = this._pool.acquire();
+    p.__jygameSortOrder = this._sortCounter++;
     if (initializer) initializer(p, 0);
     const emitMods = this._emitModifiers;
     const ctx = this._modifierContext;
@@ -162,6 +316,7 @@ export class ParticleSystem {
         mod.onEmit(p, ctx);
       }
     }
+    if (this._sortMode !== "none") this._markSortDirty();
     return p;
   }
 
@@ -187,6 +342,8 @@ export class ParticleSystem {
         mod.beginFrame(dt, ctx);
       }
     }
+
+    let anyReleased = false;
 
     for (let i = active.length - 1; i >= 0; i--) {
       const p = active[i];
@@ -216,6 +373,7 @@ export class ParticleSystem {
           }
         }
         pool.release(p);
+        anyReleased = true;
       }
     }
 
@@ -226,15 +384,39 @@ export class ParticleSystem {
       }
     }
 
+    if (anyReleased && this._sortMode !== "none") {
+      this._markSortDirty();
+    }
+
     this._isUpdating = false;
     this._flushPendingRemovals();
   }
 
   render(ctx) {
     const active = this._pool.activeObjects;
+    const count = active.length;
+
     ctx.save();
-    for (let i = 0; i < active.length; i++) {
-      const p = active[i];
+
+    if (count === 0) {
+      ctx.restore();
+      return;
+    }
+
+    let source;
+    let renderCount;
+
+    if (this._sortMode === "none") {
+      source = active;
+      renderCount = count;
+    } else {
+      this._sortParticles();
+      source = this._sortedParticles;
+      renderCount = count;
+    }
+
+    for (let i = 0; i < renderCount; i++) {
+      const p = source[i];
       ctx.globalAlpha = p.alpha;
       if (this._renderParticle) {
         this._renderParticle(ctx, p);
@@ -255,6 +437,7 @@ export class ParticleSystem {
         ctx.fillRect(p.x - p.size * 0.5, p.y - p.size * 0.5, p.size, p.size);
       }
     }
+
     ctx.restore();
   }
 

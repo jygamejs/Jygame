@@ -40,6 +40,7 @@ export class Particle {
 
     this.userData = null;
 
+    this.depth = 0;
     this.ageRatio = 0;
     this.__jygameAnimOffset = 0;
     this.__jygameAnimPrevFrame = -1;

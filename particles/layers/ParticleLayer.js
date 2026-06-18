@@ -18,6 +18,7 @@ export class ParticleLayer {
     this._pausedOriginalEnabled = null;
     this._tags = new Set();
     this._destroyed = false;
+    this._manager = null;
   }
 
   get name() {
@@ -130,6 +131,10 @@ export class ParticleLayer {
     this._tags.clear();
     this._paused = false;
     this._pausedOriginalEnabled = null;
+    if (this._manager) {
+      this._manager.remove(this._name);
+    }
+    this._manager = null;
     this._onOrderChange = null;
   }
 
