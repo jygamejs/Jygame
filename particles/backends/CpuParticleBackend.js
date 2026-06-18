@@ -1,0 +1,504 @@
+import { ActivePool } from "../../memory/ActivePool.js";
+import { Particle } from "../../display/Particle.js";
+import { hasLifecycleMethods } from "../../modifiers/ModifierUtils.js";
+
+const _resetParticle = p => {
+  p.x = 0;
+  p.y = 0;
+  p.vx = 0;
+  p.vy = 0;
+  p.ax = 0;
+  p.ay = 0;
+  p.life = 0;
+  p.maxLife = 0;
+  p.size = 1;
+  p.rotation = 0;
+  p.rotationSpeed = 0;
+  p.alpha = 1;
+  p.r = 255;
+  p.g = 255;
+  p.b = 255;
+  p.color = "#ffffff";
+  p.depth = 0;
+  p.ageRatio = 0;
+  p.collides = false;
+  p.radius = 1;
+  p.collisionResponse = "bounce";
+  p.restitution = 1;
+  p.collisionLayer = "default";
+  p.onCollision = null;
+  p.texture = null;
+  p.originX = 0.5;
+  p.originY = 0.5;
+  p.width = 0;
+  p.height = 0;
+  p.frameX = 0;
+  p.frameY = 0;
+  p.frameWidth = 0;
+  p.frameHeight = 0;
+  p.userData = null;
+  p.__jygameSortOrder = 0;
+  p.__jygameAnimOffset = 0;
+  p.__jygameAnimPrevFrame = -1;
+  p.__jygameAnimLoopCount = 0;
+  p.__jygameColorSegment = 0;
+  p.__jygameAnimSegments = null;
+  p.__turbulenceStates = null;
+  p.__spawnStates = null;
+  p.__trailStates = null;
+};
+
+const _createEntry = (modifier, priority) => ({ modifier, priority });
+
+const SORT_MODES = new Set([
+  "none", "age", "reverseAge", "size", "reverseSize",
+  "depth", "reverseDepth", "custom",
+]);
+
+function _finiteCompare(a, b, field) {
+  const va = a[field];
+  const vb = b[field];
+  if (!Number.isFinite(va) || !Number.isFinite(vb)) {
+    throw new Error(
+      `ParticleSystem: particle.${field} must be finite, got ${va} and ${vb}`
+    );
+  }
+  return va - vb;
+}
+
+export class CpuParticleBackend {
+  constructor({ renderParticle, system } = {}) {
+    this._system = system;
+    this._renderParticle = renderParticle;
+    this._pool = new ActivePool({
+      create: () => new Particle(),
+      reset: _resetParticle,
+    });
+    this._modifiers = [];
+    this._updateModifiers = [];
+    this._emitModifiers = [];
+    this._deathModifiers = [];
+    this._beginFrameModifiers = [];
+    this._endFrameModifiers = [];
+    this._modifierContext = { system: this._system, activeParticles: this._pool.activeObjects };
+    this._isUpdating = false;
+    this._pendingRemove = null;
+    this._sortMode = "none";
+    this._sortFunction = null;
+    this.sortEveryFrame = false;
+    this._sortDirty = false;
+    this._sortedParticles = null;
+    this._sortCounter = 0;
+    this._collisionProvider = null;
+  }
+
+  _flushPendingRemovals() {
+    if (!this._pendingRemove) return;
+    const pending = this._pendingRemove;
+    this._pendingRemove = null;
+    for (let i = 0; i < pending.length; i++) {
+      this.removeModifier(pending[i]);
+    }
+  }
+
+  _rebuildCaches() {
+    this._beginFrameModifiers.length = 0;
+    this._updateModifiers.length = 0;
+    this._emitModifiers.length = 0;
+    this._deathModifiers.length = 0;
+    this._endFrameModifiers.length = 0;
+    const mods = this._modifiers;
+    for (let i = 0; i < mods.length; i++) {
+      const mod = mods[i].modifier;
+      if (typeof mod.beginFrame === 'function') this._beginFrameModifiers.push(mod);
+      if (typeof mod.update === 'function') this._updateModifiers.push(mod);
+      if (typeof mod.onEmit === 'function') this._emitModifiers.push(mod);
+      if (typeof mod.onDeath === 'function') this._deathModifiers.push(mod);
+      if (typeof mod.endFrame === 'function') this._endFrameModifiers.push(mod);
+    }
+  }
+
+  addModifier(modifier, priority) {
+    if (!hasLifecycleMethods(modifier)) {
+      throw new Error('Modifier must implement at least one lifecycle method (beginFrame, update, onEmit, onDeath, or endFrame)');
+    }
+    if (priority === undefined) priority = modifier.priority ?? 0;
+    const entry = _createEntry(modifier, priority);
+    this._modifiers.push(entry);
+    this._modifiers.sort((a, b) => a.priority - b.priority);
+    this._rebuildCaches();
+  }
+
+  removeModifier(modifier) {
+    if (this._isUpdating) {
+      if (!this._pendingRemove) this._pendingRemove = [];
+      this._pendingRemove.push(modifier);
+      return;
+    }
+    const mods = this._modifiers;
+    for (let i = 0; i < mods.length; i++) {
+      if (mods[i].modifier === modifier) {
+        mods[i].modifier.destroy?.();
+        mods.splice(i, 1);
+        this._rebuildCaches();
+        return;
+      }
+    }
+  }
+
+  clearModifiers() {
+    const mods = this._modifiers;
+    for (let i = 0; i < mods.length; i++) {
+      mods[i].modifier.destroy?.();
+    }
+    this._modifiers.length = 0;
+    this._beginFrameModifiers.length = 0;
+    this._updateModifiers.length = 0;
+    this._emitModifiers.length = 0;
+    this._deathModifiers.length = 0;
+    this._endFrameModifiers.length = 0;
+  }
+
+  destroy() {
+    this.clear();
+    this.clearModifiers();
+    this._renderParticle = null;
+    this._modifierContext.system = null;
+    this._modifierContext.activeParticles = null;
+    this._sortedParticles = null;
+    this._sortFunction = null;
+  }
+
+  get sortMode() {
+    return this._sortMode;
+  }
+
+  set sortMode(value) {
+    if (!SORT_MODES.has(value)) {
+      throw new Error(
+        `ParticleSystem.sortMode: unknown mode "${value}". ` +
+        `Valid modes: ${Array.from(SORT_MODES).join(", ")}`
+      );
+    }
+    if (value === this._sortMode) return;
+    this._sortMode = value;
+    this._sortDirty = true;
+    if (value !== "custom") {
+      this._sortFunction = null;
+    }
+  }
+
+  get sortFunction() {
+    return this._sortFunction;
+  }
+
+  set sortFunction(value) {
+    if (this._sortMode === "custom" && typeof value !== "function") {
+      throw new Error(
+        "ParticleSystem.sortFunction: must be a function when sortMode is \"custom\""
+      );
+    }
+    this._sortFunction = value;
+    this._sortDirty = true;
+  }
+
+  get sortedParticleCount() {
+    return this._sortMode !== "none" ? this.activeCount : 0;
+  }
+
+  _ensureSortBuffer(minSize) {
+    if (!this._sortedParticles || this._sortedParticles.length < minSize) {
+      this._sortedParticles = new Array(minSize);
+    }
+  }
+
+  _getComparator() {
+    const tie = (a, b) => a.__jygameSortOrder - b.__jygameSortOrder;
+
+    switch (this._sortMode) {
+      case "age":
+        return (a, b) => {
+          const d = b.ageRatio - a.ageRatio;
+          return d !== 0 ? d : tie(a, b);
+        };
+      case "reverseAge":
+        return (a, b) => {
+          const d = a.ageRatio - b.ageRatio;
+          return d !== 0 ? d : tie(a, b);
+        };
+      case "size":
+        return (a, b) => {
+          const d = _finiteCompare(a, b, "size");
+          return d !== 0 ? d : tie(a, b);
+        };
+      case "reverseSize":
+        return (a, b) => {
+          const d = _finiteCompare(b, a, "size");
+          return d !== 0 ? d : tie(a, b);
+        };
+      case "depth":
+        return (a, b) => {
+          const d = _finiteCompare(a, b, "depth");
+          return d !== 0 ? d : tie(a, b);
+        };
+      case "reverseDepth":
+        return (a, b) => {
+          const d = _finiteCompare(b, a, "depth");
+          return d !== 0 ? d : tie(a, b);
+        };
+      case "custom":
+        return (a, b) => {
+          const d = this._sortFunction(a, b);
+          if (typeof d !== "number" || !Number.isFinite(d)) {
+            throw new Error(
+              `ParticleSystem custom sortFunction returned invalid value ${d}. Must return a finite number.`
+            );
+          }
+          return d !== 0 ? d : tie(a, b);
+        };
+      default:
+        return null;
+    }
+  }
+
+  _markSortDirty() {
+    this._sortDirty = true;
+  }
+
+  _sortParticles() {
+    if (this.sortEveryFrame) {
+      this._sortDirty = true;
+    }
+    if (!this._sortDirty) return;
+
+    const active = this._pool.activeObjects;
+    const count = active.length;
+
+    this._ensureSortBuffer(count);
+    const buf = this._sortedParticles;
+
+    for (let i = 0; i < count; i++) {
+      buf[i] = active[i];
+    }
+
+    if (count > 1) {
+      const cmp = this._getComparator();
+      if (cmp) {
+        const savedLen = buf.length;
+        buf.length = count;
+        buf.sort(cmp);
+        buf.length = savedLen;
+      }
+    }
+
+    this._sortDirty = false;
+  }
+
+  emit(count, initializer, emitter) {
+    const emitMods = this._emitModifiers;
+    const emLen = emitMods.length;
+    const ctx = this._modifierContext;
+    for (let i = 0; i < count; i++) {
+      const p = this._pool.acquire();
+      p.__jygameSortOrder = this._sortCounter++;
+      if (initializer) initializer(p, i, emitter);
+      for (let m = 0; m < emLen; m++) {
+        const mod = emitMods[m];
+        if (mod.enabled !== false) {
+          mod.onEmit(p, ctx);
+        }
+      }
+    }
+    if (this._sortMode !== "none") this._markSortDirty();
+  }
+
+  emitOne(initializer) {
+    const p = this._pool.acquire();
+    p.__jygameSortOrder = this._sortCounter++;
+    if (initializer) initializer(p, 0);
+    const emitMods = this._emitModifiers;
+    const ctx = this._modifierContext;
+    for (let m = 0; m < emitMods.length; m++) {
+      const mod = emitMods[m];
+      if (mod.enabled !== false) {
+        mod.onEmit(p, ctx);
+      }
+    }
+    if (this._sortMode !== "none") this._markSortDirty();
+    return p;
+  }
+
+  update(dt) {
+    if (!Number.isFinite(dt) || dt < 0) return;
+    this._isUpdating = true;
+
+    const active = this._pool.activeObjects;
+    const pool = this._pool;
+    const ctx = this._modifierContext;
+    const beginFrameMods = this._beginFrameModifiers;
+    const updateMods = this._updateModifiers;
+    const deathMods = this._deathModifiers;
+    const endFrameMods = this._endFrameModifiers;
+    const bfLen = beginFrameMods.length;
+    const upLen = updateMods.length;
+    const dLen = deathMods.length;
+    const efLen = endFrameMods.length;
+
+    for (let m = 0; m < bfLen; m++) {
+      const mod = beginFrameMods[m];
+      if (mod.enabled !== false) {
+        mod.beginFrame(dt, ctx);
+      }
+    }
+
+    for (let i = active.length - 1; i >= 0; i--) {
+      const p = active[i];
+
+      p.vx += p.ax * dt;
+      p.vy += p.ay * dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.rotation += p.rotationSpeed * dt;
+      p.life -= dt;
+      p.ageRatio = p.maxLife > 0
+        ? Math.max(0, Math.min(1, 1 - p.life / p.maxLife))
+        : 0;
+
+      for (let m = 0; m < upLen; m++) {
+        const mod = updateMods[m];
+        if (mod.enabled !== false) {
+          mod.update(p, dt, ctx);
+        }
+      }
+
+      if (p.life <= 0) {
+        for (let m = 0; m < dLen; m++) {
+          const mod = deathMods[m];
+          if (mod.enabled !== false) {
+            mod.onDeath(p, ctx);
+          }
+        }
+        pool.release(p);
+      }
+    }
+
+    for (let m = 0; m < efLen; m++) {
+      const mod = endFrameMods[m];
+      if (mod.enabled !== false) {
+        mod.endFrame(dt, ctx);
+      }
+    }
+
+    if (this._sortMode !== "none") {
+      this._markSortDirty();
+    }
+
+    this._isUpdating = false;
+    this._flushPendingRemovals();
+  }
+
+  render(ctx) {
+    const active = this._pool.activeObjects;
+    const count = active.length;
+
+    ctx.save();
+
+    if (count === 0) {
+      ctx.restore();
+      return;
+    }
+
+    let source;
+    let renderCount;
+
+    if (this._sortMode === "none") {
+      source = active;
+      renderCount = count;
+    } else {
+      this._sortParticles();
+      source = this._sortedParticles;
+      renderCount = count;
+    }
+
+    for (let i = 0; i < renderCount; i++) {
+      const p = source[i];
+      ctx.globalAlpha = p.alpha;
+      if (this._renderParticle) {
+        this._renderParticle(ctx, p);
+      } else if (p.texture) {
+        const w = p.width > 0 ? p.width : p.size;
+        const h = p.height > 0 ? p.height : p.size;
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        if (p.rotation) ctx.rotate(p.rotation);
+        if (p.frameWidth > 0 && p.frameHeight > 0) {
+          ctx.drawImage(p.texture, p.frameX, p.frameY, p.frameWidth, p.frameHeight, -w * p.originX, -h * p.originY, w, h);
+        } else {
+          ctx.drawImage(p.texture, -w * p.originX, -h * p.originY, w, h);
+        }
+        ctx.restore();
+      } else {
+        ctx.fillStyle = `rgb(${p.r | 0},${p.g | 0},${p.b | 0})`;
+        ctx.fillRect(p.x - p.size * 0.5, p.y - p.size * 0.5, p.size, p.size);
+      }
+    }
+
+    ctx.restore();
+  }
+
+  setCollisionProvider(provider) {
+    this._collisionProvider = provider;
+  }
+
+  clear() {
+    this._pool.clearActive();
+  }
+
+  get particles() {
+    return this._pool.activeObjects;
+  }
+
+  warmup(count) {
+    this._pool.warmup(count);
+  }
+
+  get activeCount() {
+    return this._pool.activeCount;
+  }
+
+  get freeCount() {
+    return this._pool.freeCount;
+  }
+
+  get capacity() {
+    return this._pool.capacity;
+  }
+
+  get peakActive() {
+    return this._pool.peakActive;
+  }
+
+  get peakCapacity() {
+    return this._pool.peakCapacity;
+  }
+
+  get peakFree() {
+    return this._pool.peakFree;
+  }
+
+  get totalCreated() {
+    return this._pool.totalCreated;
+  }
+
+  get isEmpty() {
+    return this.activeCount === 0;
+  }
+
+  get hasParticles() {
+    return this.activeCount > 0;
+  }
+
+  get modifierCount() {
+    return this._modifiers.length;
+  }
+}
