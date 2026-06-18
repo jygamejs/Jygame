@@ -40,8 +40,8 @@ export class SpawnModifier {
     this._offsetX = offsetX;
     this._offsetY = offsetY;
 
-    if (!Number.isFinite(maxPerFrame) || maxPerFrame < 0) {
-      throw new Error("SpawnModifier maxPerFrame must be >= 0");
+    if (maxPerFrame !== Infinity && (!Number.isFinite(maxPerFrame) || maxPerFrame < 0)) {
+      throw new Error("SpawnModifier maxPerFrame must be >= 0 or Infinity");
     }
     this._maxPerFrame = maxPerFrame;
 
@@ -114,5 +114,23 @@ export class SpawnModifier {
     }
     this._spawnedThisFrame++;
     this.spawnedCount++;
+  }
+
+  toJSON() {
+    throw new Error("SpawnModifier cannot be serialized (closures in initializer)");
+  }
+
+  clone() {
+    const opts = {
+      mode: this._mode,
+      count: this._count,
+      initializer: this._initializer,
+      offsetX: this._offsetX,
+      offsetY: this._offsetY,
+      maxPerFrame: this._maxPerFrame,
+      priority: this.priority
+    };
+    if (this._mode === "interval") opts.every = this._every;
+    return new SpawnModifier(opts);
   }
 }

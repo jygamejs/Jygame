@@ -126,4 +126,8 @@ export class AnimatedSpriteModifier {
       particle.__jygameAnimPrevFrame = idx;
     }
   }
+
+  toJSON() {
+    throw new Error("AnimatedSpriteModifier cannot be serialized (callbacks in constructor)");
+  }
 }

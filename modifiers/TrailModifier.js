@@ -29,13 +29,13 @@ export class TrailModifier {
 
     this._inheritVelocity = !!inheritVelocity;
 
-    if (!Number.isFinite(maxPerFrame) || maxPerFrame < 0) {
-      throw new Error("TrailModifier maxPerFrame must be >= 0");
+    if (maxPerFrame !== Infinity && (!Number.isFinite(maxPerFrame) || maxPerFrame < 0)) {
+      throw new Error("TrailModifier maxPerFrame must be >= 0 or Infinity");
     }
     this._maxPerFrame = maxPerFrame;
 
-    if (!Number.isFinite(maxDistance) || maxDistance <= 0) {
-      throw new Error("TrailModifier maxDistance must be a finite number > 0");
+    if (maxDistance !== Infinity && (!Number.isFinite(maxDistance) || maxDistance <= 0)) {
+      throw new Error("TrailModifier maxDistance must be > 0 or Infinity");
     }
     this._maxDistance = maxDistance;
 
@@ -117,6 +117,22 @@ export class TrailModifier {
     this._initializer(child, source);
     this._spawnedThisFrame++;
     this.spawnedCount++;
+  }
+
+  toJSON() {
+    throw new Error("TrailModifier cannot be serialized (closures in initializer)");
+  }
+
+  clone() {
+    return new TrailModifier({
+      mode: this._mode,
+      every: this._every,
+      initializer: this._initializer,
+      inheritVelocity: this._inheritVelocity,
+      maxPerFrame: this._maxPerFrame,
+      maxDistance: this._maxDistance,
+      priority: this.priority
+    });
   }
 
   destroy() {

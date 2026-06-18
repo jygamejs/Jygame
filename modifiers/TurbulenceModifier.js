@@ -41,4 +41,22 @@ export class TurbulenceModifier {
     particle.vx += Math.sin(seed + t) * this._strength * dt;
     particle.vy += Math.cos(seed + t * 1.31) * this._strength * dt;
   }
+
+  clone() {
+    return new TurbulenceModifier({
+      strength: this._strength,
+      frequency: this._frequency,
+      priority: this.priority
+    });
+  }
+
+  toJSON() {
+    const obj = { type: "TurbulenceModifier", strength: this._strength, frequency: this._frequency };
+    if (this.priority !== undefined) obj.priority = this.priority;
+    return obj;
+  }
+
+  static fromJSON(data) {
+    return new TurbulenceModifier(data);
+  }
 }

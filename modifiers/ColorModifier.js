@@ -14,6 +14,9 @@ export class ColorModifier {
   constructor({ from, to, stops, priority } = {}) {
     this.enabled = true;
     this.priority = priority;
+    this._fromArg = from;
+    this._toArg = to;
+    this._stopsArg = stops;
     if (stops) {
       if (stops.length < 2) throw new Error("ColorModifier requires at least 2 color stops");
       this._stops = stops.map(_toStop).sort((a, b) => a.pos - b.pos);
@@ -52,5 +55,24 @@ export class ColorModifier {
     particle.r = a.r + (b.r - a.r) * segT;
     particle.g = a.g + (b.g - a.g) * segT;
     particle.b = a.b + (b.b - a.b) * segT;
+  }
+
+  toJSON() {
+    const obj = { type: "ColorModifier" };
+    if (this._stopsArg) {
+      obj.stops = this._stops.map(s => [
+        s.pos,
+        `#${s.r.toString(16).padStart(2, "0")}${s.g.toString(16).padStart(2, "0")}${s.b.toString(16).padStart(2, "0")}`
+      ]);
+    } else {
+      obj.from = this._fromArg || "#ffffff";
+      obj.to = this._toArg || "#000000";
+    }
+    if (this.priority !== undefined) obj.priority = this.priority;
+    return obj;
+  }
+
+  static fromJSON(data) {
+    return new ColorModifier(data);
   }
 }

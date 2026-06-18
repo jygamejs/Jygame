@@ -47,6 +47,8 @@ export class AnimationModifier {
     this._id = _nextId++;
     this._track = new KeyframeTrack(keyframes, easing);
     this._property = property;
+    this._keyframes = keyframes;
+    this._easing = easing;
     this.enabled = true;
     this.priority = priority;
   }
@@ -67,6 +69,17 @@ export class AnimationModifier {
     seg = this._track.advance(particle.ageRatio, seg);
     t[this._id] = seg;
     particle[this._property] = this._track.evaluate(particle.ageRatio, seg);
+  }
+
+  toJSON() {
+    const obj = { type: "AnimationModifier", property: this._property, keyframes: this._keyframes };
+    if (this._easing !== "linear") obj.easing = this._easing;
+    if (this.priority !== undefined) obj.priority = this.priority;
+    return obj;
+  }
+
+  static fromJSON(data) {
+    return new AnimationModifier(data);
   }
 }
 

@@ -34,4 +34,31 @@ export class RotationModifier {
       particle.rotation = this._from + this._diff * particle.ageRatio;
     }
   }
+
+  clone() {
+    const opts = { randomStart: this._randomStart, priority: this.priority };
+    if (this._mode === "velocity") {
+      opts.speed = this._speed;
+    } else {
+      opts.from = this._from;
+      opts.to = this._to;
+    }
+    return new RotationModifier(opts);
+  }
+
+  toJSON() {
+    const obj = { type: "RotationModifier", randomStart: this._randomStart };
+    if (this._mode === "velocity") {
+      obj.speed = this._speed;
+    } else {
+      obj.from = this._from;
+      obj.to = this._to;
+    }
+    if (this.priority !== undefined) obj.priority = this.priority;
+    return obj;
+  }
+
+  static fromJSON(data) {
+    return new RotationModifier(data);
+  }
 }

@@ -44,4 +44,36 @@ export class OrbitModifier extends ForceModifier {
       particle.vy += this._tmpNY * correction * dt;
     }
   }
+
+  clone() {
+    return new OrbitModifier({
+      x: this._staticX,
+      y: this._staticY,
+      target: this._isStaticTarget ? undefined : this._target,
+      strength: this._strength,
+      falloff: this._falloff,
+      minDistance: this._minDistance,
+      radius: this._radius,
+      stiffness: this._stiffness,
+      direction: this._clockwise ? "clockwise" : "counterclockwise",
+      priority: this.priority
+    });
+  }
+
+  toJSON() {
+    const obj = { type: "OrbitModifier", strength: this._strength, falloff: this._falloff, minDistance: this._minDistance, stiffness: this._stiffness, direction: this._clockwise ? "clockwise" : "counterclockwise" };
+    if (this._radiusMode) obj.radius = this._radius;
+    if (this._isStaticTarget) {
+      obj.x = this._staticX;
+      obj.y = this._staticY;
+    } else {
+      throw new Error("OrbitModifier.toJSON(): dynamic targets cannot be serialized");
+    }
+    if (this.priority !== undefined) obj.priority = this.priority;
+    return obj;
+  }
+
+  static fromJSON(data) {
+    return new OrbitModifier(data);
+  }
 }

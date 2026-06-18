@@ -20,4 +20,22 @@ export class WindModifier {
     particle.vx += this._frameVX;
     particle.vy += this._frameVY;
   }
+
+  clone() {
+    return new WindModifier({
+      x: this._windX,
+      y: this._windY,
+      priority: this.priority
+    });
+  }
+
+  toJSON() {
+    const obj = { type: "WindModifier", x: this._windX, y: this._windY };
+    if (this.priority !== undefined) obj.priority = this.priority;
+    return obj;
+  }
+
+  static fromJSON(data) {
+    return new WindModifier(data);
+  }
 }

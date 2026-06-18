@@ -16,4 +16,23 @@ export class VelocityModifier {
     if (this._affectX) particle.vx *= this._factor;
     if (this._affectY) particle.vy *= this._factor;
   }
+
+  clone() {
+    return new VelocityModifier({
+      drag: this._drag,
+      affectX: this._affectX,
+      affectY: this._affectY,
+      priority: this.priority
+    });
+  }
+
+  toJSON() {
+    const obj = { type: "VelocityModifier", drag: this._drag, affectX: this._affectX, affectY: this._affectY };
+    if (this.priority !== undefined) obj.priority = this.priority;
+    return obj;
+  }
+
+  static fromJSON(data) {
+    return new VelocityModifier(data);
+  }
 }

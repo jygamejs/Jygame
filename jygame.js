@@ -53,6 +53,8 @@ export { AttractionModifier } from "./modifiers/AttractionModifier.js";
 export { OrbitModifier } from "./modifiers/OrbitModifier.js";
 export { SpawnModifier } from "./modifiers/SpawnModifier.js";
 export { TrailModifier } from "./modifiers/TrailModifier.js";
+export { ModifierStack } from "./modifiers/ModifierStack.js";
+export { ModifierRegistry } from "./modifiers/ModifierRegistry.js";
 export { TrailSystem } from "./systems/TrailSystem.js";
 export { AudioLoader } from "./loaders/AudioLoader.js";
 export { ObjectPool } from "./audio/ObjectPool.js";
