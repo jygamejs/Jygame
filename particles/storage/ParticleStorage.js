@@ -52,4 +52,29 @@ export class ParticleStorage {
   get totalCreated() {
     throw new Error("ParticleStorage#totalCreated must be implemented by subclass");
   }
+
+  /** Resolve a sort-index to the particle/accessor for rendering. */
+  resolveParticle(sortIndex) {
+    throw new Error("ParticleStorage#resolveParticle must be implemented by subclass");
+  }
+
+  /** Read a numeric field from the particle at the given sort-index. */
+  getFieldValue(sortIndex, fieldName) {
+    throw new Error("ParticleStorage#getFieldValue must be implemented by subclass");
+  }
+
+  /** Read __jygameSortOrder for the particle at the given sort-index. */
+  getSortOrder(sortIndex) {
+    throw new Error("ParticleStorage#getSortOrder must be implemented by subclass");
+  }
+
+  /**
+   * Storage-native physics integration for one particle.
+   * Called from the backend hot loop. Bypasses all accessor overhead.
+   * @param {object} particle — Particle (ObjectParticleStorage) or SoAParticleAccessor (SoAParticleStorage)
+   * @param {number} dt — delta time in seconds
+   */
+  integrateParticle(particle, dt) {
+    throw new Error("ParticleStorage#integrateParticle must be implemented by subclass");
+  }
 }

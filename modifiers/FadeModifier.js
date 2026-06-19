@@ -1,6 +1,16 @@
 import { EASINGS } from "./easing.js";
 
 export class FadeModifier {
+  static get capabilities() {
+    return {
+      gpuCompatible: true,
+      requiresState: false,
+      spawnsParticles: false,
+      requiresCollision: false,
+      pass: "visual",
+    };
+  }
+
   constructor({ mode = "out", easing = "linear", priority } = {}) {
     this.enabled = true;
     this.priority = priority;
@@ -9,8 +19,8 @@ export class FadeModifier {
     this._ease = EASINGS[easing] || EASINGS.linear;
   }
 
-  update(particle, dt) {
-    const t = this._ease(particle.ageRatio);
+  update(acc, dt) {
+    const t = this._ease(acc.ageRatio);
     let alpha;
     if (this._mode === "in") {
       alpha = t;
@@ -19,7 +29,11 @@ export class FadeModifier {
     } else {
       alpha = 1 - t;
     }
-    particle.alpha = alpha;
+    acc.alpha = alpha;
+  }
+
+  toDescriptor() {
+    return { type: "fade", mode: this._mode, easing: this._easingName };
   }
 
   clone() {

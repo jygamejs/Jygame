@@ -1,4 +1,14 @@
 export class WindModifier {
+  static get capabilities() {
+    return {
+      gpuCompatible: true,
+      requiresState: false,
+      spawnsParticles: false,
+      requiresCollision: false,
+      pass: "force",
+    };
+  }
+
   constructor({ x = 0, y = 0, priority } = {}) {
     if (!Number.isFinite(x) || !Number.isFinite(y)) {
       throw new Error("WindModifier x and y must be finite numbers");
@@ -19,6 +29,10 @@ export class WindModifier {
   update(particle) {
     particle.vx += this._frameVX;
     particle.vy += this._frameVY;
+  }
+
+  toDescriptor() {
+    return { type: "wind", x: this._windX, y: this._windY };
   }
 
   clone() {

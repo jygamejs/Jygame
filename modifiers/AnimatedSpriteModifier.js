@@ -1,6 +1,16 @@
 const MODES = ["once", "loop", "pingpong", "random"];
 
 export class AnimatedSpriteModifier {
+  static get capabilities() {
+    return {
+      gpuCompatible: false,
+      requiresState: true,
+      spawnsParticles: false,
+      requiresCollision: false,
+      pass: "visual",
+    };
+  }
+
   constructor({ frames, mode = "once", loops = 1, reverse = false, randomStart = false, animationDuration, onAnimationStart, onAnimationLoop, onAnimationComplete, onFrameChange, priority } = {}) {
     if (!frames || frames.length === 0) throw new Error("AnimatedSpriteModifier requires at least one frame");
     if (!MODES.includes(mode)) throw new Error("AnimatedSpriteModifier mode must be one of: " + MODES.join(", "));
@@ -40,11 +50,11 @@ export class AnimatedSpriteModifier {
     }
   }
 
-  _applyFrame(particle, frame) {
-    particle.frameX = frame.x;
-    particle.frameY = frame.y;
-    particle.frameWidth = frame.width;
-    particle.frameHeight = frame.height;
+  _applyFrame(acc, frame) {
+    acc.frameX = frame.x;
+    acc.frameY = frame.y;
+    acc.frameWidth = frame.width;
+    acc.frameHeight = frame.height;
   }
 
   _binarySearch(needle) {
@@ -86,8 +96,8 @@ export class AnimatedSpriteModifier {
     return index;
   }
 
-  onEmit(particle, ctx) {
-    const state = ctx.stateStore.ensure(particle, this, () => ({
+  onEmit(acc, ctx) {
+    const state = ctx.stateStore.ensure(acc, this, () => ({
       offset: 0,
       prevFrame: -1,
       loopCount: 0,
@@ -97,40 +107,52 @@ export class AnimatedSpriteModifier {
       : 0;
     state.prevFrame = -1;
     state.loopCount = 0;
-    this._applyFrame(particle, this._frames[state.offset]);
+    this._applyFrame(acc, this._frames[state.offset]);
   }
 
-  update(particle, dt, ctx) {
-    const state = ctx.stateStore.get(particle, this);
+  update(acc, dt, ctx) {
+    const state = ctx.stateStore.get(acc, this);
     if (!state) return;
 
     const t = this._animationDuration != null
-      ? Math.min(1, particle.ageRatio * particle.maxLife / this._animationDuration)
-      : particle.ageRatio;
+      ? Math.min(1, acc.ageRatio * acc.maxLife / this._animationDuration)
+      : acc.ageRatio;
 
     const idx = this._getFrameIndex(t, state.offset);
-    this._applyFrame(particle, this._frames[idx]);
+    this._applyFrame(acc, this._frames[idx]);
 
     if (this._hasCallbacks) {
       const prev = state.prevFrame;
       if (prev < 0) {
-        this._onAnimationStart?.(particle);
+        this._onAnimationStart?.(acc);
       } else if (idx !== prev) {
-        this._onFrameChange?.(particle, idx);
+        this._onFrameChange?.(acc, idx);
       }
 
       if (this._mode !== "once") {
         const cycles = (t * this._loops) | 0;
         if (cycles > state.loopCount) {
           state.loopCount = cycles;
-          this._onAnimationLoop?.(particle, cycles);
+          this._onAnimationLoop?.(acc, cycles);
         }
       } else if (idx === this._count - 1 && prev !== idx) {
-        this._onAnimationComplete?.(particle);
+        this._onAnimationComplete?.(acc);
       }
 
       state.prevFrame = idx;
     }
+  }
+
+  toDescriptor() {
+    return {
+      type: "animatedSprite",
+      frames: this._frames.map(f => ({ x: f.x, y: f.y, width: f.width, height: f.height, duration: f.duration })),
+      mode: this._mode,
+      loops: this._loops,
+      reverse: this._reverse,
+      randomStart: this._randomStart,
+      animationDuration: this._animationDuration,
+    };
   }
 
   toJSON() {

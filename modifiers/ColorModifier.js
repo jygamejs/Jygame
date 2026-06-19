@@ -11,6 +11,16 @@ const _toStop = ([pos, hex]) => {
 };
 
 export class ColorModifier {
+  static get capabilities() {
+    return {
+      gpuCompatible: true,
+      requiresState: true,
+      spawnsParticles: false,
+      requiresCollision: false,
+      pass: "visual",
+    };
+  }
+
   constructor({ from, to, stops, priority } = {}) {
     this.enabled = true;
     this.priority = priority;
@@ -31,31 +41,42 @@ export class ColorModifier {
     this._count = this._stops.length;
   }
 
-  update(particle, dt, ctx) {
-    const state = ctx.stateStore.ensure(particle, this, () => ({ segment: 0 }));
+  update(acc, dt, ctx) {
+    const state = ctx.stateStore.ensure(acc, this, () => ({ segment: 0 }));
     const stops = this._stops;
     let seg = state.segment;
-    while (seg < this._count - 2 && particle.ageRatio >= stops[seg + 1].pos) {
+    while (seg < this._count - 2 && acc.ageRatio >= stops[seg + 1].pos) {
       seg++;
     }
     state.segment = seg;
 
     if (seg >= this._count - 1) {
-      particle.r = stops[this._count - 1].r;
-      particle.g = stops[this._count - 1].g;
-      particle.b = stops[this._count - 1].b;
+      acc.r = stops[this._count - 1].r;
+      acc.g = stops[this._count - 1].g;
+      acc.b = stops[this._count - 1].b;
       return;
     }
 
     const a = stops[seg];
     const b = stops[seg + 1];
     const segT = b.pos > a.pos
-      ? (particle.ageRatio - a.pos) / (b.pos - a.pos)
+      ? (acc.ageRatio - a.pos) / (b.pos - a.pos)
       : 0;
 
-    particle.r = a.r + (b.r - a.r) * segT;
-    particle.g = a.g + (b.g - a.g) * segT;
-    particle.b = a.b + (b.b - a.b) * segT;
+    acc.r = a.r + (b.r - a.r) * segT;
+    acc.g = a.g + (b.g - a.g) * segT;
+    acc.b = a.b + (b.b - a.b) * segT;
+  }
+
+  toDescriptor() {
+    const d = { type: "color" };
+    if (this._stopsArg) {
+      d.stops = this._stops.map(s => [s.pos, s.r, s.g, s.b]);
+    } else {
+      d.from = `#${this._stops[0].r.toString(16).padStart(2, "0")}${this._stops[0].g.toString(16).padStart(2, "0")}${this._stops[0].b.toString(16).padStart(2, "0")}`;
+      d.to = `#${this._stops[1].r.toString(16).padStart(2, "0")}${this._stops[1].g.toString(16).padStart(2, "0")}${this._stops[1].b.toString(16).padStart(2, "0")}`;
+    }
+    return d;
   }
 
   toJSON() {

@@ -1,4 +1,14 @@
 export class TurbulenceModifier {
+  static get capabilities() {
+    return {
+      gpuCompatible: true,
+      requiresState: true,
+      spawnsParticles: false,
+      requiresCollision: false,
+      pass: "force",
+    };
+  }
+
   constructor({ strength = 50, frequency = 1, priority } = {}) {
     if (!Number.isFinite(strength) || strength < 0) {
       throw new Error("TurbulenceModifier strength must be a non-negative finite number");
@@ -13,8 +23,8 @@ export class TurbulenceModifier {
     this.priority = priority;
   }
 
-  onEmit(particle, ctx) {
-    const state = ctx.stateStore.ensure(particle, this, () => ({ seed: 0 }));
+  onEmit(acc, ctx) {
+    const state = ctx.stateStore.ensure(acc, this, () => ({ seed: 0 }));
     state.seed = Math.random() * 100000;
   }
 
@@ -22,13 +32,17 @@ export class TurbulenceModifier {
     this._time += dt * this._frequency;
   }
 
-  update(particle, dt, ctx) {
-    const state = ctx.stateStore.get(particle, this);
+  update(acc, dt, ctx) {
+    const state = ctx.stateStore.get(acc, this);
     if (!state) return;
     const seed = state.seed;
     const t = this._time;
-    particle.vx += Math.sin(seed + t) * this._strength * dt;
-    particle.vy += Math.cos(seed + t * 1.31) * this._strength * dt;
+    acc.vx += Math.sin(seed + t) * this._strength * dt;
+    acc.vy += Math.cos(seed + t * 1.31) * this._strength * dt;
+  }
+
+  toDescriptor() {
+    return { type: "turbulence", strength: this._strength, frequency: this._frequency };
   }
 
   clone() {

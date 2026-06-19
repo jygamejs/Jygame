@@ -1,4 +1,14 @@
 export class RotationModifier {
+  static get capabilities() {
+    return {
+      gpuCompatible: true,
+      requiresState: false,
+      spawnsParticles: false,
+      requiresCollision: false,
+      pass: "integration",
+    };
+  }
+
   constructor({ speed, from, to, randomStart = false, priority } = {}) {
     if (speed !== undefined) {
       this._mode = "velocity";
@@ -33,6 +43,17 @@ export class RotationModifier {
     if (this._mode === "interpolate") {
       particle.rotation = this._from + this._diff * particle.ageRatio;
     }
+  }
+
+  toDescriptor() {
+    const d = { type: "rotation", mode: this._mode, randomStart: this._randomStart };
+    if (this._mode === "velocity") {
+      d.speed = this._speed;
+    } else {
+      d.from = this._from;
+      d.to = this._to;
+    }
+    return d;
   }
 
   clone() {

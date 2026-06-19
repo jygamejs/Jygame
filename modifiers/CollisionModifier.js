@@ -1,4 +1,14 @@
 export class CollisionModifier {
+  static get capabilities() {
+    return {
+      gpuCompatible: false,
+      requiresState: false,
+      spawnsParticles: false,
+      requiresCollision: true,
+      pass: "collision",
+    };
+  }
+
   constructor({ provider, frequency = 1, priority, onParticleCollision } = {}) {
     if (frequency !== undefined && (!Number.isInteger(frequency) || frequency < 1)) {
       throw new Error("CollisionModifier: frequency must be a positive integer");
@@ -20,21 +30,21 @@ export class CollisionModifier {
     this._frameCounter++;
   }
 
-  update(p, dt, ctx) {
-    if (!p.collides) return;
+  update(acc, dt, ctx) {
+    if (!acc.collides) return;
     if (this._frameCounter % this._frequency !== 0) return;
 
     const provider = this._provider || (ctx.system && ctx.system._collisionProvider);
     if (!provider) return;
 
-    const hit = provider.queryCircle(p.x, p.y, p.radius, p.collisionLayer);
+    const hit = provider.queryCircle(acc.x, acc.y, acc.radius, acc.collisionLayer);
     if (!hit) return;
 
     this.collisionCount++;
     this._frameCollisions++;
-    this._resolve(p, hit);
-    if (p.onCollision) p.onCollision(p, hit);
-    if (this._onParticleCollision) this._onParticleCollision(p, hit);
+    this._resolve(acc, hit);
+    if (acc.onCollision) acc.onCollision(acc, hit);
+    if (this._onParticleCollision) this._onParticleCollision(acc, hit);
   }
 
   endFrame() {
@@ -42,45 +52,45 @@ export class CollisionModifier {
     this._frameCollisions = 0;
   }
 
-  _resolve(p, hit) {
-    switch (p.collisionResponse) {
-      case "bounce": this._bounce(p, hit); break;
-      case "slide": this._slide(p, hit); break;
-      case "stop": this._stop(p, hit); break;
-      case "kill": this._kill(p, hit); break;
+  _resolve(acc, hit) {
+    switch (acc.collisionResponse) {
+      case "bounce": this._bounce(acc, hit); break;
+      case "slide": this._slide(acc, hit); break;
+      case "stop": this._stop(acc, hit); break;
+      case "kill": this._kill(acc, hit); break;
       default: break;
     }
   }
 
-  _bounce(p, hit) {
-    const dot = p.vx * hit.normalX + p.vy * hit.normalY;
+  _bounce(acc, hit) {
+    const dot = acc.vx * hit.normalX + acc.vy * hit.normalY;
     if (dot >= 0) return;
-    p.vx -= 2 * dot * hit.normalX;
-    p.vy -= 2 * dot * hit.normalY;
-    p.vx *= p.restitution;
-    p.vy *= p.restitution;
-    p.x += hit.normalX * hit.penetration;
-    p.y += hit.normalY * hit.penetration;
+    acc.vx -= 2 * dot * hit.normalX;
+    acc.vy -= 2 * dot * hit.normalY;
+    acc.vx *= acc.restitution;
+    acc.vy *= acc.restitution;
+    acc.x += hit.normalX * hit.penetration;
+    acc.y += hit.normalY * hit.penetration;
   }
 
-  _slide(p, hit) {
-    const dot = p.vx * hit.normalX + p.vy * hit.normalY;
+  _slide(acc, hit) {
+    const dot = acc.vx * hit.normalX + acc.vy * hit.normalY;
     if (dot >= 0) return;
-    p.vx -= dot * hit.normalX;
-    p.vy -= dot * hit.normalY;
-    p.x += hit.normalX * hit.penetration;
-    p.y += hit.normalY * hit.penetration;
+    acc.vx -= dot * hit.normalX;
+    acc.vy -= dot * hit.normalY;
+    acc.x += hit.normalX * hit.penetration;
+    acc.y += hit.normalY * hit.penetration;
   }
 
-  _stop(p, hit) {
-    p.vx = 0;
-    p.vy = 0;
-    p.x += hit.normalX * hit.penetration;
-    p.y += hit.normalY * hit.penetration;
+  _stop(acc, hit) {
+    acc.vx = 0;
+    acc.vy = 0;
+    acc.x += hit.normalX * hit.penetration;
+    acc.y += hit.normalY * hit.penetration;
   }
 
-  _kill(p, hit) {
-    p.life = 0;
+  _kill(acc, hit) {
+    acc.life = 0;
   }
 
   clone() {
@@ -90,6 +100,10 @@ export class CollisionModifier {
       priority: this.priority,
       onParticleCollision: this._onParticleCollision,
     });
+  }
+
+  toDescriptor() {
+    return { type: "collision", frequency: this._frequency };
   }
 
   toJSON() {

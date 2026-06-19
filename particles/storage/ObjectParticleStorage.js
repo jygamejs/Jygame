@@ -103,4 +103,28 @@ export class ObjectParticleStorage extends ParticleStorage {
   get totalCreated() {
     return this._pool.totalCreated;
   }
+
+  resolveParticle(sortIndex) {
+    return this._pool.activeObjects[sortIndex];
+  }
+
+  getFieldValue(sortIndex, fieldName) {
+    return this._pool.activeObjects[sortIndex][fieldName];
+  }
+
+  getSortOrder(sortIndex) {
+    return this._pool.activeObjects[sortIndex].__jygameSortOrder;
+  }
+
+  integrateParticle(p, dt) {
+    p.vx += p.ax * dt;
+    p.vy += p.ay * dt;
+    p.x += p.vx * dt;
+    p.y += p.vy * dt;
+    p.rotation += p.rotationSpeed * dt;
+    p.life -= dt;
+    p.ageRatio = p.maxLife > 0
+      ? Math.max(0, Math.min(1, 1 - p.life / p.maxLife))
+      : 0;
+  }
 }

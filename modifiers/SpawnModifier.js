@@ -1,4 +1,14 @@
 export class SpawnModifier {
+  static get capabilities() {
+    return {
+      gpuCompatible: false,
+      requiresState: true,
+      spawnsParticles: true,
+      requiresCollision: false,
+      pass: "spawn",
+    };
+  }
+
   constructor({
     mode,
     every,
@@ -51,17 +61,17 @@ export class SpawnModifier {
     this._spawnedThisFrame = 0;
   }
 
-  onEmit(particle, ctx) {
+  onEmit(acc, ctx) {
     if (this._mode === "interval") {
-      const state = ctx.stateStore.ensure(particle, this, () => ({ timer: 0 }));
+      const state = ctx.stateStore.ensure(acc, this, () => ({ timer: 0 }));
       state.timer = 0;
     }
   }
 
-  update(particle, dt, ctx) {
+  update(acc, dt, ctx) {
     if (this._mode !== "interval") return;
 
-    const state = ctx.stateStore.ensure(particle, this, () => ({ timer: 0 }));
+    const state = ctx.stateStore.ensure(acc, this, () => ({ timer: 0 }));
     state.timer += dt;
 
     if (state.timer < this._every) return;
@@ -72,12 +82,12 @@ export class SpawnModifier {
 
     const limit = this._maxPerFrame;
     while (remaining > 0 && this._spawnedThisFrame < limit) {
-      this._spawn(particle, system);
+      this._spawn(acc, system);
       remaining--;
     }
   }
 
-  onDeath(particle, ctx) {
+  onDeath(acc, ctx) {
     if (this._mode !== "death") return;
 
     const system = ctx.system;
@@ -85,7 +95,7 @@ export class SpawnModifier {
     let spawned = 0;
 
     while (spawned < this._count && this._spawnedThisFrame < limit) {
-      this._spawn(particle, system);
+      this._spawn(acc, system);
       spawned++;
     }
   }
@@ -101,6 +111,12 @@ export class SpawnModifier {
     }
     this._spawnedThisFrame++;
     this.spawnedCount++;
+  }
+
+  toDescriptor() {
+    const d = { type: "spawn", mode: this._mode, count: this._count, offsetX: this._offsetX, offsetY: this._offsetY, maxPerFrame: this._maxPerFrame };
+    if (this._mode === "interval") d.every = this._every;
+    return d;
   }
 
   toJSON() {

@@ -1,17 +1,35 @@
 export class ParticleRenderData {
-  constructor() {
-    if (new.target === ParticleRenderData) {
-      throw new Error("ParticleRenderData is abstract — extend it");
-    }
+  constructor(storage, indices, count) {
+    this._storage = storage;
+    this._indices = indices;
+    this._count = count;
   }
 
   get count() {
-    return 0;
+    return this._count;
   }
 
-  getParticle(index) {
-    throw new Error("ParticleRenderData#getParticle must be implemented by subclass");
+  getParticle(i) {
+    if (this._indices) {
+      return this._storage.resolveParticle(this._indices[i]);
+    }
+    return this._storage.resolveParticle(i);
   }
 
-  destroy() {}
+  fillCommandBuffer(buffer) {
+    if (this._indices) {
+      for (let i = 0; i < this._count; i++) {
+        buffer.append(this._storage.resolveParticle(this._indices[i]));
+      }
+    } else {
+      for (let i = 0; i < this._count; i++) {
+        buffer.append(this._storage.resolveParticle(i));
+      }
+    }
+  }
+
+  destroy() {
+    this._storage = null;
+    this._indices = null;
+  }
 }

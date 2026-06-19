@@ -1,4 +1,14 @@
 export class VelocityModifier {
+  static get capabilities() {
+    return {
+      gpuCompatible: true,
+      requiresState: false,
+      spawnsParticles: false,
+      requiresCollision: false,
+      pass: "integration",
+    };
+  }
+
   constructor({ drag = 0, affectX = true, affectY = true, priority } = {}) {
     this.enabled = true;
     this.priority = priority;
@@ -15,6 +25,10 @@ export class VelocityModifier {
   update(particle) {
     if (this._affectX) particle.vx *= this._factor;
     if (this._affectY) particle.vy *= this._factor;
+  }
+
+  toDescriptor() {
+    return { type: "velocity", drag: this._drag, affectX: this._affectX, affectY: this._affectY };
   }
 
   clone() {

@@ -1,8 +1,8 @@
 import { CpuParticleBackend } from "./backends/CpuParticleBackend.js";
 
 export class ParticleSystem {
-  constructor({ renderParticle, renderer, backend } = {}) {
-    this._backend = backend || new CpuParticleBackend({ renderParticle, renderer, system: this });
+  constructor({ renderParticle, renderer, backend, storage } = {}) {
+    this._backend = backend || new CpuParticleBackend({ renderParticle, renderer, system: this, storage });
   }
 
   // ---- Modifiers ----
@@ -161,8 +161,8 @@ export class ParticleSystem {
     this._backend._sortFunction = value;
   }
 
-  get _sortedParticles() {
-    return this._backend._sortedParticles;
+  get _sortedIndices() {
+    return this._backend._sortedIndices;
   }
 
   get _collisionProvider() {

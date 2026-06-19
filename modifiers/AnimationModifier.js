@@ -34,6 +34,16 @@ const VALID_PROPERTIES = new Set([
 ]);
 
 export class AnimationModifier {
+  static get capabilities() {
+    return {
+      gpuCompatible: true,
+      requiresState: true,
+      spawnsParticles: false,
+      requiresCollision: false,
+      pass: "visual",
+    };
+  }
+
   constructor({ property, keyframes, easing = "linear", priority } = {}) {
     if (!property || !VALID_PROPERTIES.has(property)) {
       throw new Error(
@@ -50,19 +60,25 @@ export class AnimationModifier {
     this.priority = priority;
   }
 
-  onEmit(particle, ctx) {
-    const state = ctx.stateStore.ensure(particle, this, () => ({ segment: 0 }));
+  onEmit(acc, ctx) {
+    const state = ctx.stateStore.ensure(acc, this, () => ({ segment: 0 }));
     state.segment = 0;
-    particle[this._property] = this._track.evaluate(0, 0);
+    acc[this._property] = this._track.evaluate(0, 0);
   }
 
-  update(particle, dt, ctx) {
-    const state = ctx.stateStore.get(particle, this);
+  update(acc, dt, ctx) {
+    const state = ctx.stateStore.get(acc, this);
     if (!state) return;
     let seg = state.segment;
-    seg = this._track.advance(particle.ageRatio, seg);
+    seg = this._track.advance(acc.ageRatio, seg);
     state.segment = seg;
-    particle[this._property] = this._track.evaluate(particle.ageRatio, seg);
+    acc[this._property] = this._track.evaluate(acc.ageRatio, seg);
+  }
+
+  toDescriptor() {
+    const d = { type: "animation", property: this._property, keyframes: this._keyframes };
+    if (this._easing !== "linear") d.easing = this._easing;
+    return d;
   }
 
   toJSON() {

@@ -1,6 +1,16 @@
 import { ForceModifier } from "./ForceModifier.js";
 
 export class OrbitModifier extends ForceModifier {
+  static get capabilities() {
+    return {
+      gpuCompatible: true,
+      requiresState: false,
+      spawnsParticles: false,
+      requiresCollision: false,
+      pass: "force",
+    };
+  }
+
   constructor({ x, y, target, strength, falloff, minDistance, radius, stiffness = 2, direction = "counterclockwise", priority } = {}) {
     super({ x, y, target, strength, falloff, minDistance, priority });
 
@@ -43,6 +53,16 @@ export class OrbitModifier extends ForceModifier {
       particle.vx += this._tmpNX * correction * dt;
       particle.vy += this._tmpNY * correction * dt;
     }
+  }
+
+  toDescriptor() {
+    const d = { type: "orbit", strength: this._strength, falloff: this._falloff, minDistance: this._minDistance, stiffness: this._stiffness, direction: this._clockwise ? "clockwise" : "counterclockwise" };
+    if (this._radiusMode) d.radius = this._radius;
+    if (this._isStaticTarget) {
+      d.x = this._staticX;
+      d.y = this._staticY;
+    }
+    return d;
   }
 
   clone() {

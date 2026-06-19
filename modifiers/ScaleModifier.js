@@ -1,6 +1,16 @@
 import { EASINGS } from "./easing.js";
 
 export class ScaleModifier {
+  static get capabilities() {
+    return {
+      gpuCompatible: true,
+      requiresState: false,
+      spawnsParticles: false,
+      requiresCollision: false,
+      pass: "visual",
+    };
+  }
+
   constructor({ mode, from, to, min, max, easing = "linear", priority } = {}) {
     this.enabled = true;
     this.priority = priority;
@@ -17,8 +27,8 @@ export class ScaleModifier {
     this._ease = EASINGS[easing] || EASINGS.linear;
   }
 
-  update(particle, dt) {
-    const t = this._ease(particle.ageRatio);
+  update(acc, dt) {
+    const t = this._ease(acc.ageRatio);
     let size;
     if (this._mode === "in-out") {
       size = t < 0.5
@@ -27,7 +37,19 @@ export class ScaleModifier {
     } else {
       size = this._from + this._diff * t;
     }
-    particle.size = Math.max(0, size);
+    acc.size = Math.max(0, size);
+  }
+
+  toDescriptor() {
+    const d = { type: "scale", mode: this._mode, easing: this._easingName };
+    if (this._mode === "in-out") {
+      d.min = this._min;
+      d.max = this._max;
+    } else {
+      d.from = this._from;
+      d.to = this._to;
+    }
+    return d;
   }
 
   clone() {

@@ -1,4 +1,14 @@
 export class TrailModifier {
+  static get capabilities() {
+    return {
+      gpuCompatible: false,
+      requiresState: true,
+      spawnsParticles: true,
+      requiresCollision: false,
+      pass: "spawn",
+    };
+  }
+
   constructor({
     mode = "distance",
     every,
@@ -45,20 +55,20 @@ export class TrailModifier {
     this._spawnedThisFrame = 0;
   }
 
-  onEmit(particle, ctx) {
-    const state = ctx.stateStore.ensure(particle, this, () => ({ x: 0, y: 0, timer: 0 }));
-    state.x = particle.x;
-    state.y = particle.y;
+  onEmit(acc, ctx) {
+    const state = ctx.stateStore.ensure(acc, this, () => ({ x: 0, y: 0, timer: 0 }));
+    state.x = acc.x;
+    state.y = acc.y;
     state.timer = 0;
   }
 
-  update(particle, dt, ctx) {
-    const state = ctx.stateStore.ensure(particle, this, () => ({ x: 0, y: 0, timer: 0 }));
+  update(acc, dt, ctx) {
+    const state = ctx.stateStore.ensure(acc, this, () => ({ x: 0, y: 0, timer: 0 }));
     const system = ctx.system;
     const prevX = state.x;
     const prevY = state.y;
-    const curX = particle.x;
-    const curY = particle.y;
+    const curX = acc.x;
+    const curY = acc.y;
     const dx = curX - prevX;
     const dy = curY - prevY;
 
@@ -69,7 +79,7 @@ export class TrailModifier {
       state.timer += dt;
       while (state.timer >= this._every && this._spawnedThisFrame < this._maxPerFrame) {
         state.timer -= this._every;
-        this._spawn(particle, curX, curY, system);
+        this._spawn(acc, curX, curY, system);
       }
     } else {
       const dist = Math.sqrt(dx * dx + dy * dy);
@@ -87,7 +97,7 @@ export class TrailModifier {
         const t = (dist - state.timer) / dist;
         const sx = prevX + dx * t;
         const sy = prevY + dy * t;
-        this._spawn(particle, sx, sy, system);
+        this._spawn(acc, sx, sy, system);
       }
     }
   }
@@ -103,6 +113,10 @@ export class TrailModifier {
     this._initializer(child, source);
     this._spawnedThisFrame++;
     this.spawnedCount++;
+  }
+
+  toDescriptor() {
+    return { type: "trail", mode: this._mode, every: this._every, inheritVelocity: this._inheritVelocity, maxPerFrame: this._maxPerFrame, maxDistance: this._maxDistance };
   }
 
   toJSON() {

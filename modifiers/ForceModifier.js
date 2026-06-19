@@ -1,4 +1,14 @@
 export class ForceModifier {
+  static get capabilities() {
+    return {
+      gpuCompatible: true,
+      requiresState: false,
+      spawnsParticles: false,
+      requiresCollision: false,
+      pass: "force",
+    };
+  }
+
   constructor({ x = 0, y = 0, target, strength, falloff = "none", minDistance = 10, priority } = {}) {
     if (target !== undefined) {
       if (target === null || typeof target !== "object") {
@@ -40,7 +50,7 @@ export class ForceModifier {
     this._tmpForce = 0;
   }
 
-  _computeForce(particle) {
+  _computeForce(acc) {
     let tx, ty;
     if (this._isStaticTarget) {
       tx = this._staticX;
@@ -52,8 +62,8 @@ export class ForceModifier {
       else { tx = 0; ty = 0; }
     }
 
-    this._tmpDX = tx - particle.x;
-    this._tmpDY = ty - particle.y;
+    this._tmpDX = tx - acc.x;
+    this._tmpDY = ty - acc.y;
 
     if (!Number.isFinite(this._tmpDX) || !Number.isFinite(this._tmpDY)) {
       this._tmpDX = 0;
@@ -87,6 +97,15 @@ export class ForceModifier {
       f /= (clamped * clamped);
     }
     this._tmpForce = f;
+  }
+
+  toDescriptor() {
+    const d = { type: "force", strength: this._strength, falloff: this._falloff, minDistance: this._minDistance };
+    if (this._isStaticTarget) {
+      d.x = this._staticX;
+      d.y = this._staticY;
+    }
+    return d;
   }
 
   clone() {

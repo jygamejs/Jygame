@@ -84,35 +84,35 @@ export class ModifierStack {
     }
   }
 
-  update(particle, dt, ctx) {
+  update(acc, dt, ctx) {
     if (!this.enabled) return;
     const mods = this._modifiers;
     for (let i = 0; i < mods.length; i++) {
       const mod = mods[i];
       if (mod.enabled !== false && typeof mod.update === 'function') {
-        mod.update(particle, dt, ctx);
+        mod.update(acc, dt, ctx);
       }
     }
   }
 
-  onEmit(particle, ctx) {
+  onEmit(acc, ctx) {
     if (!this.enabled) return;
     const mods = this._modifiers;
     for (let i = 0; i < mods.length; i++) {
       const mod = mods[i];
       if (mod.enabled !== false && typeof mod.onEmit === 'function') {
-        mod.onEmit(particle, ctx);
+        mod.onEmit(acc, ctx);
       }
     }
   }
 
-  onDeath(particle, ctx) {
+  onDeath(acc, ctx) {
     if (!this.enabled) return;
     const mods = this._modifiers;
     for (let i = 0; i < mods.length; i++) {
       const mod = mods[i];
       if (mod.enabled !== false && typeof mod.onDeath === 'function') {
-        mod.onDeath(particle, ctx);
+        mod.onDeath(acc, ctx);
       }
     }
   }
