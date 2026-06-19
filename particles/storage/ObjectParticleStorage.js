@@ -2,6 +2,8 @@ import { ActivePool } from "../../memory/ActivePool.js";
 import { Particle } from "../../display/Particle.js";
 import { ParticleStorage } from "./ParticleStorage.js";
 
+let _nextId = 1;
+
 function _resetParticle(p) {
   p.x = 0;
   p.y = 0;
@@ -38,6 +40,7 @@ function _resetParticle(p) {
   p.frameHeight = 0;
   p.userData = null;
   p.__jygameSortOrder = 0;
+  p.__jygameId = 0;
 }
 
 export class ObjectParticleStorage extends ParticleStorage {
@@ -52,7 +55,9 @@ export class ObjectParticleStorage extends ParticleStorage {
   }
 
   acquire() {
-    return this._pool.acquire();
+    const p = this._pool.acquire();
+    p.__jygameId = _nextId++;
+    return p;
   }
 
   release(obj) {

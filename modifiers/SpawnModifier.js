@@ -53,7 +53,7 @@ export class SpawnModifier {
 
   onEmit(particle, ctx) {
     if (this._mode === "interval") {
-      const state = ctx.stateManager.ensure(particle, this, () => ({ timer: 0 }));
+      const state = ctx.stateStore.ensure(particle, this, () => ({ timer: 0 }));
       state.timer = 0;
     }
   }
@@ -61,7 +61,7 @@ export class SpawnModifier {
   update(particle, dt, ctx) {
     if (this._mode !== "interval") return;
 
-    const state = ctx.stateManager.ensure(particle, this, () => ({ timer: 0 }));
+    const state = ctx.stateStore.ensure(particle, this, () => ({ timer: 0 }));
     state.timer += dt;
 
     if (state.timer < this._every) return;

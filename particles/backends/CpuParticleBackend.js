@@ -1,6 +1,6 @@
 import { hasLifecycleMethods } from "../../modifiers/ModifierUtils.js";
 import { ObjectParticleStorage } from "../storage/ObjectParticleStorage.js";
-import { ParticleStateManager } from "../ParticleStateManager.js";
+import { ModifierStateStore } from "../ModifierStateStore.js";
 import { CanvasParticleRenderer } from "../renderers/CanvasParticleRenderer.js";
 import { ObjectParticleRenderData } from "../renderdata/ObjectParticleRenderData.js";
 
@@ -27,14 +27,14 @@ export class CpuParticleBackend {
     this._system = system;
     this._storage = new ObjectParticleStorage();
     this._renderer = renderer || new CanvasParticleRenderer({ renderParticle });
-    this._stateManager = new ParticleStateManager();
+    this._stateStore = new ModifierStateStore();
     this._modifiers = [];
     this._updateModifiers = [];
     this._emitModifiers = [];
     this._deathModifiers = [];
     this._beginFrameModifiers = [];
     this._endFrameModifiers = [];
-    this._modifierContext = { system: this._system, activeParticles: this._storage.activeParticles, stateManager: this._stateManager };
+    this._modifierContext = { system: this._system, activeParticles: this._storage.activeParticles, stateStore: this._stateStore };
     this._isUpdating = false;
     this._pendingRemove = null;
     this._sortMode = "none";
@@ -123,7 +123,7 @@ export class CpuParticleBackend {
     this._sortedParticles = null;
     this._sortFunction = null;
     this._storage = null;
-    this._stateManager = null;
+    this._stateStore = null;
   }
 
   get _renderParticle() {
@@ -343,7 +343,7 @@ export class CpuParticleBackend {
           }
         }
         this._storage.release(p);
-        this._stateManager.release(p);
+        this._stateStore.release(p);
       }
     }
 
@@ -393,7 +393,7 @@ export class CpuParticleBackend {
 
   clear() {
     this._storage.clear();
-    this._stateManager.releaseAll();
+    this._stateStore.releaseAll();
   }
 
   get particles() {

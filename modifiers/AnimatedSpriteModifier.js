@@ -87,7 +87,7 @@ export class AnimatedSpriteModifier {
   }
 
   onEmit(particle, ctx) {
-    const state = ctx.stateManager.ensure(particle, this, () => ({
+    const state = ctx.stateStore.ensure(particle, this, () => ({
       offset: 0,
       prevFrame: -1,
       loopCount: 0,
@@ -101,7 +101,7 @@ export class AnimatedSpriteModifier {
   }
 
   update(particle, dt, ctx) {
-    const state = ctx.stateManager.get(particle, this);
+    const state = ctx.stateStore.get(particle, this);
     if (!state) return;
 
     const t = this._animationDuration != null

@@ -14,7 +14,7 @@ export class TurbulenceModifier {
   }
 
   onEmit(particle, ctx) {
-    const state = ctx.stateManager.ensure(particle, this, () => ({ seed: 0 }));
+    const state = ctx.stateStore.ensure(particle, this, () => ({ seed: 0 }));
     state.seed = Math.random() * 100000;
   }
 
@@ -23,7 +23,7 @@ export class TurbulenceModifier {
   }
 
   update(particle, dt, ctx) {
-    const state = ctx.stateManager.get(particle, this);
+    const state = ctx.stateStore.get(particle, this);
     if (!state) return;
     const seed = state.seed;
     const t = this._time;

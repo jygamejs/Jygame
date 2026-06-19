@@ -32,7 +32,7 @@ export class ColorModifier {
   }
 
   update(particle, dt, ctx) {
-    const state = ctx.stateManager.ensure(particle, this, () => ({ segment: 0 }));
+    const state = ctx.stateStore.ensure(particle, this, () => ({ segment: 0 }));
     const stops = this._stops;
     let seg = state.segment;
     while (seg < this._count - 2 && particle.ageRatio >= stops[seg + 1].pos) {

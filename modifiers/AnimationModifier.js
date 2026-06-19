@@ -51,13 +51,13 @@ export class AnimationModifier {
   }
 
   onEmit(particle, ctx) {
-    const state = ctx.stateManager.ensure(particle, this, () => ({ segment: 0 }));
+    const state = ctx.stateStore.ensure(particle, this, () => ({ segment: 0 }));
     state.segment = 0;
     particle[this._property] = this._track.evaluate(0, 0);
   }
 
   update(particle, dt, ctx) {
-    const state = ctx.stateManager.get(particle, this);
+    const state = ctx.stateStore.get(particle, this);
     if (!state) return;
     let seg = state.segment;
     seg = this._track.advance(particle.ageRatio, seg);

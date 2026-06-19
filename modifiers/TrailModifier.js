@@ -46,14 +46,14 @@ export class TrailModifier {
   }
 
   onEmit(particle, ctx) {
-    const state = ctx.stateManager.ensure(particle, this, () => ({ x: 0, y: 0, timer: 0 }));
+    const state = ctx.stateStore.ensure(particle, this, () => ({ x: 0, y: 0, timer: 0 }));
     state.x = particle.x;
     state.y = particle.y;
     state.timer = 0;
   }
 
   update(particle, dt, ctx) {
-    const state = ctx.stateManager.ensure(particle, this, () => ({ x: 0, y: 0, timer: 0 }));
+    const state = ctx.stateStore.ensure(particle, this, () => ({ x: 0, y: 0, timer: 0 }));
     const system = ctx.system;
     const prevX = state.x;
     const prevY = state.y;
