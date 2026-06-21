@@ -46,7 +46,8 @@ export class GpuPassExecutor {
   runOnEmit(descriptor, view, slotIndex, particle) {
     const op = getOperator(descriptor.type);
     if (op.onEmit) {
-      const state = this._ensureState(descriptor, view.id(slotIndex));
+      const pid = view ? view.id(slotIndex) : particle.__jygameId;
+      const state = this._ensureState(descriptor, pid);
       op.onEmit(descriptor, view, slotIndex, state);
     }
   }

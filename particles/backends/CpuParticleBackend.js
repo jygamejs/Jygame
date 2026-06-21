@@ -1,29 +1,20 @@
 import { hasLifecycleMethods } from "../../modifiers/ModifierUtils.js";
-import { ObjectParticleStorage } from "../storage/ObjectParticleStorage.js";
-import { SoAParticleStorage } from "../storage/SoAParticleStorage.js";
+import { StorageResolver } from "../storage/StorageResolver.js";
 import { ModifierStateStore } from "../ModifierStateStore.js";
 import { CanvasParticleRenderer } from "../renderers/CanvasParticleRenderer.js";
 import { ParticleRenderData } from "../renderdata/ParticleRenderData.js";
 import { ParticleRenderCommandBuffer } from "../renderdata/ParticleRenderCommandBuffer.js";
-import { ObjectParticleAccessor } from "../accessors/ObjectParticleAccessor.js";
-import { SoAParticleAccessor } from "../accessors/SoAParticleAccessor.js";
+import { ParticleSortManager } from "../ParticleSortManager.js";
 
 const _createEntry = (modifier, priority) => ({ modifier, priority });
-
-const SORT_MODES = new Set([
-  "none", "age", "reverseAge", "size", "reverseSize",
-  "depth", "reverseDepth", "custom",
-]);
 
 export class CpuParticleBackend {
   constructor({ renderParticle, renderer, system, storage } = {}) {
     this._system = system;
-    this._storage = storage || new ObjectParticleStorage();
+    this._storage = storage || StorageResolver.createDefault();
     this._renderer = renderer || new CanvasParticleRenderer({ renderParticle });
     this._stateStore = new ModifierStateStore();
-    this._accessor = this._storage instanceof SoAParticleStorage
-      ? new SoAParticleAccessor(this._storage, 0)
-      : new ObjectParticleAccessor();
+    this._accessor = StorageResolver.createAccessor(this._storage);
     this._modifiers = [];
     this._updateModifiers = [];
     this._emitModifiers = [];
@@ -33,12 +24,7 @@ export class CpuParticleBackend {
     this._modifierContext = { system: this._system, activeParticles: this._storage.activeParticles, stateStore: this._stateStore, accessor: this._accessor };
     this._isUpdating = false;
     this._pendingRemove = null;
-    this._sortMode = "none";
-    this._sortFunction = null;
-    this.sortEveryFrame = false;
-    this._sortDirty = false;
-    this._sortedIndices = null;
-    this._sortCounter = 0;
+    this._sortManager = new ParticleSortManager(this._storage);
     this._collisionProvider = null;
     this._commandBuffer = new ParticleRenderCommandBuffer();
   }
@@ -117,8 +103,7 @@ export class CpuParticleBackend {
     this._renderer = null;
     this._modifierContext.system = null;
     this._modifierContext.activeParticles = null;
-    this._sortedIndices = null;
-    this._sortFunction = null;
+    this._sortManager.destroy();
     this._storage = null;
     this._accessor = null;
     this._stateStore = null;
@@ -132,159 +117,16 @@ export class CpuParticleBackend {
     if (this._renderer) this._renderer._renderParticle = value;
   }
 
-  get sortMode() {
-    return this._sortMode;
-  }
+  get sortMode() { return this._sortManager.sortMode; }
+  set sortMode(value) { this._sortManager.sortMode = value; }
 
-  set sortMode(value) {
-    if (!SORT_MODES.has(value)) {
-      throw new Error(
-        `ParticleSystem.sortMode: unknown mode "${value}". ` +
-        `Valid modes: ${Array.from(SORT_MODES).join(", ")}`
-      );
-    }
-    if (value === this._sortMode) return;
-    this._sortMode = value;
-    this._sortDirty = true;
-    if (value !== "custom") {
-      this._sortFunction = null;
-    }
-  }
+  get sortFunction() { return this._sortManager.sortFunction; }
+  set sortFunction(value) { this._sortManager.sortFunction = value; }
 
-  get sortFunction() {
-    return this._sortFunction;
-  }
+  get sortedParticleCount() { return this._sortManager.sortedParticleCount; }
 
-  set sortFunction(value) {
-    if (this._sortMode === "custom" && typeof value !== "function") {
-      throw new Error(
-        "ParticleSystem.sortFunction: must be a function when sortMode is \"custom\""
-      );
-    }
-    this._sortFunction = value;
-    this._sortDirty = true;
-  }
-
-  get sortedParticleCount() {
-    return this._sortMode !== "none" ? this.activeCount : 0;
-  }
-
-  _ensureSortIndices(minSize) {
-    if (!this._sortedIndices || this._sortedIndices.length < minSize) {
-      this._sortedIndices = new Array(minSize);
-    }
-  }
-
-  _getComparator() {
-    const storage = this._storage;
-
-    switch (this._sortMode) {
-      case "age":
-        return (a, b) => {
-          const d = storage.getFieldValue(b, "ageRatio") - storage.getFieldValue(a, "ageRatio");
-          return d !== 0 ? d : storage.getSortOrder(a) - storage.getSortOrder(b);
-        };
-      case "reverseAge":
-        return (a, b) => {
-          const d = storage.getFieldValue(a, "ageRatio") - storage.getFieldValue(b, "ageRatio");
-          return d !== 0 ? d : storage.getSortOrder(a) - storage.getSortOrder(b);
-        };
-      case "size":
-        return (a, b) => {
-          const va = storage.getFieldValue(a, "size");
-          const vb = storage.getFieldValue(b, "size");
-          if (!Number.isFinite(va) || !Number.isFinite(vb)) {
-            throw new Error(
-              `ParticleSystem: particle.size must be finite, got ${va} and ${vb}`
-            );
-          }
-          const d = va - vb;
-          return d !== 0 ? d : storage.getSortOrder(a) - storage.getSortOrder(b);
-        };
-      case "reverseSize":
-        return (a, b) => {
-          const va = storage.getFieldValue(a, "size");
-          const vb = storage.getFieldValue(b, "size");
-          if (!Number.isFinite(va) || !Number.isFinite(vb)) {
-            throw new Error(
-              `ParticleSystem: particle.size must be finite, got ${va} and ${vb}`
-            );
-          }
-          const d = vb - va;
-          return d !== 0 ? d : storage.getSortOrder(a) - storage.getSortOrder(b);
-        };
-      case "depth":
-        return (a, b) => {
-          const va = storage.getFieldValue(a, "depth");
-          const vb = storage.getFieldValue(b, "depth");
-          if (!Number.isFinite(va) || !Number.isFinite(vb)) {
-            throw new Error(
-              `ParticleSystem: particle.depth must be finite, got ${va} and ${vb}`
-            );
-          }
-          const d = va - vb;
-          return d !== 0 ? d : storage.getSortOrder(a) - storage.getSortOrder(b);
-        };
-      case "reverseDepth":
-        return (a, b) => {
-          const va = storage.getFieldValue(a, "depth");
-          const vb = storage.getFieldValue(b, "depth");
-          if (!Number.isFinite(va) || !Number.isFinite(vb)) {
-            throw new Error(
-              `ParticleSystem: particle.depth must be finite, got ${va} and ${vb}`
-            );
-          }
-          const d = vb - va;
-          return d !== 0 ? d : storage.getSortOrder(a) - storage.getSortOrder(b);
-        };
-      case "custom":
-        return (a, b) => {
-          const pa = storage.resolveParticle(a);
-          const pb = storage.resolveParticle(b);
-          const d = this._sortFunction(pa, pb);
-          if (typeof d !== "number" || !Number.isFinite(d)) {
-            throw new Error(
-              `ParticleSystem custom sortFunction returned invalid value ${d}. Must return a finite number.`
-            );
-          }
-          return d !== 0 ? d : storage.getSortOrder(a) - storage.getSortOrder(b);
-        };
-      default:
-        return null;
-    }
-  }
-
-  _markSortDirty() {
-    this._sortDirty = true;
-  }
-
-  _sortParticles() {
-    if (this.sortEveryFrame) {
-      this._sortDirty = true;
-    }
-    if (!this._sortDirty) return;
-
-    const count = this.activeCount;
-
-    this._ensureSortIndices(count);
-    const buf = this._sortedIndices;
-
-    for (let i = 0; i < count; i++) {
-      buf[i] = i;
-    }
-
-    if (count > 1) {
-      const cmp = this._getComparator();
-      if (cmp) {
-        const savedLen = buf.length;
-        buf.length = count;
-        buf.sort(cmp);
-        buf.length = savedLen;
-      }
-    }
-
-    this._sortDirty = false;
-  }
+  get sortEveryFrame() { return this._sortManager.sortEveryFrame; }
+  set sortEveryFrame(value) { this._sortManager.sortEveryFrame = value; }
 
   emit(count, initializer, emitter) {
     const emitMods = this._emitModifiers;
@@ -293,7 +135,7 @@ export class CpuParticleBackend {
     const acc = this._accessor;
     for (let i = 0; i < count; i++) {
       const p = this._storage.acquire();
-      p.__jygameSortOrder = this._sortCounter++;
+      p.__jygameSortOrder = this._sortManager.nextSortOrder();
       acc.wrap(p);
       if (initializer) initializer(p, i, emitter);
       for (let m = 0; m < emLen; m++) {
@@ -303,12 +145,12 @@ export class CpuParticleBackend {
         }
       }
     }
-    if (this._sortMode !== "none") this._markSortDirty();
+    if (this._sortManager.sortMode !== "none") this._sortManager.markDirty();
   }
 
   emitOne(initializer) {
     const p = this._storage.acquire();
-    p.__jygameSortOrder = this._sortCounter++;
+    p.__jygameSortOrder = this._sortManager.nextSortOrder();
     const acc = this._accessor;
     acc.wrap(p);
     if (initializer) initializer(p, 0);
@@ -320,7 +162,7 @@ export class CpuParticleBackend {
         mod.onEmit(acc, ctx);
       }
     }
-    if (this._sortMode !== "none") this._markSortDirty();
+    if (this._sortManager.sortMode !== "none") this._sortManager.markDirty();
     return p;
   }
 
@@ -383,8 +225,8 @@ export class CpuParticleBackend {
       }
     }
 
-    if (this._sortMode !== "none") {
-      this._markSortDirty();
+    if (this._sortManager.sortMode !== "none") {
+      this._sortManager.markDirty();
     }
 
     this._isUpdating = false;
@@ -400,11 +242,11 @@ export class CpuParticleBackend {
     if (count === 0) return;
 
     let renderData;
-    if (this._sortMode === "none") {
+    if (this._sortManager.sortMode === "none") {
       renderData = this._buildRenderData(null, count);
     } else {
-      this._sortParticles();
-      renderData = this._buildRenderData(this._sortedIndices, count);
+      this._sortManager.sort();
+      renderData = this._buildRenderData(this._sortManager.sortedIndices, count);
     }
 
     const buf = this._commandBuffer;

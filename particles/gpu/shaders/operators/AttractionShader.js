@@ -9,20 +9,21 @@ export const AttractionShader = {
     const strength = descriptor.strength || 0;
     const falloff = descriptor.falloff || "none";
     const minDist = descriptor.minDistance != null ? descriptor.minDistance : 10;
+    const n = uid();
     return `
-  let dx${uid()} = ${tx} - x[index];
-  let dy${uid()} = ${ty} - y[index];
-  let distSq${uid()} = dx * dx + dy * dy;
-  let dist${uid()} = sqrt(distSq);
-  if (dist > 0.0) {
-    let clamped${uid()} = max(dist, ${minDist});
-    let nx${uid()} = dx / dist;
-    let ny${uid()} = dy / dist;
-    var f${uid()} = ${strength};
-    ${falloff === "inverse" ? "f = f / clamped;" : ""}
-    ${falloff === "inverseSquared" ? "f = f / (clamped * clamped);" : ""}
-    vx[index] = vx[index] + nx * f * uniforms.dt;
-    vy[index] = vy[index] + ny * f * uniforms.dt;
+  let dx${n} = ${tx} - x[index];
+  let dy${n} = ${ty} - y[index];
+  let distSq${n} = dx${n} * dx${n} + dy${n} * dy${n};
+  let dist${n} = sqrt(distSq${n});
+  if (dist${n} > 0.0) {
+    let clamped${n} = max(dist${n}, ${minDist});
+    let nx${n} = dx${n} / dist${n};
+    let ny${n} = dy${n} / dist${n};
+    var f${n} = f32(${strength});
+    ${falloff === "inverse" ? `f${n} = f${n} / clamped${n};` : ""}
+    ${falloff === "inverseSquared" ? `f${n} = f${n} / (clamped${n} * clamped${n});` : ""}
+    vx[index] = vx[index] + nx${n} * f${n} * uniforms.dt;
+    vy[index] = vy[index] + ny${n} * f${n} * uniforms.dt;
   }
 `;
   },

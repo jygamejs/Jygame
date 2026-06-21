@@ -218,6 +218,10 @@ export class SoAParticleStorage extends ParticleStorage {
     return this._activeAccessors[sortIndex][fieldName];
   }
 
+  setFieldValue(sortIndex, fieldName, value) {
+    this._activeAccessors[sortIndex][fieldName] = value;
+  }
+
   getSortOrder(sortIndex) {
     return this._activeAccessors[sortIndex].__jygameSortOrder;
   }

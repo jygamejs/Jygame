@@ -17,25 +17,25 @@ export const OrbitShader = {
     let code = `
   let dx${n} = ${tx} - x[index];
   let dy${n} = ${ty} - y[index];
-  let distSq${n} = dx * dx + dy * dy;
-  let dist${n} = sqrt(distSq);
-  if (dist > 0.0) {
-    let clamped${n} = max(dist, ${minDist});
-    let nx${n} = dx / dist;
-    let ny${n} = dy / dist;
-    var f${n} = ${strength};
-    ${falloff === "inverse" ? "f = f / clamped;" : ""}
-    ${falloff === "inverseSquared" ? "f = f / (clamped * clamped);" : ""}
-    let tnx${n} = ${clockwise ? "ny" : "-ny"};
-    let tny${n} = ${clockwise ? "-nx" : "nx"};
-    vx[index] = vx[index] + tnx * f * uniforms.dt;
-    vy[index] = vy[index] + tny * f * uniforms.dt;
+  let distSq${n} = dx${n} * dx${n} + dy${n} * dy${n};
+  let dist${n} = sqrt(distSq${n});
+  if (dist${n} > 0.0) {
+    let clamped${n} = max(dist${n}, ${minDist});
+    let nx${n} = dx${n} / dist${n};
+    let ny${n} = dy${n} / dist${n};
+    var f${n} = f32(${strength});
+    ${falloff === "inverse" ? `f${n} = f${n} / clamped${n};` : ""}
+    ${falloff === "inverseSquared" ? `f${n} = f${n} / (clamped${n} * clamped${n});` : ""}
+    let tnx${n} = ${clockwise ? `ny${n}` : `-ny${n}`};
+    let tny${n} = ${clockwise ? `-nx${n}` : `nx${n}`};
+    vx[index] = vx[index] + tnx${n} * f${n} * uniforms.dt;
+    vy[index] = vy[index] + tny${n} * f${n} * uniforms.dt;
 `;
     if (radius != null) {
-      code += `    let error${n} = ${radius} - dist;
-    let correction${n} = error * ${stiffness};
-    vx[index] = vx[index] + nx * correction * uniforms.dt;
-    vy[index] = vy[index] + ny * correction * uniforms.dt;
+      code += `    let error${n} = ${radius} - dist${n};
+    let correction${n} = error${n} * ${stiffness};
+    vx[index] = vx[index] + nx${n} * correction${n} * uniforms.dt;
+    vy[index] = vy[index] + ny${n} * correction${n} * uniforms.dt;
 `;
     }
     code += "  } else {\n";

@@ -9,9 +9,9 @@ export const TurbulenceShader = {
     const n = uid();
     return `
   let seed${n} = f32(index) * 100.0;
-  let phase${n} = seed + uniforms.elapsedTime * ${frequency};
-  vx[index] = vx[index] + sin(phase) * ${strength} * uniforms.dt;
-  vy[index] = vy[index] + cos(phase * 1.31) * ${strength} * uniforms.dt;
+  let phase${n} = seed${n} + uniforms.elapsedTime * ${frequency};
+  vx[index] = vx[index] + sin(phase${n}) * ${strength} * uniforms.dt;
+  vy[index] = vy[index] + cos(phase${n} * 1.31) * ${strength} * uniforms.dt;
 `;
   },
 };

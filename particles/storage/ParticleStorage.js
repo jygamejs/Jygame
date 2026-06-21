@@ -63,6 +63,11 @@ export class ParticleStorage {
     throw new Error("ParticleStorage#getFieldValue must be implemented by subclass");
   }
 
+  /** Write a numeric field to the particle at the given sort-index. */
+  setFieldValue(sortIndex, fieldName, value) {
+    throw new Error("ParticleStorage#setFieldValue must be implemented by subclass");
+  }
+
   /** Read __jygameSortOrder for the particle at the given sort-index. */
   getSortOrder(sortIndex) {
     throw new Error("ParticleStorage#getSortOrder must be implemented by subclass");

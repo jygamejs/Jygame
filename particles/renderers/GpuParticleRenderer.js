@@ -101,7 +101,7 @@ out vec4 fragColor;
 
 void main() {
   vec2 uv = v_uv;
-  if (u_hasFrame > 0.5) {
+  if (v_hasFrame > 0.5) {
     vec2 frameSize = u_frame.zw;
     vec2 texel = vec2(1.0) / u_texSize;
     uv = v_uv * (frameSize * texel) + (u_frame.xy * texel);

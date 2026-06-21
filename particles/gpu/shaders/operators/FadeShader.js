@@ -9,11 +9,11 @@ export const FadeShader = {
     const n = uid();
     let body;
     if (mode === "in") {
-      body = "alpha[index] = t;";
+      body = `alpha[index] = t${n};`;
     } else if (mode === "in-out") {
-      body = "alpha[index] = select(1.0 - t * 2.0, t * 2.0, t < 0.5);";
+      body = `alpha[index] = select(1.0 - t${n} * 2.0, t${n} * 2.0, t${n} < 0.5);`;
     } else {
-      body = "alpha[index] = 1.0 - t;";
+      body = `alpha[index] = 1.0 - t${n};`;
     }
     return `  let t${n} = ease_${easing}(ageRatio[index]);\n  ${body}\n`;
   },

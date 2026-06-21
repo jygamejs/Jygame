@@ -85,10 +85,6 @@ export class ParticleSystem {
     return this._backend.sortedParticleCount;
   }
 
-  _markSortDirty() {
-    this._backend._markSortDirty();
-  }
-
   // ---- Statistics ----
 
   get activeCount() {
@@ -146,23 +142,23 @@ export class ParticleSystem {
   }
 
   get _sortDirty() {
-    return this._backend._sortDirty;
+    return this._backend._sortManager._sortDirty;
   }
 
   set _sortDirty(value) {
-    this._backend._sortDirty = value;
+    this._backend._sortManager._sortDirty = value;
   }
 
   get _sortFunction() {
-    return this._backend._sortFunction;
+    return this._backend._sortManager._sortFunction;
   }
 
   set _sortFunction(value) {
-    this._backend._sortFunction = value;
+    this._backend._sortManager._sortFunction = value;
   }
 
   get _sortedIndices() {
-    return this._backend._sortedIndices;
+    return this._backend._sortManager._sortedIndices;
   }
 
   get _collisionProvider() {

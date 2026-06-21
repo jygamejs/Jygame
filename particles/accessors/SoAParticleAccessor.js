@@ -23,13 +23,34 @@ export class SoAParticleAccessor extends ParticleAccessor {
     this._onCollision = null;
     this._color = "#ffffff";
     this._userData = null;
-    this.__jygameSortOrder = 0;
+    this._sortOrder = 0;
     this._activeIndex = -1;
   }
+
+  get __jygameSortOrder() { return this._sortOrder; }
+  set __jygameSortOrder(v) { this._sortOrder = v; }
 
   wrap(source) {
     if (source instanceof SoAParticleAccessor) {
       this._i = source._i;
+      this._texture = source._texture;
+      this._originX = source._originX;
+      this._originY = source._originY;
+      this._width = source._width;
+      this._height = source._height;
+      this._frameX = source._frameX;
+      this._frameY = source._frameY;
+      this._frameWidth = source._frameWidth;
+      this._frameHeight = source._frameHeight;
+      this._collides = source._collides;
+      this._radius = source._radius;
+      this._collisionResponse = source._collisionResponse;
+      this._restitution = source._restitution;
+      this._collisionLayer = source._collisionLayer;
+      this._onCollision = source._onCollision;
+      this._color = source._color;
+      this._userData = source._userData;
+      this._sortOrder = source._sortOrder;
     }
   }
 
@@ -51,7 +72,7 @@ export class SoAParticleAccessor extends ParticleAccessor {
     this._onCollision = null;
     this._color = "#ffffff";
     this._userData = null;
-    this.__jygameSortOrder = 0;
+    this._sortOrder = 0;
     this._activeIndex = -1;
   }
 

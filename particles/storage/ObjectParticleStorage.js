@@ -112,6 +112,10 @@ export class ObjectParticleStorage extends ParticleStorage {
     return this._pool.activeObjects[sortIndex][fieldName];
   }
 
+  setFieldValue(sortIndex, fieldName, value) {
+    this._pool.activeObjects[sortIndex][fieldName] = value;
+  }
+
   getSortOrder(sortIndex) {
     return this._pool.activeObjects[sortIndex].__jygameSortOrder;
   }
