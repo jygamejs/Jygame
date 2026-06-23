@@ -26,8 +26,7 @@
     "audio/",
     "modifiers/",
     "camera/",
-    "particles/backends/death_sweep.wasm",
-    "particles/backends/death_sweep_simd_bytes.js"
+    "particles/"
   ],
   "keywords": [
     "game",
