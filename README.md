@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="./logo_jygame.avif" alt="JyGame Logo" width="400">
+</p>
+
 # jygame
 
 A lightweight 2D game framework for the browser.
