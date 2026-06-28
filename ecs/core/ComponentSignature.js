@@ -7,12 +7,6 @@ function validateComponentId(id, context) {
     );
   }
 
-  if (Number.isNaN(id)) {
-    throw new TypeError(
-      `ComponentSignature.${context} failed: component ID must not be NaN.`
-    );
-  }
-
   if (id < 0) {
     throw new RangeError(
       `ComponentSignature.${context} failed: component ID must be non-negative, got ${id}.`
@@ -40,23 +34,26 @@ export class ComponentSignature {
       );
     }
 
-    const ids = [];
+    const arr = new Uint16Array(componentIds.length);
 
     for (let i = 0; i < componentIds.length; i++) {
       const id = componentIds[i];
       validateComponentId(id, 'constructor');
+      arr[i] = id;
+    }
 
-      if (ids.indexOf(id) === -1) {
-        ids.push(id);
+    arr.sort();
+
+    let write = 0;
+    for (let read = 0; read < arr.length; read++) {
+      if (read === 0 || arr[read] !== arr[read - 1]) {
+        arr[write++] = arr[read];
       }
     }
 
-    ids.sort((a, b) => a - b);
-
-    this._components = new Uint16Array(ids);
-    this._key = ids.join(',');
-
-    this._size = ids.length;
+    this._components = write < arr.length ? arr.subarray(0, write) : arr;
+    this._size = write;
+    this._key = this._size === 0 ? '' : Array.from(this._components).join(',');
 
     Object.freeze(this);
   }
@@ -66,7 +63,7 @@ export class ComponentSignature {
   }
 
   get components() {
-    return Array.from(this._components);
+    return this._components;
   }
 
   get key() {
@@ -76,7 +73,16 @@ export class ComponentSignature {
   equals(other) {
     if (this === other) return true;
     if (!(other instanceof ComponentSignature)) return false;
-    return this._key === other._key;
+    if (this._size !== other._size) return false;
+
+    const a = this._components;
+    const b = other._components;
+
+    for (let i = 0; i < this._size; i++) {
+      if (a[i] !== b[i]) return false;
+    }
+
+    return true;
   }
 
   contains(componentId) {
@@ -152,43 +158,45 @@ export class ComponentSignature {
   add(componentId) {
     validateComponentId(componentId, 'add');
 
-    if (this.contains(componentId)) return this;
-
     const arr = this._components;
-    const result = new Array(arr.length + 1);
-    let inserted = false;
-    let ri = 0;
+    let insertAt = 0;
 
-    for (let i = 0; i < arr.length; i++) {
-      if (!inserted && componentId < arr[i]) {
-        result[ri++] = componentId;
-        inserted = true;
-      }
-      result[ri++] = arr[i];
+    while (insertAt < arr.length && arr[insertAt] < componentId) {
+      insertAt++;
     }
 
-    if (!inserted) {
-      result[ri] = componentId;
-    }
+    if (insertAt < arr.length && arr[insertAt] === componentId) return this;
 
-    return new ComponentSignature(result);
+    const result = new Uint16Array(arr.length + 1);
+
+    for (let i = 0; i < insertAt; i++) result[i] = arr[i];
+    result[insertAt] = componentId;
+    for (let i = insertAt; i < arr.length; i++) result[i + 1] = arr[i];
+
+    return new ComponentSignature(Array.from(result));
   }
 
   remove(componentId) {
     validateComponentId(componentId, 'remove');
 
-    if (!this.contains(componentId)) return this;
-
     const arr = this._components;
-    const result = [];
+    let foundAt = -1;
 
     for (let i = 0; i < arr.length; i++) {
-      if (arr[i] !== componentId) {
-        result.push(arr[i]);
+      if (arr[i] === componentId) {
+        foundAt = i;
+        break;
       }
     }
 
-    return new ComponentSignature(result);
+    if (foundAt === -1) return this;
+
+    const result = new Uint16Array(arr.length - 1);
+
+    for (let i = 0; i < foundAt; i++) result[i] = arr[i];
+    for (let i = foundAt + 1; i < arr.length; i++) result[i - 1] = arr[i];
+
+    return new ComponentSignature(Array.from(result));
   }
 
   toString() {

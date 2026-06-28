@@ -9,31 +9,31 @@ describe("ComponentSignature", () => {
     it("creates an empty signature", () => {
       const s = new ComponentSignature([]);
       assert.strictEqual(s.size, 0);
-      assert.deepStrictEqual(s.components, []);
+      assert.deepStrictEqual([...s.components], []);
       assert.strictEqual(s.key, "");
     });
 
     it("creates a signature with a single component", () => {
       const s = new ComponentSignature([5]);
       assert.strictEqual(s.size, 1);
-      assert.deepStrictEqual(s.components, [5]);
+      assert.deepStrictEqual([...s.components], [5]);
     });
 
     it("creates a signature with multiple components", () => {
       const s = new ComponentSignature([1, 2, 3]);
       assert.strictEqual(s.size, 3);
-      assert.deepStrictEqual(s.components, [1, 2, 3]);
+      assert.deepStrictEqual([...s.components], [1, 2, 3]);
     });
 
     it("sorts components in ascending order", () => {
       const s = new ComponentSignature([7, 2, 5]);
-      assert.deepStrictEqual(s.components, [2, 5, 7]);
+      assert.deepStrictEqual([...s.components], [2, 5, 7]);
     });
 
     it("removes duplicates", () => {
       const s = new ComponentSignature([3, 1, 3, 2, 1]);
       assert.strictEqual(s.size, 3);
-      assert.deepStrictEqual(s.components, [1, 2, 3]);
+      assert.deepStrictEqual([...s.components], [1, 2, 3]);
     });
 
     it("accepts no arguments (defaults to empty)", () => {
@@ -116,12 +116,12 @@ describe("ComponentSignature", () => {
       assert.throws(() => { s.x = 1; }, TypeError);
     });
 
-    it("components getter returns a fresh copy", () => {
+    it("components getter returns the same frozen Uint16Array", () => {
       const s = new ComponentSignature([1, 2, 3]);
       const c1 = s.components;
       const c2 = s.components;
-      assert.notStrictEqual(c1, c2);
-      assert.deepStrictEqual(c1, c2);
+      assert.strictEqual(c1, c2);
+      assert.ok(c1 instanceof Uint16Array);
     });
 
     it("add() returns a new instance", () => {
@@ -377,19 +377,19 @@ describe("ComponentSignature", () => {
     it("adds a new component in sorted position", () => {
       const s = new ComponentSignature([1, 5]);
       const result = s.add(3);
-      assert.deepStrictEqual(result.components, [1, 3, 5]);
+      assert.deepStrictEqual([...result.components], [1, 3, 5]);
     });
 
     it("adds at the beginning when smaller than all existing", () => {
       const s = new ComponentSignature([5, 10]);
       const result = s.add(1);
-      assert.deepStrictEqual(result.components, [1, 5, 10]);
+      assert.deepStrictEqual([...result.components], [1, 5, 10]);
     });
 
     it("adds at the end when larger than all existing", () => {
       const s = new ComponentSignature([1, 5]);
       const result = s.add(10);
-      assert.deepStrictEqual(result.components, [1, 5, 10]);
+      assert.deepStrictEqual([...result.components], [1, 5, 10]);
     });
 
     it("returns the same instance when component already present", () => {
@@ -401,13 +401,13 @@ describe("ComponentSignature", () => {
     it("adds to an empty signature", () => {
       const s = new ComponentSignature([]);
       const result = s.add(5);
-      assert.deepStrictEqual(result.components, [5]);
+      assert.deepStrictEqual([...result.components], [5]);
     });
 
     it("does not mutate the original signature", () => {
       const s = new ComponentSignature([1, 2]);
       s.add(3);
-      assert.deepStrictEqual(s.components, [1, 2]);
+      assert.deepStrictEqual([...s.components], [1, 2]);
     });
 
     it("throws for invalid component IDs", () => {
@@ -425,19 +425,19 @@ describe("ComponentSignature", () => {
     it("removes an existing component", () => {
       const s = new ComponentSignature([1, 2, 3]);
       const result = s.remove(2);
-      assert.deepStrictEqual(result.components, [1, 3]);
+      assert.deepStrictEqual([...result.components], [1, 3]);
     });
 
     it("removes the first component", () => {
       const s = new ComponentSignature([1, 2, 3]);
       const result = s.remove(1);
-      assert.deepStrictEqual(result.components, [2, 3]);
+      assert.deepStrictEqual([...result.components], [2, 3]);
     });
 
     it("removes the last component", () => {
       const s = new ComponentSignature([1, 2, 3]);
       const result = s.remove(3);
-      assert.deepStrictEqual(result.components, [1, 2]);
+      assert.deepStrictEqual([...result.components], [1, 2]);
     });
 
     it("returns the same instance when component is absent", () => {
@@ -449,14 +449,14 @@ describe("ComponentSignature", () => {
     it("does not mutate the original signature", () => {
       const s = new ComponentSignature([1, 2, 3]);
       s.remove(2);
-      assert.deepStrictEqual(s.components, [1, 2, 3]);
+      assert.deepStrictEqual([...s.components], [1, 2, 3]);
     });
 
     it("removes the only component yields empty signature", () => {
       const s = new ComponentSignature([5]);
       const result = s.remove(5);
       assert.strictEqual(result.size, 0);
-      assert.deepStrictEqual(result.components, []);
+      assert.deepStrictEqual([...result.components], []);
     });
 
     it("throws for invalid component IDs", () => {
