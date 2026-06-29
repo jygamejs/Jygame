@@ -1,0 +1,319 @@
+import { ComponentSignature } from "./ComponentSignature.js";
+import { ComponentRegistry } from "./ComponentRegistry.js";
+import { EntityManager } from "./EntityManager.js";
+import { ArchetypeSystem } from "./ArchetypeSystem.js";
+import { QueryEngine } from "./QueryEngine.js";
+import { QueryView } from "./QueryView.js";
+import { SystemScheduler } from "./SystemScheduler.js";
+
+export class World {
+  constructor(options = {}) {
+    const parsed = {};
+
+    if (options.initialCapacity !== undefined) {
+      parsed.initialCapacity = options.initialCapacity;
+    }
+    if (options.maxEntities !== undefined) {
+      parsed.maxEntities = options.maxEntities;
+    }
+
+    parsed.initialTableCapacity = options.initialTableCapacity ?? 64;
+
+    if (typeof parsed.initialTableCapacity !== 'number' || !Number.isInteger(parsed.initialTableCapacity) || parsed.initialTableCapacity < 1) {
+      throw new RangeError(
+        `World constructor failed: initialTableCapacity must be a positive integer, got ${parsed.initialTableCapacity}.`
+      );
+    }
+
+    this._registry = new ComponentRegistry();
+    this._entityManager = new EntityManager(parsed);
+    this._archetypeSystem = new ArchetypeSystem(
+      this._registry,
+      this._entityManager,
+      { initialTableCapacity: parsed.initialTableCapacity }
+    );
+    this._queryEngine = new QueryEngine(this._archetypeSystem);
+    this._scheduler = new SystemScheduler(this._queryEngine, this._registry);
+    this._scheduler.world = this;
+
+    this._archetypeSystem.onArchetypeCreated = (archetype) => {
+      this._queryEngine.onArchetypeCreated(archetype);
+    };
+
+    this._viewCache = new Map();
+    this._queryViewCache = new WeakMap();
+  }
+
+  get registry() {
+    return this._registry;
+  }
+
+  get entityManager() {
+    return this._entityManager;
+  }
+
+  get archetypeSystem() {
+    return this._archetypeSystem;
+  }
+
+  get queryEngine() {
+    return this._queryEngine;
+  }
+
+  get scheduler() {
+    return this._scheduler;
+  }
+
+  register(...args) {
+    return this._registry.register(...args);
+  }
+
+  createEntity() {
+    this._registry.lock();
+
+    const entity = this._entityManager.create();
+    const emptySig = new ComponentSignature([]);
+    const emptyTable = this._archetypeSystem.getTable(emptySig);
+    const row = emptyTable.allocate();
+    emptyTable.setEntity(row, entity);
+    this._entityManager.setLocation(entity, 1, row);
+
+    return entity;
+  }
+
+  destroyEntity(entity) {
+    if (!this._entityManager.isAlive(entity)) {
+      return;
+    }
+
+    const archetypeId = this._entityManager.getArchetype(entity);
+    const row = this._entityManager.getRow(entity);
+    const table = this._archetypeSystem.getTableById(archetypeId);
+
+    this._clearEntityCache(entity);
+
+    const result = table.removeRow(row);
+    if (result.moved) {
+      this._entityManager.setLocation(result.entity, archetypeId, row);
+    }
+
+    this._entityManager.destroy(entity);
+  }
+
+  isAlive(entity) {
+    return this._entityManager.isAlive(entity);
+  }
+
+  addComponent(entity, component) {
+    const componentId = this._resolveComponentId(component, 'addComponent');
+
+    if (!this._entityManager.isAlive(entity)) {
+      throw new Error(
+        `World.addComponent failed: entity ${entity} is not alive.`
+      );
+    }
+
+    const currentSig = this._archetypeSystem.entitySignature(entity);
+    if (!currentSig) {
+      throw new Error(
+        `World.addComponent failed: entity ${entity} has no signature.`
+      );
+    }
+
+    if (currentSig.contains(componentId)) {
+      return;
+    }
+
+    const newSig = currentSig.add(componentId);
+
+    this._clearEntityCache(entity);
+    this._archetypeSystem.moveEntity(entity, newSig);
+
+    const table = this._archetypeSystem.entityTable(entity);
+    const row = this._entityManager.getRow(entity);
+    const schema = this._registry.getSchemaById(componentId);
+    if (schema) {
+      const fieldNames = Object.keys(schema);
+      for (let fi = 0; fi < fieldNames.length; fi++) {
+        const fieldName = fieldNames[fi];
+        const col = table.getColumn(componentId, fieldName);
+        if (col) {
+          col[row] = 0;
+        }
+      }
+    }
+  }
+
+  removeComponent(entity, component) {
+    const componentId = this._resolveComponentId(component, 'removeComponent');
+
+    if (!this._entityManager.isAlive(entity)) {
+      throw new Error(
+        `World.removeComponent failed: entity ${entity} is not alive.`
+      );
+    }
+
+    const currentSig = this._archetypeSystem.entitySignature(entity);
+    if (!currentSig) {
+      throw new Error(
+        `World.removeComponent failed: entity ${entity} has no signature.`
+      );
+    }
+
+    if (!currentSig.contains(componentId)) {
+      return;
+    }
+
+    const newSig = currentSig.remove(componentId);
+
+    this._clearEntityCache(entity);
+    this._archetypeSystem.moveEntity(entity, newSig);
+  }
+
+  hasComponent(entity, component) {
+    const componentId = this._resolveComponentId(component, 'hasComponent');
+
+    if (!this._entityManager.isAlive(entity)) {
+      return false;
+    }
+
+    const sig = this._archetypeSystem.entitySignature(entity);
+    if (!sig) return false;
+
+    return sig.contains(componentId);
+  }
+
+  getComponent(entity, component) {
+    const componentId = this._resolveComponentId(component, 'getComponent');
+
+    if (!this._entityManager.isAlive(entity)) {
+      throw new Error(
+        `World.getComponent failed: entity ${entity} is not alive.`
+      );
+    }
+
+    const sig = this._archetypeSystem.entitySignature(entity);
+    if (!sig || !sig.contains(componentId)) {
+      throw new Error(
+        `World.getComponent failed: entity ${entity} does not have the requested component.`
+      );
+    }
+
+    const cacheKey = `${entity}:${componentId}`;
+    let view = this._viewCache.get(cacheKey);
+    if (!view) {
+      const table = this._archetypeSystem.entityTable(entity);
+      const row = this._entityManager.getRow(entity);
+      const schema = this._registry.getSchemaById(componentId);
+      view = this._createComponentView(componentId, schema, table, row);
+      this._viewCache.set(cacheKey, view);
+    }
+    return view;
+  }
+
+  setComponent(entity, component, values) {
+    const componentId = this._resolveComponentId(component, 'setComponent');
+
+    if (!this._entityManager.isAlive(entity)) {
+      throw new Error(
+        `World.setComponent failed: entity ${entity} is not alive.`
+      );
+    }
+
+    const sig = this._archetypeSystem.entitySignature(entity);
+    if (!sig || !sig.contains(componentId)) {
+      throw new Error(
+        `World.setComponent failed: entity ${entity} does not have the requested component.`
+      );
+    }
+
+    if (typeof values !== 'object' || values === null || Array.isArray(values)) {
+      throw new TypeError(
+        `World.setComponent failed: values must be a plain object, got ${typeof values}.`
+      );
+    }
+
+    const table = this._archetypeSystem.entityTable(entity);
+    const row = this._entityManager.getRow(entity);
+    const schema = this._registry.getSchemaById(componentId);
+
+    for (const fieldName of Object.keys(values)) {
+      if (!schema || !(fieldName in schema)) {
+        throw new Error(
+          `World.setComponent failed: unknown field "${fieldName}".`
+        );
+      }
+      const col = table.getColumn(componentId, fieldName);
+      if (col) {
+        col[row] = values[fieldName];
+      }
+    }
+  }
+
+  addSystem(system) {
+    this._scheduler.add(system);
+  }
+
+  removeSystem(system) {
+    this._scheduler.remove(system);
+  }
+
+  clearSystems() {
+    this._scheduler.clear();
+  }
+
+  update(dt) {
+    this._scheduler.update(dt);
+  }
+
+  query(query) {
+    let view = this._queryViewCache.get(query);
+    if (!view) {
+      view = new QueryView(this._queryEngine, query);
+      this._queryViewCache.set(query, view);
+    }
+    return view;
+  }
+
+  _resolveComponentId(component, operation) {
+    if (typeof component !== 'function' && typeof component !== 'string') {
+      throw new TypeError(
+        `World.${operation} failed: component must be a component class or string name, ` +
+        `got ${typeof component}.`
+      );
+    }
+    const id = this._registry.getId(component);
+    if (id === null) {
+      throw new Error(
+        `World.${operation} failed: component "${component}" is not registered. ` +
+        `Register components before creating entities.`
+      );
+    }
+    return id;
+  }
+
+  _createComponentView(componentId, schema, table, row) {
+    const view = {};
+    const fieldNames = Object.keys(schema);
+    for (let fi = 0; fi < fieldNames.length; fi++) {
+      const fieldName = fieldNames[fi];
+      const col = table.getColumn(componentId, fieldName);
+      Object.defineProperty(view, fieldName, {
+        get() { return col[row]; },
+        set(v) { col[row] = v; },
+        enumerable: true,
+        configurable: true,
+      });
+    }
+    return view;
+  }
+
+  _clearEntityCache(entity) {
+    const prefix = `${entity}:`;
+    for (const key of this._viewCache.keys()) {
+      if (key.startsWith(prefix)) {
+        this._viewCache.delete(key);
+      }
+    }
+  }
+}

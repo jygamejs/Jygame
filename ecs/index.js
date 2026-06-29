@@ -1,3 +1,10 @@
+export { ArchetypeSystem } from "./core/ArchetypeSystem.js";
 export { ComponentRegistry } from "./core/ComponentRegistry.js";
 export { ComponentSignature } from "./core/ComponentSignature.js";
 export { EntityManager } from "./core/EntityManager.js";
+export { QueryEngine } from "./core/QueryEngine.js";
+export { QueryView } from "./core/QueryView.js";
+export { System } from "./core/System.js";
+export { SystemScheduler } from "./core/SystemScheduler.js";
+export { Table } from "./core/Table.js";
+export { World } from "./core/World.js";

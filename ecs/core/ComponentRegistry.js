@@ -203,6 +203,15 @@ export class ComponentRegistry {
     return meta ? meta.schema : null;
   }
 
+  getMetadataById(componentId) {
+    return this._idToMetadata.get(componentId) ?? null;
+  }
+
+  getSchemaById(componentId) {
+    const meta = this._idToMetadata.get(componentId);
+    return meta ? meta.schema : null;
+  }
+
   getMetadata(Component) {
     const id = this.getId(Component);
     if (id === null) return null;
