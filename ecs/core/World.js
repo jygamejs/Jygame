@@ -42,6 +42,7 @@ export class World {
 
     this._viewCache = new Map();
     this._queryViewCache = new WeakMap();
+    this._resources = new Map();
   }
 
   get registry() {
@@ -62,6 +63,31 @@ export class World {
 
   get scheduler() {
     return this._scheduler;
+  }
+
+  setResource(key, value) {
+    if (key === null || key === undefined) {
+      throw new TypeError(
+        `World.setResource failed: resource key cannot be null or undefined.`
+      );
+    }
+    this._resources.set(key, value);
+  }
+
+  getResource(key) {
+    return this._resources.get(key);
+  }
+
+  removeResource(key) {
+    this._resources.delete(key);
+  }
+
+  hasResource(key) {
+    return this._resources.has(key);
+  }
+
+  clearResources() {
+    this._resources.clear();
   }
 
   register(...args) {

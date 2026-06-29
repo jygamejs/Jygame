@@ -58,27 +58,27 @@ describe("System", () => {
     it("can be overridden by subclass", () => {
       let called = false;
       class TestSystem extends System {
-        update(world, dt) {
+        update(ctx, dt) {
           called = true;
         }
       }
       const s = new TestSystem();
-      s.update({}, 16);
+      s.update({ world: {} }, 16);
       assert.strictEqual(called, true);
     });
 
-    it("receives world and dt", () => {
+    it("receives ctx and dt", () => {
       let receivedWorld = null;
       let receivedDt = null;
       const world = { name: "test" };
       class TestSystem extends System {
-        update(w, dt) {
-          receivedWorld = w;
+        update(ctx, dt) {
+          receivedWorld = ctx.world;
           receivedDt = dt;
         }
       }
       const s = new TestSystem();
-      s.update(world, 16.5);
+      s.update({ world }, 16.5);
       assert.strictEqual(receivedWorld, world);
       assert.strictEqual(receivedDt, 16.5);
     });

@@ -1,5 +1,6 @@
 import { ComponentSignature } from "./ComponentSignature.js";
 import { System } from "./System.js";
+import { SystemContext } from "./SystemContext.js";
 
 export class SystemScheduler {
   constructor(queryEngine, componentRegistry) {
@@ -34,6 +35,11 @@ export class SystemScheduler {
 
   set world(w) {
     this._world = w;
+    for (let i = 0; i < this._systems.length; i++) {
+      const ctx = this._systems[i]._ctx;
+      ctx._world = w;
+      ctx._resources._bind(w ? w._resources : null);
+    }
   }
 
   add(system) {
@@ -58,6 +64,12 @@ export class SystemScheduler {
     this._compileQuery(system);
 
     system._queryEngine = this._queryEngine;
+    if (!system._ctx) {
+      system._ctx = new SystemContext(this._world, system);
+    } else {
+      system._ctx._world = this._world;
+      system._ctx._resources._bind(this._world ? this._world._resources : null);
+    }
 
     this._systems.push(system);
     this._needsSort = true;
@@ -134,7 +146,8 @@ export class SystemScheduler {
       for (let i = 0; i < systems.length; i++) {
         const system = systems[i];
         if (!system.enabled) continue;
-        system.update(this._world, dt);
+        system._ctx._refresh(dt);
+        system.update(system._ctx, dt);
       }
     } finally {
       this._insideUpdate = false;
@@ -146,16 +159,30 @@ export class SystemScheduler {
     if (!queryDef) return;
 
     const resolved = {};
+    const compiledIds = new Map();
     if (queryDef.all) {
-      resolved.all = queryDef.all.map(c => this._resolveComponent(c));
+      resolved.all = queryDef.all.map(c => {
+        const id = this._resolveComponent(c);
+        compiledIds.set(c, id);
+        return id;
+      });
     }
     if (queryDef.any) {
-      resolved.any = queryDef.any.map(c => this._resolveComponent(c));
+      resolved.any = queryDef.any.map(c => {
+        const id = this._resolveComponent(c);
+        compiledIds.set(c, id);
+        return id;
+      });
     }
     if (queryDef.none) {
-      resolved.none = queryDef.none.map(c => this._resolveComponent(c));
+      resolved.none = queryDef.none.map(c => {
+        const id = this._resolveComponent(c);
+        compiledIds.set(c, id);
+        return id;
+      });
     }
 
+    system._compiledIds = compiledIds;
     system._query = this._queryEngine.createQuery(resolved);
   }
 

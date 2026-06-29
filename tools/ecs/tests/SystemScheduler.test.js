@@ -131,7 +131,7 @@ describe("SystemScheduler", () => {
     it("rejects adding during update", () => {
       const { scheduler } = createFixture();
       class TestSystem extends System {
-        update(world, dt) {
+        update(ctx, dt) {
           const s = new TestSystem();
           scheduler.add(s);
         }
@@ -166,7 +166,7 @@ describe("SystemScheduler", () => {
     it("rejects removing during update", () => {
       const { scheduler } = createFixture();
       class RemoveSystem extends System {
-        update(world, dt) {
+        update(ctx, dt) {
           scheduler.remove(this);
         }
       }
@@ -217,7 +217,7 @@ describe("SystemScheduler", () => {
     it("rejects clearing during update", () => {
       const { scheduler } = createFixture();
       class ClearSystem extends System {
-        update(world, dt) {
+        update(ctx, dt) {
           scheduler.clear();
         }
       }
@@ -340,15 +340,15 @@ describe("SystemScheduler", () => {
 
       class LowPri extends System {
         static priority = 0;
-        update(world, dt) { order.push("low"); }
+        update(ctx, dt) { order.push("low"); }
       }
       class HighPri extends System {
         static priority = 100;
-        update(world, dt) { order.push("high"); }
+        update(ctx, dt) { order.push("high"); }
       }
       class MidPri extends System {
         static priority = 50;
-        update(world, dt) { order.push("mid"); }
+        update(ctx, dt) { order.push("mid"); }
       }
 
       scheduler.add(new LowPri());
@@ -365,15 +365,15 @@ describe("SystemScheduler", () => {
 
       class SysA extends System {
         static priority = 0;
-        update(world, dt) { order.push("A"); }
+        update(ctx, dt) { order.push("A"); }
       }
       class SysB extends System {
         static priority = 0;
-        update(world, dt) { order.push("B"); }
+        update(ctx, dt) { order.push("B"); }
       }
       class SysC extends System {
         static priority = 0;
-        update(world, dt) { order.push("C"); }
+        update(ctx, dt) { order.push("C"); }
       }
 
       scheduler.add(new SysA());
@@ -390,11 +390,11 @@ describe("SystemScheduler", () => {
 
       class Normal extends System {
         static priority = 0;
-        update(world, dt) { order.push("normal"); }
+        update(ctx, dt) { order.push("normal"); }
       }
       class Early extends System {
         static priority = -100;
-        update(world, dt) { order.push("early"); }
+        update(ctx, dt) { order.push("early"); }
       }
 
       scheduler.add(new Normal());
@@ -410,15 +410,15 @@ describe("SystemScheduler", () => {
 
       class SysA extends System {
         static priority = 0;
-        update(world, dt) { order.push("A"); }
+        update(ctx, dt) { order.push("A"); }
       }
       class SysB extends System {
         static priority = 0;
-        update(world, dt) { order.push("B"); }
+        update(ctx, dt) { order.push("B"); }
       }
       class SysC extends System {
         static priority = 0;
-        update(world, dt) { order.push("C"); }
+        update(ctx, dt) { order.push("C"); }
       }
 
       const a = new SysA();
@@ -443,7 +443,7 @@ describe("SystemScheduler", () => {
       let called = false;
 
       class TestSystem extends System {
-        update(world, dt) { called = true; }
+        update(ctx, dt) { called = true; }
       }
 
       scheduler.add(new TestSystem());
@@ -457,7 +457,7 @@ describe("SystemScheduler", () => {
       let receivedDt = -1;
 
       class TestSystem extends System {
-        update(world, dt) { receivedDt = dt; }
+        update(ctx, dt) { receivedDt = dt; }
       }
 
       scheduler.add(new TestSystem());
@@ -471,7 +471,7 @@ describe("SystemScheduler", () => {
       let receivedWorld = null;
 
       class TestSystem extends System {
-        update(w, dt) { receivedWorld = w; }
+        update(ctx, dt) { receivedWorld = ctx.world; }
       }
 
       scheduler.add(new TestSystem());
@@ -485,7 +485,7 @@ describe("SystemScheduler", () => {
       let called = false;
 
       class TestSystem extends System {
-        update(world, dt) { called = true; }
+        update(ctx, dt) { called = true; }
       }
 
       const system = new TestSystem();
@@ -501,10 +501,10 @@ describe("SystemScheduler", () => {
       const executed = [];
 
       class SysA extends System {
-        update(world, dt) { executed.push("A"); }
+        update(ctx, dt) { executed.push("A"); }
       }
       class SysB extends System {
-        update(world, dt) { executed.push("B"); }
+        update(ctx, dt) { executed.push("B"); }
       }
 
       scheduler.add(new SysA());
@@ -519,7 +519,7 @@ describe("SystemScheduler", () => {
       let called = false;
 
       class TestSystem extends System {
-        update(world, dt) { called = true; }
+        update(ctx, dt) { called = true; }
       }
 
       scheduler.add(new TestSystem());
@@ -538,8 +538,8 @@ describe("SystemScheduler", () => {
 
       class TestSystem extends System {
         static query = { all: [Transform] };
-        update(world, dt) {
-          const tables = world.queryEngine.getTables(this.query);
+        update(ctx, dt) {
+          const tables = ctx.world.queryEngine.getTables(this.query);
           tableCount = tables.length;
         }
       }
@@ -559,7 +559,7 @@ describe("SystemScheduler", () => {
       let executed = false;
 
       class SimpleSystem extends System {
-        update(world, dt) {
+        update(ctx, dt) {
           executed = true;
         }
       }
@@ -668,7 +668,7 @@ describe("SystemScheduler", () => {
     it("update throws on recursive call", () => {
       const { scheduler } = createFixture();
       class RecursiveSystem extends System {
-        update(world, dt) {
+        update(ctx, dt) {
           scheduler.update(dt);
         }
       }
@@ -700,7 +700,7 @@ describe("SystemScheduler", () => {
       let sortCalled = 0;
 
       class TestSystem extends System {
-        update(world, dt) {}
+        update(ctx, dt) {}
       }
 
       scheduler.add(new TestSystem());

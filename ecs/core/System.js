@@ -4,6 +4,7 @@ export class System {
     this._priority = this.constructor.priority ?? 0;
     this._query = null;
     this._queryEngine = null;
+    this._compiledIds = null;
   }
 
   get priority() {

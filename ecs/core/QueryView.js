@@ -35,4 +35,20 @@ export class QueryView {
       }
     }
   }
+
+  column(componentId, fieldName) {
+    const tables = this._queryEngine.getTables(this._query);
+    if (tables.length === 0) return null;
+    return tables[0].getColumn(componentId, fieldName);
+  }
+
+  forEach(callback) {
+    const tables = this._queryEngine.getTables(this._query);
+    for (let i = 0; i < tables.length; i++) {
+      const table = tables[i];
+      for (let r = 0; r < table.count; r++) {
+        callback(table, r);
+      }
+    }
+  }
 }

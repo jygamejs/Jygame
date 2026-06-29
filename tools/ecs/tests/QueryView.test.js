@@ -565,8 +565,8 @@ describe("QueryView", () => {
 
       class TestSystem extends System {
         static query = { all: [Position] };
-        update(w, dt) {
-          for (const entity of w.query(this.query).entities()) {
+        update(ctx, dt) {
+          for (const entity of ctx.world.query(this.query).entities()) {
             visited.push(entity);
           }
         }
@@ -587,8 +587,8 @@ describe("QueryView", () => {
 
       class TestSystem extends System {
         static query = { all: [Position] };
-        update(w, dt) {
-          for (const _ of w.query(this.query).tables()) {
+        update(ctx, dt) {
+          for (const _ of ctx.world.query(this.query).tables()) {
             tableCount++;
           }
         }
@@ -608,9 +608,9 @@ describe("QueryView", () => {
 
       class TestSystem extends System {
         static query = { all: [Position] };
-        update(w, dt) {
-          const posId = w.registry.getId(Position);
-          for (const table of w.query(this.query).tables()) {
+        update(ctx, dt) {
+          const posId = ctx.world.registry.getId(Position);
+          for (const table of ctx.world.query(this.query).tables()) {
             const colX = table.getColumn(posId, "x");
             for (let r = 0; r < table.count; r++) {
               sumX += colX[r];
@@ -638,9 +638,9 @@ describe("QueryView", () => {
 
       class TestSystem extends System {
         static query = { all: [Position] };
-        update(w, dt) {
-          const posId = w.registry.getId(Position);
-          for (const { table, row } of w.query(this.query).rows()) {
+        update(ctx, dt) {
+          const posId = ctx.world.registry.getId(Position);
+          for (const { table, row } of ctx.world.query(this.query).rows()) {
             const colX = table.getColumn(posId, "x");
             colX[row] += 5;
             touched++;
@@ -670,16 +670,16 @@ describe("QueryView", () => {
 
       class PosSystem extends System {
         static query = { all: [Position] };
-        update(w, dt) {
-          for (const _ of w.query(this.query).entities()) {
+        update(ctx, dt) {
+          for (const _ of ctx.world.query(this.query).entities()) {
             posVisited++;
           }
         }
       }
       class VelSystem extends System {
         static query = { all: [Velocity] };
-        update(w, dt) {
-          for (const _ of w.query(this.query).entities()) {
+        update(ctx, dt) {
+          for (const _ of ctx.world.query(this.query).entities()) {
             velVisited++;
           }
         }
@@ -704,11 +704,11 @@ describe("QueryView", () => {
 
       class TestSystem extends System {
         static query = { all: [Position] };
-        update(w, dt) {
+        update(ctx, dt) {
           if (firstCount === 0) {
-            firstCount = [...w.query(this.query).entities()].length;
+            firstCount = [...ctx.world.query(this.query).entities()].length;
           } else {
-            secondCount = [...w.query(this.query).entities()].length;
+            secondCount = [...ctx.world.query(this.query).entities()].length;
           }
         }
       }
@@ -1158,7 +1158,7 @@ describe("QueryView", () => {
       const e = world.createEntity();
       world.addComponent(e, Position);
 
-      class DummySystem extends System { update(w, dt) {} }
+      class DummySystem extends System { update(ctx, dt) {} }
       world.addSystem(new DummySystem());
       world.update(16);
 

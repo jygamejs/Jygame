@@ -323,6 +323,38 @@ export class Table {
     return start;
   }
 
+  columns(componentId) {
+    if (this._destroyed) {
+      throw new Error('Table.columns failed: table has been destroyed.');
+    }
+    if (typeof componentId !== 'number' || !Number.isInteger(componentId) || componentId < 0) {
+      throw new TypeError(
+        `Table.columns failed: component ID must be a non-negative integer, got ${componentId}.`
+      );
+    }
+    if (!this._columnsCache) {
+      this._columnsCache = new Map();
+    }
+    let result = this._columnsCache.get(componentId);
+    if (!result) {
+      const fieldCount = this._componentFieldCounts.get(componentId);
+      if (!fieldCount) return null;
+      const schema = this._registry.getSchemaById(componentId);
+      if (!schema) return null;
+      const fieldNames = Object.keys(schema);
+      result = Object.create(null);
+      for (let fi = 0; fi < fieldNames.length; fi++) {
+        const fieldName = fieldNames[fi];
+        const col = this.getColumn(componentId, fieldName);
+        if (col) {
+          result[fieldName] = col;
+        }
+      }
+      this._columnsCache.set(componentId, result);
+    }
+    return result;
+  }
+
   grow() {
     if (this._destroyed) {
       throw new Error('Table.grow failed: table has been destroyed.');

@@ -137,14 +137,14 @@ describe("World Runtime Integration", () => {
   describe("addSystem", () => {
     it("registers a system", () => {
       const world = createWorld();
-      class TestSystem extends System { update(w, dt) {} }
+      class TestSystem extends System { update(ctx, dt) {} }
       world.addSystem(new TestSystem());
       assert.strictEqual(world.scheduler.systemCount, 1);
     });
 
     it("rejects duplicate systems", () => {
       const world = createWorld();
-      class TestSystem extends System { update(w, dt) {} }
+      class TestSystem extends System { update(ctx, dt) {} }
       const system = new TestSystem();
       world.addSystem(system);
       assert.throws(() => world.addSystem(system), /already registered/);
@@ -159,7 +159,7 @@ describe("World Runtime Integration", () => {
     it("rejects adding during update", () => {
       const world = createWorld();
       class BadSystem extends System {
-        update(w, dt) {
+        update(ctx, dt) {
           world.addSystem(new BadSystem());
         }
       }
@@ -171,7 +171,7 @@ describe("World Runtime Integration", () => {
       const world = createWorld();
       class MovementSystem extends System {
         static query = { all: [Position, Velocity] };
-        update(w, dt) {}
+        update(ctx, dt) {}
       }
       const system = new MovementSystem();
       world.addSystem(system);
@@ -180,7 +180,7 @@ describe("World Runtime Integration", () => {
 
     it("does not compile query if none defined", () => {
       const world = createWorld();
-      class NoQuerySystem extends System { update(w, dt) {} }
+      class NoQuerySystem extends System { update(ctx, dt) {} }
       const system = new NoQuerySystem();
       world.addSystem(system);
       assert.strictEqual(system.query, null);
@@ -191,7 +191,7 @@ describe("World Runtime Integration", () => {
       class Unregistered {}
       class BadSystem extends System {
         static query = { all: [Unregistered] };
-        update(w, dt) {}
+        update(ctx, dt) {}
       }
       assert.throws(() => world.addSystem(new BadSystem()), /not registered/);
     });
@@ -200,11 +200,11 @@ describe("World Runtime Integration", () => {
       const world = createWorld();
       class SysA extends System {
         static query = { all: [Position] };
-        update(w, dt) {}
+        update(ctx, dt) {}
       }
       class SysB extends System {
         static query = { all: [Position] };
-        update(w, dt) {}
+        update(ctx, dt) {}
       }
       const a = new SysA();
       const b = new SysB();
@@ -218,7 +218,7 @@ describe("World Runtime Integration", () => {
   describe("removeSystem", () => {
     it("removes a registered system", () => {
       const world = createWorld();
-      class TestSystem extends System { update(w, dt) {} }
+      class TestSystem extends System { update(ctx, dt) {} }
       const system = new TestSystem();
       world.addSystem(system);
       world.removeSystem(system);
@@ -227,7 +227,7 @@ describe("World Runtime Integration", () => {
 
     it("throws for unregistered system", () => {
       const world = createWorld();
-      class TestSystem extends System { update(w, dt) {} }
+      class TestSystem extends System { update(ctx, dt) {} }
       assert.throws(() => world.removeSystem(new TestSystem()), /not registered/);
     });
 
@@ -236,7 +236,7 @@ describe("World Runtime Integration", () => {
       let removed = false;
       class TestSystem extends System {
         onRemoved(w) { removed = true; }
-        update(w, dt) {}
+        update(ctx, dt) {}
       }
       const system = new TestSystem();
       world.addSystem(system);
@@ -249,8 +249,8 @@ describe("World Runtime Integration", () => {
   describe("clearSystems", () => {
     it("removes all systems", () => {
       const world = createWorld();
-      class A extends System { update(w, dt) {} }
-      class B extends System { update(w, dt) {} }
+      class A extends System { update(ctx, dt) {} }
+      class B extends System { update(ctx, dt) {} }
       world.addSystem(new A());
       world.addSystem(new B());
       world.clearSystems();
@@ -262,11 +262,11 @@ describe("World Runtime Integration", () => {
       const removed = [];
       class A extends System {
         onRemoved(w) { removed.push("A"); }
-        update(w, dt) {}
+        update(ctx, dt) {}
       }
       class B extends System {
         onRemoved(w) { removed.push("B"); }
-        update(w, dt) {}
+        update(ctx, dt) {}
       }
       world.addSystem(new A());
       world.addSystem(new B());
@@ -281,8 +281,8 @@ describe("World Runtime Integration", () => {
       const world = createWorld();
       let calledA = false;
       let calledB = false;
-      class A extends System { update(w, dt) { calledA = true; } }
-      class B extends System { update(w, dt) { calledB = true; } }
+      class A extends System { update(ctx, dt) { calledA = true; } }
+      class B extends System { update(ctx, dt) { calledB = true; } }
       world.addSystem(new A());
       world.addSystem(new B());
       world.update(16);
@@ -293,7 +293,7 @@ describe("World Runtime Integration", () => {
     it("forwards dt to systems", () => {
       const world = createWorld();
       let received = 0;
-      class TestSystem extends System { update(w, dt) { received = dt; } }
+      class TestSystem extends System { update(ctx, dt) { received = dt; } }
       world.addSystem(new TestSystem());
       world.update(42.5);
       assert.strictEqual(received, 42.5);
@@ -302,7 +302,7 @@ describe("World Runtime Integration", () => {
     it("forwards world to systems", () => {
       const world = createWorld();
       let received = null;
-      class TestSystem extends System { update(w, dt) { received = w; } }
+      class TestSystem extends System { update(ctx, dt) { received = ctx.world; } }
       world.addSystem(new TestSystem());
       world.update(16);
       assert.strictEqual(received, world);
@@ -311,7 +311,7 @@ describe("World Runtime Integration", () => {
     it("throws for recursive update", () => {
       const world = createWorld();
       class RecursiveSystem extends System {
-        update(w, dt) { w.update(dt); }
+        update(ctx, dt) { ctx.world.update(dt); }
       }
       world.addSystem(new RecursiveSystem());
       assert.throws(() => world.update(16), /recursive update/);
@@ -324,7 +324,7 @@ describe("World Runtime Integration", () => {
 
     it("does not throw when update is called multiple times", () => {
       const world = createWorld();
-      class TestSystem extends System { update(w, dt) {} }
+      class TestSystem extends System { update(ctx, dt) {} }
       world.addSystem(new TestSystem());
       world.update(16);
       world.update(16);
@@ -340,15 +340,15 @@ describe("World Runtime Integration", () => {
 
       class Low extends System {
         static priority = 0;
-        update(w, dt) { order.push("low"); }
+        update(ctx, dt) { order.push("low"); }
       }
       class High extends System {
         static priority = 100;
-        update(w, dt) { order.push("high"); }
+        update(ctx, dt) { order.push("high"); }
       }
       class Mid extends System {
         static priority = 50;
-        update(w, dt) { order.push("mid"); }
+        update(ctx, dt) { order.push("mid"); }
       }
 
       world.addSystem(new Low());
@@ -365,11 +365,11 @@ describe("World Runtime Integration", () => {
 
       class Early extends System {
         static priority = -100;
-        update(w, dt) { order.push("early"); }
+        update(ctx, dt) { order.push("early"); }
       }
       class Normal extends System {
         static priority = 0;
-        update(w, dt) { order.push("normal"); }
+        update(ctx, dt) { order.push("normal"); }
       }
 
       world.addSystem(new Normal());
@@ -385,15 +385,15 @@ describe("World Runtime Integration", () => {
 
       class A extends System {
         static priority = 0;
-        update(w, dt) { order.push("A"); }
+        update(ctx, dt) { order.push("A"); }
       }
       class B extends System {
         static priority = 0;
-        update(w, dt) { order.push("B"); }
+        update(ctx, dt) { order.push("B"); }
       }
       class C extends System {
         static priority = 0;
-        update(w, dt) { order.push("C"); }
+        update(ctx, dt) { order.push("C"); }
       }
 
       world.addSystem(new A());
@@ -410,15 +410,15 @@ describe("World Runtime Integration", () => {
 
       class A extends System {
         static priority = 0;
-        update(w, dt) { order.push("A"); }
+        update(ctx, dt) { order.push("A"); }
       }
       class B extends System {
         static priority = 0;
-        update(w, dt) { order.push("B"); }
+        update(ctx, dt) { order.push("B"); }
       }
       class C extends System {
         static priority = 0;
-        update(w, dt) { order.push("C"); }
+        update(ctx, dt) { order.push("C"); }
       }
 
       const a = new A();
@@ -440,8 +440,8 @@ describe("World Runtime Integration", () => {
     it("skips a disabled system", () => {
       const world = createWorld();
       const executed = [];
-      class A extends System { update(w, dt) { executed.push("A"); } }
-      class B extends System { update(w, dt) { executed.push("B"); } }
+      class A extends System { update(ctx, dt) { executed.push("A"); } }
+      class B extends System { update(ctx, dt) { executed.push("B"); } }
       const a = new A();
       a.enabled = false;
       world.addSystem(a);
@@ -453,9 +453,9 @@ describe("World Runtime Integration", () => {
     it("skips only disabled systems, executes others", () => {
       const world = createWorld();
       const executed = [];
-      class A extends System { update(w, dt) { executed.push("A"); } }
-      class B extends System { update(w, dt) { executed.push("B"); } }
-      class C extends System { update(w, dt) { executed.push("C"); } }
+      class A extends System { update(ctx, dt) { executed.push("A"); } }
+      class B extends System { update(ctx, dt) { executed.push("B"); } }
+      class C extends System { update(ctx, dt) { executed.push("C"); } }
       const b = new B();
       b.enabled = false;
       world.addSystem(new A());
@@ -474,7 +474,7 @@ describe("World Runtime Integration", () => {
       let received = null;
       class TestSystem extends System {
         onAdded(w) { called = true; received = w; }
-        update(w, dt) {}
+        update(ctx, dt) {}
       }
       world.addSystem(new TestSystem());
       assert.strictEqual(called, true);
@@ -487,7 +487,7 @@ describe("World Runtime Integration", () => {
       let received = null;
       class TestSystem extends System {
         onRemoved(w) { called = true; received = w; }
-        update(w, dt) {}
+        update(ctx, dt) {}
       }
       const system = new TestSystem();
       world.addSystem(system);
@@ -501,11 +501,11 @@ describe("World Runtime Integration", () => {
       const removed = [];
       class A extends System {
         onRemoved(w) { removed.push("A"); }
-        update(w, dt) {}
+        update(ctx, dt) {}
       }
       class B extends System {
         onRemoved(w) { removed.push("B"); }
-        update(w, dt) {}
+        update(ctx, dt) {}
       }
       world.addSystem(new A());
       world.addSystem(new B());
@@ -518,7 +518,7 @@ describe("World Runtime Integration", () => {
       let received = null;
       class TestSystem extends System {
         onAdded(w) { received = w; }
-        update(w, dt) {}
+        update(ctx, dt) {}
       }
       world.addSystem(new TestSystem());
       assert.ok(received.registry);
@@ -535,7 +535,7 @@ describe("World Runtime Integration", () => {
       const world = createWorld();
       class TestSystem extends System {
         static query = { all: [Position, Velocity] };
-        update(w, dt) {}
+        update(ctx, dt) {}
       }
       const system = new TestSystem();
       world.addSystem(system);
@@ -548,7 +548,7 @@ describe("World Runtime Integration", () => {
       const world = createWorld();
       class TestSystem extends System {
         static query = { all: [Position], any: [Velocity], none: [Enemy] };
-        update(w, dt) {}
+        update(ctx, dt) {}
       }
       const system = new TestSystem();
       world.addSystem(system);
@@ -562,7 +562,7 @@ describe("World Runtime Integration", () => {
       const world = createWorld();
       class TestSystem extends System {
         static query = {};
-        update(w, dt) {}
+        update(ctx, dt) {}
       }
       const system = new TestSystem();
       world.addSystem(system);
@@ -573,7 +573,7 @@ describe("World Runtime Integration", () => {
       const world = createWorld();
       class BadSystem extends System {
         static query = { all: [Position], none: [Position] };
-        update(w, dt) {}
+        update(ctx, dt) {}
       }
       assert.throws(() => world.addSystem(new BadSystem()), /impossible query/);
     });
@@ -582,7 +582,7 @@ describe("World Runtime Integration", () => {
       const world = createWorld();
       class BadSystem extends System {
         static query = { any: [Velocity], none: [Velocity] };
-        update(w, dt) {}
+        update(ctx, dt) {}
       }
       assert.throws(() => world.addSystem(new BadSystem()), /impossible query/);
     });
@@ -594,11 +594,11 @@ describe("World Runtime Integration", () => {
       const world = createWorld();
       class SysA extends System {
         static query = { all: [Position] };
-        update(w, dt) {}
+        update(ctx, dt) {}
       }
       class SysB extends System {
         static query = { all: [Position] };
-        update(w, dt) {}
+        update(ctx, dt) {}
       }
       const a = new SysA();
       const b = new SysB();
@@ -611,11 +611,11 @@ describe("World Runtime Integration", () => {
       const world = createWorld();
       class SysA extends System {
         static query = { all: [Position] };
-        update(w, dt) {}
+        update(ctx, dt) {}
       }
       class SysB extends System {
         static query = { all: [Velocity] };
-        update(w, dt) {}
+        update(ctx, dt) {}
       }
       const a = new SysA();
       const b = new SysB();
@@ -636,8 +636,8 @@ describe("World Runtime Integration", () => {
       let tableCount = 0;
       class MovementSystem extends System {
         static query = { all: [Position, Velocity] };
-        update(w, dt) {
-          tableCount = w.queryEngine.getTables(this.query).length;
+        update(ctx, dt) {
+          tableCount = ctx.world.queryEngine.getTables(this.query).length;
         }
       }
       world.addSystem(new MovementSystem());
@@ -651,8 +651,8 @@ describe("World Runtime Integration", () => {
 
       class MovementSystem extends System {
         static query = { all: [Position, Velocity] };
-        update(w, dt) {
-          tableCount = w.queryEngine.getTables(this.query).length;
+        update(ctx, dt) {
+          tableCount = ctx.world.queryEngine.getTables(this.query).length;
         }
       }
       world.addSystem(new MovementSystem());
@@ -671,8 +671,8 @@ describe("World Runtime Integration", () => {
 
       class PosSystem extends System {
         static query = { all: [Position] };
-        update(w, dt) {
-          tableCount = w.queryEngine.getTables(this.query).length;
+        update(ctx, dt) {
+          tableCount = ctx.world.queryEngine.getTables(this.query).length;
         }
       }
       world.addSystem(new PosSystem());
@@ -704,8 +704,8 @@ describe("World Runtime Integration", () => {
 
       class AnySystem extends System {
         static query = { any: [Position, Sprite] };
-        update(w, dt) {
-          tableCount = w.queryEngine.getTables(this.query).length;
+        update(ctx, dt) {
+          tableCount = ctx.world.queryEngine.getTables(this.query).length;
         }
       }
       world.addSystem(new AnySystem());
@@ -725,8 +725,8 @@ describe("World Runtime Integration", () => {
 
       class NoneSystem extends System {
         static query = { none: [Enemy] };
-        update(w, dt) {
-          tableCount = w.queryEngine.getTables(this.query).length;
+        update(ctx, dt) {
+          tableCount = ctx.world.queryEngine.getTables(this.query).length;
         }
       }
       world.addSystem(new NoneSystem());
@@ -752,15 +752,15 @@ describe("World Runtime Integration", () => {
 
       class MovementSystem extends System {
         static query = { all: [Position, Velocity] };
-        update(w, dt) {
-          const tables = w.queryEngine.getTables(this.query);
+        update(ctx, dt) {
+          const tables = ctx.world.queryEngine.getTables(this.query);
           for (let t = 0; t < tables.length; t++) {
             const table = tables[t];
             const entities = table.entityIds;
-            const posX = table.getColumn(w.registry.getId(Position), "x");
-            const posY = table.getColumn(w.registry.getId(Position), "y");
-            const velX = table.getColumn(w.registry.getId(Velocity), "vx");
-            const velY = table.getColumn(w.registry.getId(Velocity), "vy");
+            const posX = table.getColumn(ctx.world.registry.getId(Position), "x");
+            const posY = table.getColumn(ctx.world.registry.getId(Position), "y");
+            const velX = table.getColumn(ctx.world.registry.getId(Velocity), "vx");
+            const velY = table.getColumn(ctx.world.registry.getId(Velocity), "vy");
             for (let r = 0; r < table.count; r++) {
               posX[r] += velX[r] * dt;
               posY[r] += velY[r] * dt;
@@ -792,13 +792,13 @@ describe("World Runtime Integration", () => {
 
       class MovementSystem extends System {
         static query = { all: [Position, Velocity] };
-        update(w, dt) {
-          const tables = w.queryEngine.getTables(this.query);
+        update(ctx, dt) {
+          const tables = ctx.world.queryEngine.getTables(this.query);
           for (let t = 0; t < tables.length; t++) {
             const table = tables[t];
             const entities = table.entityIds;
-            const posX = table.getColumn(w.registry.getId(Position), "x");
-            const velX = table.getColumn(w.registry.getId(Velocity), "vx");
+            const posX = table.getColumn(ctx.world.registry.getId(Position), "x");
+            const velX = table.getColumn(ctx.world.registry.getId(Velocity), "vx");
             for (let r = 0; r < table.count; r++) {
               posX[r] += velX[r] * dt;
               moved.push(entities[r]);
@@ -836,9 +836,9 @@ describe("World Runtime Integration", () => {
       let targetEntity = null;
 
       class TestSystem extends System {
-        update(w, dt) {
+        update(ctx, dt) {
           if (targetEntity !== null) {
-            posView = w.getComponent(targetEntity, Position);
+            posView = ctx.world.getComponent(targetEntity, Position);
           }
         }
       }
@@ -863,8 +863,8 @@ describe("World Runtime Integration", () => {
 
       class TestSystem extends System {
         static query = { all: [Health] };
-        update(w, dt) {
-          tablesLen = w.queryEngine.getTables(this.query).length;
+        update(ctx, dt) {
+          tablesLen = ctx.world.queryEngine.getTables(this.query).length;
         }
       }
 
@@ -882,7 +882,7 @@ describe("World Runtime Integration", () => {
   describe("error states", () => {
     it("rejects duplicate system via addSystem", () => {
       const world = createWorld();
-      class TestSystem extends System { update(w, dt) {} }
+      class TestSystem extends System { update(ctx, dt) {} }
       const system = new TestSystem();
       world.addSystem(system);
       assert.throws(() => world.addSystem(system), /already registered/);
@@ -890,14 +890,14 @@ describe("World Runtime Integration", () => {
 
     it("rejects removing unregistered system", () => {
       const world = createWorld();
-      class TestSystem extends System { update(w, dt) {} }
+      class TestSystem extends System { update(ctx, dt) {} }
       assert.throws(() => world.removeSystem(new TestSystem()), /not registered/);
     });
 
     it("rejects recursive update", () => {
       const world = createWorld();
       class Recursive extends System {
-        update(w, dt) { w.update(dt); }
+        update(ctx, dt) { ctx.world.update(dt); }
       }
       world.addSystem(new Recursive());
       assert.throws(() => world.update(16), /recursive update/);
@@ -906,7 +906,7 @@ describe("World Runtime Integration", () => {
     it("rejects adding system during update", () => {
       const world = createWorld();
       class Adder extends System {
-        update(w, dt) { w.addSystem(new Adder()); }
+        update(ctx, dt) { ctx.world.addSystem(new Adder()); }
       }
       world.addSystem(new Adder());
       assert.throws(() => world.update(16), /cannot add systems during update/);
@@ -915,7 +915,7 @@ describe("World Runtime Integration", () => {
     it("rejects removing system during update", () => {
       const world = createWorld();
       class Remover extends System {
-        update(w, dt) { w.removeSystem(this); }
+        update(ctx, dt) { ctx.world.removeSystem(this); }
       }
       world.addSystem(new Remover());
       assert.throws(() => world.update(16), /cannot remove systems during update/);
@@ -924,7 +924,7 @@ describe("World Runtime Integration", () => {
     it("rejects clearing systems during update", () => {
       const world = createWorld();
       class Clearer extends System {
-        update(w, dt) { w.clearSystems(); }
+        update(ctx, dt) { ctx.world.clearSystems(); }
       }
       world.addSystem(new Clearer());
       assert.throws(() => world.update(16), /cannot clear systems during update/);
@@ -966,9 +966,9 @@ describe("World Runtime Integration", () => {
     it("cannot mutate system list during update via addSystem", () => {
       const world = createWorld();
       class EvilSystem extends System {
-        update(w, dt) {
+        update(ctx, dt) {
           class Inner extends System { update(w2, dt2) {} }
-          w.addSystem(new Inner());
+          ctx.world.addSystem(new Inner());
         }
       }
       world.addSystem(new EvilSystem());
@@ -979,7 +979,7 @@ describe("World Runtime Integration", () => {
       const world = createWorld();
       let seen = null;
       class TestSystem extends System {
-        update(w, dt) { seen = w; }
+        update(ctx, dt) { seen = ctx.world; }
       }
       world.addSystem(new TestSystem());
       world.update(16);
@@ -1017,7 +1017,7 @@ describe("World Runtime Integration", () => {
     it("does not sort every update when no systems change", () => {
       const world = createWorld();
       class TestSystem extends System {
-        update(w, dt) {}
+        update(ctx, dt) {}
       }
       world.addSystem(new TestSystem());
 
@@ -1030,8 +1030,8 @@ describe("World Runtime Integration", () => {
 
     it("re-sorts after adding a new system", () => {
       const world = createWorld();
-      class A extends System { update(w, dt) {} }
-      class B extends System { update(w, dt) {} }
+      class A extends System { update(ctx, dt) {} }
+      class B extends System { update(ctx, dt) {} }
 
       world.addSystem(new A());
       world.update(16);
