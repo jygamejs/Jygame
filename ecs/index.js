@@ -22,3 +22,5 @@ export {
   ProjectileTag,
   StaticTag,
 } from "./components/index.js";
+
+export { MovementSystem } from "./systems/index.js";
