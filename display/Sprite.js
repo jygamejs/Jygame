@@ -7,6 +7,7 @@ import { Animation } from "../ecs/components/Animation.js";
 import { Visible } from "../ecs/components/Visible.js";
 import { RenderBounds } from "../ecs/components/RenderBounds.js";
 
+const _INTERNAL = Symbol("sprite.internal.wrap");
 const _SPRITE_COMPONENTS = [Transform, Collider, Renderable, Visible, Velocity, Animation, RenderBounds];
 
 export class Sprite {
@@ -27,11 +28,21 @@ export class Sprite {
     return Sprite._defaultWorld;
   }
 
+  static _wrap(world, entity) {
+    return new Sprite({ [_INTERNAL]: true, world, entity });
+  }
+
   #world;
   #entity;
   #dead = false;
 
   constructor(x = 0, y = 0, w = 32, h = 32, world) {
+    if (x && typeof x === "object" && _INTERNAL in x) {
+      this.#world = x.world;
+      this.#entity = x.entity;
+      this.#dead = false;
+      return;
+    }
     this.#world = world || Sprite._ensureDefaultWorld();
     const wld = this.#world;
 

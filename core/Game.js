@@ -400,6 +400,12 @@ export class Game {
     this.fps += ((1 / Math.max(realDt, 0.001)) - this.fps) * 0.05;
 
     this.ctx.clearRect(0, 0, this.width, this.height);
+
+    const top = this.scene;
+    if (top && top.world) {
+      top.world.update(this.clock.fixedDt);
+    }
+
     this._renderScenes(this.ctx, renderStart);
 
     this._rafId = requestAnimationFrame((t) => this._loop(t));
