@@ -3,32 +3,54 @@ export class SpatialHash {
     this.cellSize = cellSize;
     this.cells = new Map();
     this._queryStamp = 0;
+    this._entryPool = [];
+    this._poolIdx = 0;
   }
 
   clear() {
     this.cells.clear();
+    this._poolIdx = 0;
     this._queryStamp = 0;
   }
 
+  _allocEntry(id, l, r, t, b) {
+    let entry = this._entryPool[this._poolIdx];
+    if (!entry) {
+      entry = { id: 0, l: 0, r: 0, t: 0, b: 0, _qs: 0 };
+      this._entryPool.push(entry);
+    }
+    this._poolIdx++;
+    entry.id = id;
+    entry.l = l;
+    entry.r = r;
+    entry.t = t;
+    entry.b = b;
+    entry._qs = 0;
+    return entry;
+  }
+
   insert(id, cx, cy, w, h) {
+    const cs = this.cellSize;
     const hw = w * 0.5;
     const hh = h * 0.5;
     const l = cx - hw;
     const r = cx + hw;
     const t = cy - hh;
     const b = cy + hh;
-    const left = Math.floor(l / this.cellSize);
-    const right = Math.floor(r / this.cellSize);
-    const top = Math.floor(t / this.cellSize);
-    const bottom = Math.floor(b / this.cellSize);
-    const entry = { id, l, r, t, b, _qs: 0 };
-    for (let x = left; x <= right; x++) {
-      for (let y = top; y <= bottom; y++) {
-        const key = `${x}:${y}`;
-        let cell = this.cells.get(key);
+    const left = Math.floor(l / cs);
+    const right = Math.floor(r / cs);
+    const top = Math.floor(t / cs);
+    const bottom = Math.floor(b / cs);
+    const entry = this._allocEntry(id, l, r, t, b);
+    const cells = this.cells;
+    for (let cx2 = left; cx2 <= right; cx2++) {
+      const base = cx2 * 100003;
+      for (let cy2 = top; cy2 <= bottom; cy2++) {
+        const key = base + cy2;
+        let cell = cells.get(key);
         if (!cell) {
           cell = [];
-          this.cells.set(key, cell);
+          cells.set(key, cell);
         }
         cell.push(entry);
       }
@@ -38,9 +60,11 @@ export class SpatialHash {
   _eachCell(left, right, top, bottom, fn) {
     this._queryStamp++;
     const qs = this._queryStamp;
+    const cells = this.cells;
     for (let x = left; x <= right; x++) {
+      const base = x * 100003;
       for (let y = top; y <= bottom; y++) {
-        const cell = this.cells.get(`${x}:${y}`);
+        const cell = cells.get(base + y);
         if (!cell) continue;
         for (let i = 0; i < cell.length; i++) {
           const e = cell[i];
@@ -66,7 +90,8 @@ export class SpatialHash {
   }
 
   queryPoint(point, out = []) {
-    const key = `${Math.floor(point.x / this.cellSize)}:${Math.floor(point.y / this.cellSize)}`;
+    const cs = this.cellSize;
+    const key = (Math.floor(point.x / cs) * 100003) + Math.floor(point.y / cs);
     const cell = this.cells.get(key);
     if (!cell) return out;
     for (let i = 0; i < cell.length; i++) {
@@ -137,9 +162,9 @@ export class SpatialHash {
     const maxX = Math.max(ox, rayEndX);
     const minY = Math.min(oy, rayEndY);
     const maxY = Math.max(oy, rayEndY);
+    const cells = this.cells;
     while (true) {
-      const key = `${cx}:${cy}`;
-      const cell = this.cells.get(key);
+      const cell = cells.get((cx * 100003) + cy);
       if (cell) {
         for (let i = 0; i < cell.length; i++) {
           const e = cell[i];

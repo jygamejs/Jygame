@@ -14,6 +14,16 @@ export class TrailSystem extends System {
     super();
     this._prevSet = new Set();
     this._currSet = new Set();
+    this._colorCache = new Map();
+  }
+
+  _getColorString(color) {
+    let s = this._colorCache.get(color);
+    if (!s) {
+      s = "#" + color.toString(16).padStart(6, "0");
+      this._colorCache.set(color, s);
+    }
+    return s;
   }
 
   update(ctx, dt) {
@@ -41,6 +51,9 @@ export class TrailSystem extends System {
     const camera = ctx.resources.get(Camera);
 
     this._currSet.clear();
+
+    canvas.save();
+    if (camera) camera.apply(canvas);
 
     for (const table of ctx) {
       const count = table.count;
@@ -74,24 +87,36 @@ export class TrailSystem extends System {
         const buffer = manager.getOrCreate(eid, maxP);
         const dx = tx[r] - buffer._lastX;
         const dy = ty[r] - buffer._lastY;
-        const dist = Math.sqrt(dx * dx + dy * dy);
+        const distSq = dx * dx + dy * dy;
+        if (distSq === 0) continue;
 
-        if (dist === 0) continue;
-
+        const dist = Math.sqrt(distSq);
+        const oldAccum = buffer._accumulated;
         buffer._accumulated += dist;
-        let spawned = 0;
-
-        while (buffer._accumulated >= sp && spawned < maxP) {
-          buffer._accumulated -= sp;
-          const t = (dist - buffer._accumulated) / dist;
-          buffer.addPoint(buffer._lastX + dx * t, buffer._lastY + dy * t);
-          spawned++;
+        const needed = Math.min((buffer._accumulated / sp) | 0, maxP);
+        if (needed > 0) {
+          for (let s = 0; s < needed; s++) {
+            const t = (sp - oldAccum + s * sp) / dist;
+            buffer.addPoint(buffer._lastX + dx * t, buffer._lastY + dy * t);
+          }
+          buffer._accumulated -= needed * sp;
         }
 
         buffer._lastX = tx[r];
         buffer._lastY = ty[r];
+
+        if (buffer.count >= 2) {
+          const width = widthCol[r];
+          if (modeCol[r] === 1) {
+            this._renderRibbon(canvas, buffer, colorCol[r], width);
+          } else {
+            this._renderLine(canvas, buffer, colorCol[r], width);
+          }
+        }
       }
     }
+
+    canvas.restore();
 
     for (const eid of this._prevSet) {
       if (!this._currSet.has(eid)) {
@@ -102,49 +127,13 @@ export class TrailSystem extends System {
     const tmp = this._prevSet;
     this._prevSet = this._currSet;
     this._currSet = tmp;
-
-    canvas.save();
-    if (camera) camera.apply(canvas);
-
-    for (const table of ctx) {
-      const count = table.count;
-      if (count === 0) continue;
-
-      const enabledCol = table.getColumn(tlid, "enabled");
-      const colorCol = table.getColumn(tlid, "color");
-      const widthCol = table.getColumn(tlid, "width");
-      const modeCol = table.getColumn(tlid, "mode");
-      const visibleCol = table.getColumn(vid, "value");
-      const entities = table.entityIds;
-      if (!enabledCol || !colorCol || !widthCol || !modeCol || !visibleCol || !entities) continue;
-
-      for (let r = 0; r < count; r++) {
-        const eid = entities[r];
-        if (!visibleCol[r] || !enabledCol[r]) continue;
-
-        const buffer = manager.get(eid);
-        if (!buffer || buffer.count < 2) continue;
-
-        const color = colorCol[r];
-        const width = widthCol[r];
-        const mode = modeCol[r];
-
-        if (mode === 1) {
-          this._renderRibbon(canvas, buffer, color, width);
-        } else {
-          this._renderLine(canvas, buffer, color, width);
-        }
-      }
-    }
-
-    canvas.restore();
   }
 
   _renderLine(ctx, buffer, color, width) {
-    ctx.strokeStyle = "#" + color.toString(16).padStart(6, "0");
+    ctx.strokeStyle = this._getColorString(color);
     ctx.lineWidth = width;
     ctx.beginPath();
-    buffer.forEach((x, y, i) => {
+    buffer.forEachPoint((x, y, i) => {
       if (i === 0) {
         ctx.moveTo(x, y);
       } else {
@@ -155,14 +144,14 @@ export class TrailSystem extends System {
   }
 
   _renderRibbon(ctx, buffer, color, width) {
-    ctx.fillStyle = "#" + color.toString(16).padStart(6, "0");
+    ctx.fillStyle = this._getColorString(color);
     const hw = width * 0.5;
     ctx.beginPath();
 
     let prevX, prevY;
     let first = true;
 
-    buffer.forEach((x, y, i) => {
+    buffer.forEachPoint((x, y, i) => {
       if (first) {
         prevX = x;
         prevY = y;

@@ -31,7 +31,13 @@ function createEntity(world, components) {
 }
 
 function mockCtx() {
-  return { save() {}, restore() {}, translate() {}, rotate() {}, scale() {}, fillRect() {}, beginPath() {}, arc() {}, fill() {}, drawImage() {} };
+  let mat = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+  return {
+    save() {}, restore() {}, translate() {}, rotate() {}, scale() {},
+    fillRect() {}, beginPath() {}, arc() {}, fill() {}, drawImage() {},
+    getTransform() { return mat; },
+    setTransform(a, b, c, d, e, f) { mat = { a, b, c, d, e, f }; },
+  };
 }
 
 function setupWorld(entities) {

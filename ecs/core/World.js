@@ -327,26 +327,38 @@ export class World {
       );
     }
 
-    const existing = new Set(currentSig.components);
+    const cur = currentSig.components;
+    const curLen = cur.length;
     const newIds = [];
 
     for (let i = 0; i < components.length; i++) {
       const id = this._resolveComponentId(components[i], 'addMany');
-      if (!existing.has(id)) {
-        existing.add(id);
+      if (!currentSig.contains(id)) {
         newIds.push(id);
       }
     }
 
     if (newIds.length === 0) return;
 
-    const allIds = new Uint16Array(currentSig.components.length + newIds.length);
-    let pos = 0;
-    for (let i = 0; i < currentSig.components.length; i++) allIds[pos++] = currentSig.components[i];
-    for (let i = 0; i < newIds.length; i++) allIds[pos++] = newIds[i];
-    allIds.sort();
+    newIds.sort((a, b) => a - b);
+    let uniqLen = 1;
+    for (let i = 1; i < newIds.length; i++) {
+      if (newIds[i] !== newIds[i - 1]) newIds[uniqLen++] = newIds[i];
+    }
+    newIds.length = uniqLen;
 
-    const newSig = new ComponentSignature(Array.from(allIds));
+    const result = new Array(curLen + newIds.length);
+    let ci = 0, ni = 0, ri = 0;
+    while (ci < curLen && ni < newIds.length) {
+      if (cur[ci] < newIds[ni]) result[ri++] = cur[ci++];
+      else if (cur[ci] > newIds[ni]) result[ri++] = newIds[ni++];
+      else { result[ri++] = cur[ci++]; ni++; }
+    }
+    while (ci < curLen) result[ri++] = cur[ci++];
+    while (ni < newIds.length) result[ri++] = newIds[ni++];
+    result.length = ri;
+
+    const newSig = new ComponentSignature(result);
     this._clearEntityCache(entity);
     this._archetypeSystem.moveEntity(entity, newSig);
   }
@@ -369,18 +381,22 @@ export class World {
 
     if (currentSig.size === 0) return;
 
-    const removeIds = new Set();
+    const removeIds = new Array(components.length);
     for (let i = 0; i < components.length; i++) {
-      removeIds.add(this._resolveComponentId(components[i], 'removeMany'));
+      removeIds[i] = this._resolveComponentId(components[i], 'removeMany');
     }
+    removeIds.sort((a, b) => a - b);
 
-    const keep = [];
     const comps = currentSig.components;
-    for (let i = 0; i < comps.length; i++) {
-      if (!removeIds.has(comps[i])) {
-        keep.push(comps[i]);
-      }
+    const keep = new Array(comps.length);
+    let ci = 0, rmi = 0, ki = 0;
+    while (ci < comps.length && rmi < removeIds.length) {
+      if (comps[ci] < removeIds[rmi]) keep[ki++] = comps[ci++];
+      else if (comps[ci] > removeIds[rmi]) rmi++;
+      else { ci++; rmi++; }
     }
+    while (ci < comps.length) keep[ki++] = comps[ci++];
+    keep.length = ki;
 
     if (keep.length === comps.length) return;
 
@@ -406,15 +422,26 @@ export class World {
     const sourceTable = this._archetypeSystem.entityTable(entity);
     const sourceRow = this._entityManager.getRow(entity);
 
-    const clone = this.createEntity();
+    const cloneId = this.createEntity();
 
-    if (sig.size === 0) return clone;
+    if (sig.size === 0) return cloneId;
 
-    this._clearEntityCache(clone);
-    this._archetypeSystem.moveEntity(clone, sig);
+    this._clearEntityCache(cloneId);
 
-    const targetTable = this._archetypeSystem.entityTable(clone);
-    const targetRow = this._entityManager.getRow(clone);
+    const emptyLoc = this._entityManager.getLocation(cloneId);
+
+    const targetArch = this._archetypeSystem.createArchetype(sig);
+    const targetTable = targetArch.table;
+    const targetRow = targetTable.allocate();
+
+    targetTable.setEntity(targetRow, cloneId);
+    this._entityManager.setLocation(cloneId, targetArch.id, targetRow);
+
+    const emptyTable = this._archetypeSystem.getArchetypeById(emptyLoc.archetype).table;
+    const removed = emptyTable.removeRow(emptyLoc.row);
+    if (removed.moved) {
+      this._entityManager.setLocation(removed.entity, emptyLoc.archetype, emptyLoc.row);
+    }
 
     const componentIds = sig.components;
     for (let ci = 0; ci < componentIds.length; ci++) {
@@ -431,7 +458,7 @@ export class World {
       }
     }
 
-    return clone;
+    return cloneId;
   }
 
   entity() {

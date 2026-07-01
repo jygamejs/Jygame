@@ -41,7 +41,7 @@ import { PlayerTag } from "../../../ecs/components/tags/PlayerTag.js";
 
 function mockGame(scene) {
   scene._game = scene.game = {
-    ctx: { save() {}, restore() {}, translate() {}, rotate() {}, scale() {}, fillRect() {}, beginPath() {}, arc() {}, fill() {}, drawImage() {}, stroke() {}, moveTo() {}, lineTo() {}, strokeStyle: "", fillStyle: "", lineWidth: 0 },
+    ctx: { save() {}, restore() {}, translate() {}, rotate() {}, scale() {}, fillRect() {}, beginPath() {}, arc() {}, fill() {}, drawImage() {}, stroke() {}, moveTo() {}, lineTo() {}, strokeStyle: "", fillStyle: "", lineWidth: 0, getTransform() { return { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }; }, setTransform() {} },
     width: 800,
     height: 600,
   };
@@ -121,7 +121,7 @@ describe("Scene — resources", () => {
 
   it("registers CanvasContext and Camera when game is available", () => {
     const scene = new Scene();
-    const mockCtx = { save() {}, restore() {} };
+    const mockCtx = { save() {}, restore() {}, getTransform() { return { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }; }, setTransform() {} };
     scene._game = { ctx: mockCtx, width: 800, height: 600 };
     scene.enter();
     assert.strictEqual(scene.world.getResource(CanvasContext), mockCtx);

@@ -19,9 +19,11 @@ export class TrailBuffer {
 
   addPoint(x, y) {
     const idx = this._writePos;
-    this._points[idx * 2] = x;
-    this._points[idx * 2 + 1] = y;
-    this._writePos = (idx + 1) % this.capacity;
+    const pts = this._points;
+    pts[idx * 2] = x;
+    pts[idx * 2 + 1] = y;
+    const next = idx + 1;
+    this._writePos = next < this.capacity ? next : 0;
     if (this._count < this.capacity) this._count++;
   }
 
@@ -51,6 +53,19 @@ export class TrailBuffer {
     this._points = newPoints;
     this._count = copyCount;
     this._writePos = copyCount % n;
+  }
+
+  forEachPoint(fn) {
+    const pts = this._points;
+    const cap = this.capacity;
+    const count = this._count;
+    let idx = this._writePos - count;
+    if (idx < 0) idx += cap;
+    for (let i = 0; i < count; i++) {
+      fn(pts[idx * 2], pts[idx * 2 + 1], i);
+      idx++;
+      if (idx >= cap) idx = 0;
+    }
   }
 
   _logicalIndex(i) {
