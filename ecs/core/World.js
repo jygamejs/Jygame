@@ -6,6 +6,7 @@ import { QueryEngine } from "./QueryEngine.js";
 import { QueryView } from "./QueryView.js";
 import { SystemScheduler } from "./SystemScheduler.js";
 import { Events } from "../events/Events.js";
+import { Prefab } from "../prefab/Prefab.js";
 
 export class World {
   constructor(options = {}) {
@@ -45,6 +46,7 @@ export class World {
     this._queryViewCache = new WeakMap();
     this._resources = new Map();
     this._events = new Events();
+    this._prefabs = new Map();
   }
 
   get registry() {
@@ -73,6 +75,27 @@ export class World {
 
   registerEvent(eventClass, options = {}) {
     this._events.register(eventClass, options);
+  }
+
+  createPrefab(name) {
+    if (this._prefabs.has(name)) {
+      throw new Error(
+        `World.createPrefab failed: prefab "${name}" already exists.`
+      );
+    }
+    const prefab = new Prefab(name);
+    this._prefabs.set(name, prefab);
+    return prefab;
+  }
+
+  instantiate(name, overrides = null) {
+    const prefab = this._prefabs.get(name);
+    if (!prefab) {
+      throw new Error(
+        `World.instantiate failed: prefab "${name}" not found.`
+      );
+    }
+    return prefab.instantiate(this, overrides);
   }
 
   setResource(key, value) {

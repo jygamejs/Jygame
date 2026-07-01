@@ -36,3 +36,5 @@ export { RenderCommand, RenderQueue, CanvasContext } from "./render/index.js";
 export { TrailBuffer, TrailManager } from "./trails/index.js";
 
 export { EventChannel, Events } from "./events/index.js";
+
+export { Prefab } from "./prefab/index.js";
