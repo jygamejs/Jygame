@@ -8,28 +8,6 @@
   "exports": {
     ".": "./jygame.js"
   },
-  "files": [
-    "jygame.js",
-    "math/",
-    "geometry/",
-    "time/",
-    "state/",
-    "storage/",
-    "collision/",
-    "color/",
-    "components/",
-    "display/",
-    "input/",
-    "core/",
-    "memory/",
-    "systems/",
-    "loaders/",
-    "audio/",
-    "modifiers/",
-    "camera/",
-    "particles/",
-    "shapes/"
-  ],
   "keywords": [
     "game",
     "game-development",

@@ -1,0 +1,6 @@
+tools/
+docs/
+.github/
+.opencode/
+.gitignore
+.gitattributes
