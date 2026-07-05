@@ -1,64 +1,106 @@
 # Architecture
 
-## Entity-Component-System Model
+## Archetype-Based Entity-Component-System Model
 
-Entities are composed from lightweight component objects. Systems operate on
-entities that expose the required components — no type checking, no base class.
+Entities are stored in archetype tables — each unique combination of component
+types forms one archetype with its own columnar (SoA) storage. Adding or
+removing a component moves the entity to a different archetype table.
+
+Systems declare their component dependencies and are scheduled by priority.
+The scheduler runs all systems each frame via `world.update(dt)`.
 
 ### Components
 
-| Component | Fields | Read by |
+| Component | Schema | Storage |
 |---|---|---|
-| `Transform` | `x`, `y`, `rotation`, `scale` | MovementSystem, RenderSystem, CollisionSystem, SpatialHash |
-| `Collider` | `width`, `height` | CollisionSystem, SpatialHash, RenderSystem (culling) |
-| `Renderable` | `image`, `style`, `draw()` | RenderSystem, AnimationSystem |
-| `Animation` | `animations`, `current`, `frame`, `elapsed`, `playing` | AnimationSystem |
-| `Velocity` | `x`, `y` (Vec2) | MovementSystem |
-| `Visible` | `visible` (boolean) | RenderSystem, CollisionSystem, SpatialHash |
+| `Transform` | `{x: float64, y: float64, rotation: float64, scale: float64}` | SoA columns in archetype table |
+| `WorldTransform` | `{x: float64, y: float64, rotation: float64, scale: float64}` | SoA columns (written by HierarchySystem) |
+| `Velocity` | `{x: float64, y: float64}` | SoA columns |
+| `Collider` | `{width: float64, height: float64}` | SoA columns |
+| `Renderable` | `{draw(ctx,w,h), image, style}` | Per-row references |
+| `Visible` | `{visible: uint8}` | SoA column |
+| `RenderBounds` | `{x: float64, y: float64, w: float64, h: float64}` | SoA columns |
+| `Animation` | `{current: string, frame: uint32, elapsed: float64, playing: uint8}` | Mixed columns |
+| `Trail` | `{maxLength: uint32, interval: float64, elapsed: float64, points: ref}` | Mixed |
+| `Parent` | `{entity: uint32}` | SoA column |
+| `Children` | (empty — tag component) | None |
+
+**Tag components** (empty schemas): `EnemyTag`, `PlayerTag`, `ProjectileTag`, `StaticTag`.
 
 ### Systems
 
-| System | Reads | Writes | Singleton |
+All systems extend `System` or `ArchetypeSystem` and are registered on the
+World. The scheduler runs them in priority order:
+
+| System | Priority | Reads | Writes |
 |---|---|---|---|
-| `AnimationSystem` | `animation`, `renderable` | `renderable.image`, `animation.frame`, `animation.elapsed`, `animation.playing` | `animationSystem` |
-| `MovementSystem` | `velocity`, `transform` | `transform.x`, `transform.y` | `movementSystem` |
-| `RenderSystem` | `transform`, `collider`, `renderable`, `visible` | canvas (side effect) | `renderSystem` |
-| `CollisionSystem` | `transform`, `collider`, `visible` | none | `collisionSystem` |
-| `SpatialHash` | `transform`, `collider`, `visible` | `__shId`, `__shStamp` (internal) | instance per Group |
+| `HierarchySystem` | -10 | `Parent`, `Transform`, `HierarchyGraph` | `WorldTransform` |
+| `MovementSystem` | 0 | `Velocity`, `Transform` | `Transform.x/y` |
+| `AnimationSystem` | 0 | `Animation`, `Renderable` | `Renderable.image`, `Animation.frame/elapsed` |
+| `TrailSystem` | 0 | `Trail`, `Transform` | `Trail.points` |
+| `CollisionSystem` | 10 | `Transform`, `Collider`, `Visible` | (broad-phase structures) |
+| `RenderSystem` | 100 | `Transform`, `Renderable`, `Visible`, `Camera` | canvas (side effect) |
 
 ### Who Owns What
 
 | Concern | Owner | Why |
 |---|---|---|
 | Position, rotation, scale | `Transform` — authoritative | Single source of truth |
+| Computed world transform | `WorldTransform` — written by HierarchySystem | Cached parent-chain result |
 | Entity size (AABB) | `Collider` — authoritative | Separate from visual bounds |
 | Visual appearance | `Renderable` — authoritative | Image or shape style |
 | Animation state | `Animation` — authoritative | `current`, `frame`, `elapsed`, `playing` |
 | Frame advancement | `AnimationSystem` | Writes `renderable.image`, advances `Animation` state |
 | Speed and direction | `Velocity` — authoritative | Consumed by MovementSystem |
-| Entity membership | `Group._sprites` | Private array, iterable |
+| Parent-child relationships | `HierarchyGraph._children` (Map) | BFS traversal from dirty roots |
 | World-to-screen transform | `Camera` — authoritative | Position, zoom, rotation applied by RenderSystem |
 | Visible world region | `Camera` — derived from position + zoom + size | Used for culling |
+| Archetype storage | `Table` instances | Columnar SoA per archetype |
+| Component schema registration | `ComponentRegistry` | Global ID assignment |
+| Query matching | `QueryEngine` | O(1) bitmask ↔ archetype |
+| System scheduling | `SystemScheduler` | Priority-ordered execution |
 | SpatialHash lifecycle | `CollisionSystem` | `beginFrame()` → all rebuilds |
 | Broad-phase strategy | `CollisionSystem` + strategy instance | Pluggable via `useSpatialHash()` |
+| Entity membership | `Group` (iterable container) | Private array |
 
 ### What Is Derived
 
 | Value | Derived From | Used By |
 |---|---|---|
+| `WorldTransform` | `Transform` + `Parent` chain | RenderSystem, CollisionSystem — culled world-space AABB |
 | Sprite `x`, `y`, `width`, `height` | `Transform + Collider` (center → top-left) | Public convenience getters |
 | `Rect` from entity | `Transform + Collider` | SpatialHash cell calculation |
 | Entity center | `Transform.x`, `Transform.y` | Collision checks, rendering |
-| World-space AABB | `Transform + Collider + scale` | Camera culling |
+| World-space AABB | `WorldTransform + Collider + scale` | Camera culling |
 | Visible world bounds | `Camera (x, y, width, height, zoom)` | Culling, worldToScreen, screenToWorld |
 
 ## Ownership Boundaries
 
+### World
+
+```
+World
+├── EntityManager           entity create/destroy, archetype assignment
+├── ComponentRegistry       schema IDs, field layouts
+├── QueryEngine             archetype-indexed query matching
+├── SystemScheduler         priority-ordered system execution
+├── _resources: Map         shared singletons (SpatialHash, events, etc.)
+├── createEntity()          → entity ID
+├── destroyEntity(id)       → cleanup
+├── addComponent(id, Component)   → archetype move
+├── removeComponent(id, Component) → archetype move
+├── hasComponent(id, Component)   → boolean
+├── getComponent(id, Component)   → component data
+├── query(...components)    → QueryView
+├── update(dt)              → run all systems
+└── resources.get/set/has   → resource access
+```
+
 ### Group
 
 ```
-Group (container only)
-├── _sprites: Entity[]       (private, iterable)
+Group (entity container)
+├── _entities: Entity[]     (private, iterable)
 ├── add/remove/clear/has     (membership)
 ├── dispose()                (unregister + clear)
 ├── useSpatialHash()         (registers with CollisionSystem)
@@ -74,19 +116,20 @@ Group (container only)
 ### Sprite
 
 ```
-Sprite (data entity)
+Sprite (convenience entity wrapper)
 ├── Transform
 ├── Collider
-├── Velocity (Vec2)
+├── Velocity
 ├── Renderable
+├── Visible
 ├── Animation
-├── visible: boolean
 └── groups: Group[]
 ```
 
 - No `update()`, no `render()`, no animation logic — systems handle behavior
+- Internally creates an ECS entity via `World._nextEntityId` and adds components
 - `kill()` removes from all groups
-- Public getters (`x`, `y`, `width`, `height`, `image`, `style`, `angle`, `scale`) are convenience shorthands over components
+- Public getters (`x`, `y`, `width`, `height`, `image`, `style`, `angle`, `scale`, `velocity`) are convenience shorthands over components
 
 ### Camera
 
@@ -146,30 +189,28 @@ callback and call `Set.delete()` — no array allocation on removal.
 `getPointers()` returns `Map.values()` iterator directly — no array copy.
 
 The `Input` facade delegates every method to the default `InputContext`
-singleton, including the new `bind`/`unbind`/`getBindings`/`clearBindings`.
+singleton.
 
 ### AnimationSystem
 
 ```
-AnimationSystem
-├── update(entities, dt)    batch frame advancement
-├── updateOne(entity, dt)   single entity
+AnimationSystem (extends System)
+├── run(ctx, dt)             batch frame advancement via query
+├── (internal) processEntity(entity, dt)
 └── no per-frame allocations
 ```
 
-- Operates on any entity with `animation` + `renderable`
+- Operates via `ctx.queries.get(Animation, Renderable)` — no manual entity collection
 - `while (elapsed >= frameTime)` loop — catches up frames after spikes
 - Per-clip FPS (no global animation speed)
 - Non-looping clips stop on last frame, fire callback once
-- Writes `entity.renderable.image` directly — RenderSystem is unaware of AnimationSystem
-- Future sprite sheet support: `clip.frames[n]` can be metadata without changing the system
+- Writes `Renderable.image` directly — RenderSystem is unaware of AnimationSystem
 
 ### RenderSystem
 
 ```
-RenderSystem
-├── render(ctx, entities, camera?)       batch render (camera optional)
-├── renderOne(ctx, entity, camera?)      single entity
+RenderSystem (extends System)
+├── run(ctx, dt)             batch render via query (camera optional)
 ├── _getViewBounds(camera) → bounds|null shared bounds computation
 ├── _isVisible(entity, bounds) → bool    shared culling (bounds=null → true)
 ├── _drawEntity(ctx, entity)             shared entity transform + draw
@@ -184,13 +225,14 @@ RenderSystem
 - `_drawEntity`: single entity-drawing implementation used by both
 - `IDENTITY` sentinel (width=0, plain object) disables both transform
   and culling — no camera setup required for simple games
-- Accepts any iterable of entities
+- Uses `QueryView` to iterate entities with `Transform + Renderable + Visible`
 
 ### CollisionSystem
 
 ```
-CollisionSystem
+CollisionSystem (extends System)
 ├── _groups: Map<Group, { strategy, entities }>
+├── run(ctx, dt)             beginFrame orchestration
 ├── beginFrame()            rebuilds all strategy instances
 ├── useSpatialHash()        registers a Group with SpatialHash
 ├── removeGroup()           unregisters a Group
@@ -205,7 +247,7 @@ CollisionSystem
 ### SpatialHash
 
 ```
-SpatialHash (strategy)
+SpatialHash (broad-phase strategy)
 ├── rebuild(entities)           clears + rebuilds cell grid
 ├── collideRect/Point/Sprite()  stamp-based single-entity dedup
 ├── collideGroup()              scratch Set pair dedup (reused)
@@ -483,11 +525,8 @@ Game._loop(time)
 │   ├── _updateScenes(fixedDt, updateStart)
 │   │   │  only scenes at or above updateStart
 │   │   ├── user input handling
-│   │   ├── animationSystem.update(group, dt)
-│   │   ├── movementSystem.update(group, dt)
-│   │   ├── collisionSystem.beginFrame()
-│   │   ├── collisionSystem.collideXxx(...)
-│   │   └── scene-specific logic
+│   │   ├── scene.world.update(dt)   ← all ECS systems run in priority order
+│   │   └── scene-specific collision queries
 │   │
 │   ├── _interpolateScenes(alpha, updateStart)
 │   │   same visibility as update
@@ -499,18 +538,19 @@ Game._loop(time)
 │
 └── _renderScenes(ctx, renderStart)
     │  only scenes at or above renderStart
-    ├── renderSystem.render(ctx, group, camera?)
-    └── scene-specific rendering
+    ├── RenderSystem runs as part of world.update(dt) — culls + draws visible entities
+    └── scene-specific overlay rendering
 ```
 
 ### Allocations Per Frame (hot path)
 
 | Operation | Allocation |
 |---|---|
-| `AnimationSystem.update` | 0 |
-| `MovementSystem.update` | 0 |
-| `RenderSystem.render` (no camera) | 0 (IDENTITY sentinel, width=0 → no culling, no transform) |
-| `RenderSystem.render` (with camera) | 0 (one `ctx.save/restore`, bounds computed once) |
+| `world.update(dt)` — system scheduling | 0 (pre-built priority list) |
+| `MovementSystem.run` | 0 |
+| `AnimationSystem.run` | 0 |
+| `RenderSystem.run` (no camera) | 0 (IDENTITY sentinel, width=0 → no culling, no transform) |
+| `RenderSystem.run` (with camera) | 0 (one `ctx.save/restore`, bounds computed once) |
 | `Camera.apply` | 0 |
 | `Camera.worldToScreen` | 0 (writes to user-provided `out`) |
 | `Camera.screenToWorld` | 0 (writes to user-provided `out`) |
@@ -524,34 +564,81 @@ Game._loop(time)
 Goal: **0 allocations per frame** during normal gameplay on the hot path.
 Pull-based APIs (`out`, callback) shift allocation control to the caller.
 
-## Entity Component Contract
+## ECS Component Schema Contract
 
-Any object with the following properties works with the engine:
+Components are registered on the `World` via `ComponentRegistry`. Each
+component type has a unique numeric ID and an `ObjectSchema` defining
+its field layout for typed-array storage.
 
 ```js
-// Required by MovementSystem
-entity.transform   // { x, y }
-entity.velocity    // { x, y }
-
-// Additional requirement for AnimationSystem
-entity.animation   // { animations, current, frame, elapsed, playing }
-entity.renderable  // { draw(ctx, w, h) }
-
-// Additional requirement for RenderSystem
-entity.visible     // boolean
-entity.collider    // { width, height }
-entity.renderable  // { draw(ctx, w, h) }
-
-// Additional requirement for CollisionSystem / SpatialHash
-entity.visible     // boolean
-entity.collider    // { width, height }
-entity.transform   // { x, y }
+ComponentRegistry.register(Transform, {
+  x: { type: "float64", default: 0 },
+  y: { type: "float64", default: 0 },
+  rotation: { type: "float64", default: 0 },
+  scale: { type: "float64", default: 1 },
+});
 ```
 
-No entity needs to extend `Sprite`. Any plain object with the right
-properties can be used with any system. `Sprite` is the built-in
-implementation that provides these components on construction and
-exposes convenience getters.
+Systems access component data through `QueryView` iteration. Entity
+objects expose component instances as properties matching the class name:
+
+```js
+// Inside a System.run(ctx, dt):
+const view = ctx.queries.get(Transform, Velocity);
+for (const entity of view) {
+  // entity.transform → { x, y, rotation, scale }
+  // entity.velocity → { x, y }
+  entity.transform.x += entity.velocity.x * dt;
+}
+```
+
+### Query Signatures
+
+Systems declare their component dependencies explicitly:
+
+| System | Query Signature | Access Pattern |
+|---|---|---|
+| `MovementSystem` | `Transform + Velocity` | `entity.transform`, `entity.velocity` |
+| `AnimationSystem` | `Animation + Renderable` | `entity.animation`, `entity.renderable` |
+| `RenderSystem` | `Transform + Renderable + Visible` | `entity.transform`, `entity.renderable` |
+| `CollisionSystem` | `Transform + Collider + Visible` | `entity.transform`, `entity.collider` |
+| `HierarchySystem` | `Parent + Transform + WorldTransform` | System internals via Table columns |
+
+### Tag Components
+
+Tag components (empty schemas) act as query filters:
+
+```js
+// Find all enemies:
+const view = ctx.queries.get(Transform, Renderable, EnemyTag);
+```
+
+Tags add no storage overhead (zero-byte schemas) and are matched by
+archetype bitmask — no runtime type checks.
+
+### Entity Lifecycle
+
+```
+world.createEntity()           → entity (with Transform added by default)
+entity.addComponent(Velocity)  → archetype move (new table)
+entity.removeComponent(Velocity) → archetype move (previous table)
+entity.hasComponent(Velocity)  → boolean (O(1))
+entity.getComponent(Velocity)  → component data reference
+entity.destroy()               → removed from all tables, ID recycled
+```
+
+Entity IDs are recycled after destruction. Active entity tracking
+uses a free-list via `EntityManager`.
+
+### Compatibility with Old API
+
+`Sprite` and `Group` remain available as convenience wrappers that
+internally use the ECS World:
+
+- `new Sprite(x, y, w, h)` creates an ECS entity with `Transform`,
+  `Collider`, `Velocity`, `Renderable`, `Visible` components.
+- `Group` is a pure entity container that delegates queries to the
+  `CollisionSystem` and supports `SpatialHash` acceleration.
 
 ## Strategy Interface
 
