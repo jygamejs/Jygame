@@ -38,6 +38,7 @@ export class AudioSystem extends System {
   }
 
   play(entity, key, overrides = {}) {
+    this.stop(entity);
     this.configure(entity, key, overrides);
     this._startPlayback(entity);
   }
@@ -46,9 +47,6 @@ export class AudioSystem extends System {
     const instance = this._instances.get(entity);
     if (instance) {
       instance.stop();
-      if (instance._sound) {
-        instance._sound.returnInstance(instance);
-      }
       this._instances.delete(entity);
     }
     this._configs.delete(entity);
@@ -73,10 +71,11 @@ export class AudioSystem extends System {
 
       for (let r = 0; r < count; r++) {
         const entity = entityIds[r];
-        const instance = this._instances.get(entity);
+        let instance = this._instances.get(entity);
 
         if (!instance && this._configs.has(entity)) {
           this._startPlayback(entity, audio);
+          instance = this._instances.get(entity);
         }
 
         if (instance) {
