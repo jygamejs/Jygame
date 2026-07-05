@@ -46,6 +46,8 @@ export { Prefab } from "./prefab/index.js";
 
 export { Serializer } from "./serialization/index.js";
 
+export { AudioSource, AudioSystem } from "./audio/index.js";
+
 export { StreamingCell, StreamingManager } from "./streaming/index.js";
 
 export { Scene, SceneManager } from "./scene/index.js";

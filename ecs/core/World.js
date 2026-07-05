@@ -10,6 +10,8 @@ import { Prefab } from "../prefab/Prefab.js";
 import { Serializer } from "../serialization/Serializer.js";
 import { Transform } from "../components/Transform.js";
 import { HierarchyGraph } from "../hierarchy/HierarchyGraph.js";
+import { AudioSource } from "../audio/AudioSource.js";
+import { AudioSystem } from "../audio/AudioSystem.js";
 import { StreamingManager } from "../streaming/StreamingManager.js";
 
 export class World {
@@ -690,6 +692,17 @@ export class World {
       );
     }
     sm.unload(name);
+  }
+
+  addAudioSource(entity, key, overrides = {}) {
+    this.addComponent(entity, AudioSource);
+    const system = this.getResource(AudioSystem);
+    if (!system) {
+      throw new Error(
+        "World.addAudioSource failed: AudioSystem is not registered."
+      );
+    }
+    system.configure(entity, key, overrides);
   }
 
   _resolveComponentId(component, operation) {
