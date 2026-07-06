@@ -13,6 +13,7 @@ import { HierarchyGraph } from "../hierarchy/HierarchyGraph.js";
 import { AudioSource } from "../audio/AudioSource.js";
 import { AudioSystem } from "../audio/AudioSystem.js";
 import { StreamingManager } from "../streaming/StreamingManager.js";
+import { Diagnostics } from "../../debug/index.js";
 
 export class World {
   constructor(options = {}) {
@@ -57,6 +58,8 @@ export class World {
     this._onComponentSet = null;
     this._transformId = null;
     this._entityDestroyedCallbacks = [];
+    this._frameCount = 0;
+    this._diagMetricIds = null;
   }
 
   get registry() {
@@ -183,6 +186,14 @@ export class World {
     emptyTable.setEntity(row, entity);
     this._entityManager.setLocation(entity, 1, row);
 
+    const diag = this._resources.get(Diagnostics);
+    if (diag) {
+      const mids = this._diagMetricIds || this._initDiagMetricIds();
+      if (mids && mids.entitiesCreated) {
+        diag.recordCounter(mids.entitiesCreated.id, 1);
+      }
+    }
+
     return entity;
   }
 
@@ -212,6 +223,14 @@ export class World {
     }
 
     this._entityManager.destroy(entity);
+
+    const diag = this._resources.get(Diagnostics);
+    if (diag) {
+      const mids = this._diagMetricIds || this._initDiagMetricIds();
+      if (mids && mids.entitiesDestroyed) {
+        diag.recordCounter(mids.entitiesDestroyed.id, 1);
+      }
+    }
   }
 
   isAlive(entity) {
@@ -612,9 +631,50 @@ export class World {
     this._scheduler.clear();
   }
 
+  _initDiagMetricIds() {
+    const diag = this._resources.get(Diagnostics);
+    if (!diag) return null;
+    const mids = {
+      frameUpdate: diag.metrics.find("frame.update"),
+      frameDelta: diag.metrics.find("frame.delta"),
+      frameFps: diag.metrics.find("frame.fps"),
+      worldEntities: diag.metrics.find("ecs.world.entities"),
+      worldArchetypes: diag.metrics.find("ecs.world.archetypes"),
+      worldSystems: diag.metrics.find("ecs.world.systems"),
+      entitiesCreated: diag.metrics.find("ecs.entitiesCreated"),
+      entitiesDestroyed: diag.metrics.find("ecs.entitiesDestroyed"),
+    };
+    this._diagMetricIds = mids;
+    return mids;
+  }
+
   update(dt) {
-    this._scheduler.update(dt);
+    const diag = this._resources.get(Diagnostics);
+    const mids = this._diagMetricIds || this._initDiagMetricIds();
+    const dtMs = dt * 1000;
+
+    if (diag) {
+      diag.beginFrame(this._frameCount++, dtMs);
+    }
+
+    if (diag && mids && mids.frameUpdate) {
+      diag.scope(mids.frameUpdate.id, () => {
+        this._scheduler.update(dt);
+      });
+    } else {
+      this._scheduler.update(dt);
+    }
+
     this._events.clear();
+
+    if (diag && mids) {
+      if (mids.frameDelta) diag.recordGauge(mids.frameDelta.id, dtMs);
+      if (mids.frameFps) diag.recordGauge(mids.frameFps.id, dtMs > 0 ? 1000 / dtMs : 0);
+      if (mids.worldEntities) diag.recordGauge(mids.worldEntities.id, this._entityManager.aliveCount);
+      if (mids.worldArchetypes) diag.recordGauge(mids.worldArchetypes.id, this._archetypeSystem.archetypeCount);
+      if (mids.worldSystems) diag.recordGauge(mids.worldSystems.id, this._scheduler.systemCount);
+      diag.endFrame();
+    }
   }
 
   query(query) {

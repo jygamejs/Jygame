@@ -14,6 +14,8 @@ import {
   FrameEvent,
   FrameHistory,
 } from "../../../debug/index.js";
+import { World } from "../../../ecs/core/World.js";
+import { System } from "../../../ecs/core/System.js";
 
 // ─── Helpers ──────────────────────────────────────────
 
@@ -693,3 +695,164 @@ describe("Diagnostics (integration)", () => {
     }
   });
 });
+
+// ─── Commit 2: ECS Integration ──────────────────────
+
+describe("Diagnostics ECS Integration", () => {
+  function createTestWorld() {
+    const world = new World();
+    world.register(FakeC1);
+    world.register(FakeC2);
+
+    const diag = new Diagnostics();
+    diag.registerMetric({ name:"frame.delta",         category:MetricCategory.FRAME, group:"Frame",  unit:MetricUnit.MILLISECONDS, type:MetricType.GAUGE,   tags:Object.freeze(["frame"]) });
+    diag.registerMetric({ name:"frame.fps",           category:MetricCategory.FRAME, group:"Frame",  unit:MetricUnit.FPS,          type:MetricType.GAUGE,   tags:Object.freeze(["frame"]) });
+    diag.registerMetric({ name:"frame.update",        category:MetricCategory.FRAME, group:"Frame",  unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,   tags:Object.freeze(["frame","ecs"]) });
+    diag.registerMetric({ name:"ecs.world.entities",  category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
+    diag.registerMetric({ name:"ecs.world.archetypes",category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
+    diag.registerMetric({ name:"ecs.world.systems",   category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
+    diag.registerMetric({ name:"ecs.entitiesCreated", category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["ecs"]) });
+    diag.registerMetric({ name:"ecs.entitiesDestroyed",category:MetricCategory.ECS,  group:"World", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["ecs"]) });
+    world.setResource(Diagnostics, diag);
+
+    world.addSystem(new DiagTestSys());
+
+    diag.lockRegistry();
+    return world;
+  }
+
+  it("World.update() records a frame snapshot", () => {
+    const world = createTestWorld();
+    world.createEntity();
+    world.update(1 / 60);
+    const diag = world.getResource(Diagnostics);
+    const snap = diag.lastSnapshot;
+    assert.ok(snap, "expected a frame snapshot");
+    assert.strictEqual(snap.frame, 0);
+  });
+
+  it("records ecs.world.* gauges after update", () => {
+    const world = createTestWorld();
+    world.createEntity();
+    world.update(1 / 60);
+    const diag = world.getResource(Diagnostics);
+    const snap = diag.lastSnapshot;
+    assert.ok(snap.gauge(diag.metrics.find("ecs.world.entities").id) >= 1);
+    assert.ok(snap.gauge(diag.metrics.find("ecs.world.systems").id) >= 1);
+    assert.ok(snap.gauge(diag.metrics.find("ecs.world.archetypes").id) >= 1);
+  });
+
+  it("records frame.delta and frame.fps gauges", () => {
+    const world = createTestWorld();
+    world.update(1 / 60);
+    const diag = world.getResource(Diagnostics);
+    const snap = diag.lastSnapshot;
+    const expectedMs = (1 / 60) * 1000;
+    assert.ok(Math.abs(snap.gauge(diag.metrics.find("frame.delta").id) - expectedMs) < 0.01);
+    assert.ok(snap.gauge(diag.metrics.find("frame.fps").id) > 0);
+  });
+
+  it("records frame.update timer", () => {
+    const world = createTestWorld();
+    world.update(1 / 60);
+    const diag = world.getResource(Diagnostics);
+    const snap = diag.lastSnapshot;
+    const updateId = diag.metrics.find("frame.update").id;
+    assert.strictEqual(snap.timerCount(updateId), 1);
+    assert.ok(snap.timerTotal(updateId) >= 0);
+  });
+
+  it("records ecs.system.* timer per system", () => {
+    const world = createTestWorld();
+    world.update(1 / 60);
+    const diag = world.getResource(Diagnostics);
+    const sysMetric = diag.metrics.find("ecs.system.diagtestsys");
+    assert.ok(sysMetric, "expected auto-registered system metric");
+    const snap = diag.lastSnapshot;
+    assert.strictEqual(snap.timerCount(sysMetric.id), 1);
+  });
+
+  it("records entitiesCreated counter on createEntity", () => {
+    const world = createTestWorld();
+    class Creator extends System {
+      update(ctx, dt) {
+        ctx.world.createEntity();
+        ctx.world.createEntity();
+      }
+    }
+    world.addSystem(new Creator());
+    world.update(1 / 60);
+    const diag = world.getResource(Diagnostics);
+    const snap = diag.lastSnapshot;
+    const createdId = diag.metrics.find("ecs.entitiesCreated").id;
+    assert.strictEqual(snap.counter(createdId), 2);
+  });
+
+  it("records entitiesDestroyed counter on destroyEntity", () => {
+    const world = createTestWorld();
+    let e1;
+    class Destroyer extends System {
+      update(ctx, dt) {
+        if (e1 === undefined) {
+          e1 = ctx.world.createEntity();
+          ctx.world.createEntity();
+        }
+        if (e1 !== undefined) {
+          ctx.world.destroyEntity(e1);
+        }
+      }
+    }
+    world.addSystem(new Destroyer());
+    world.update(1 / 60);
+    const diag = world.getResource(Diagnostics);
+    const snap = diag.lastSnapshot;
+    const destroyedId = diag.metrics.find("ecs.entitiesDestroyed").id;
+    assert.strictEqual(snap.counter(destroyedId), 1);
+    const createdId = diag.metrics.find("ecs.entitiesCreated").id;
+    assert.strictEqual(snap.counter(createdId), 2);
+  });
+
+  it("entitiesCreated and entitiesDestroyed both recorded in same frame", () => {
+    const world = createTestWorld();
+    class Combo extends System {
+      update(ctx, dt) {
+        const e1 = ctx.world.createEntity();
+        ctx.world.createEntity();
+        ctx.world.destroyEntity(e1);
+      }
+    }
+    world.addSystem(new Combo());
+    world.update(1 / 60);
+    const diag = world.getResource(Diagnostics);
+    const snap = diag.lastSnapshot;
+    const createdId = diag.metrics.find("ecs.entitiesCreated").id;
+    const destroyedId = diag.metrics.find("ecs.entitiesDestroyed").id;
+    assert.strictEqual(snap.counter(createdId), 2);
+    assert.strictEqual(snap.counter(destroyedId), 1);
+  });
+
+  it("lockRegistry prevents static registration after init", () => {
+    const world = createTestWorld();
+    const diag = world.getResource(Diagnostics);
+    assert.throws(() => {
+      diag.registerMetric({ name:"should.fail", category:0, unit:0, type:0 });
+    }, /locked/);
+  });
+
+  it("adds system after lock via registerDynamicMetric", () => {
+    const world = createTestWorld();
+    const diag = world.getResource(Diagnostics);
+    const id = diag.registerDynamicMetric({ name:"late.metric", category:0, unit:0, type:0 });
+    assert.strictEqual(diag.metrics.get(id).name, "late.metric");
+  });
+});
+
+class FakeC1 { constructor() { this.x = 0; } }
+class FakeC2 { constructor() { this.y = 0; } }
+
+class DiagTestSys extends System {
+  static query = { all: [FakeC1] };
+  update(ctx, dt) {
+    // system does work that is timed
+  }
+}

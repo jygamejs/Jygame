@@ -1,6 +1,8 @@
 import { ComponentSignature } from "./ComponentSignature.js";
 import { System } from "./System.js";
 import { SystemContext } from "./SystemContext.js";
+import { Diagnostics, MetricCategory, MetricUnit, MetricType }
+  from "../../debug/index.js";
 
 export class SystemScheduler {
   constructor(queryEngine, componentRegistry) {
@@ -74,6 +76,40 @@ export class SystemScheduler {
     this._needsSort = true;
 
     if (this._world) {
+      if (typeof this._world.getResource === 'function') {
+        const diag = this._world.getResource(Diagnostics);
+        if (diag) {
+          const sysName = system.constructor.name;
+          const lowerName = sysName.toLowerCase();
+          system._diagMetricId = diag.registerDynamicMetric({
+            name: `ecs.system.${lowerName}`,
+            displayName: sysName,
+            category: MetricCategory.ECS,
+            group: "Systems",
+            unit: MetricUnit.MILLISECONDS,
+            type: MetricType.TIMER,
+            tags: Object.freeze(["ecs", "system"]),
+          });
+          system._diagEntityMetricId = diag.registerDynamicMetric({
+            name: `ecs.system.${lowerName}.entities`,
+            displayName: `${sysName} Entities`,
+            category: MetricCategory.ECS,
+            group: "Systems",
+            unit: MetricUnit.COUNT,
+            type: MetricType.GAUGE,
+            tags: Object.freeze(["ecs", "system"]),
+          });
+          system._diagTableMetricId = diag.registerDynamicMetric({
+            name: `ecs.system.${lowerName}.tables`,
+            displayName: `${sysName} Tables`,
+            category: MetricCategory.ECS,
+            group: "Systems",
+            unit: MetricUnit.COUNT,
+            type: MetricType.GAUGE,
+            tags: Object.freeze(["ecs", "system"]),
+          });
+        }
+      }
       system.onAdded(this._world);
     }
   }
@@ -141,12 +177,21 @@ export class SystemScheduler {
         this._sortSystems();
       }
 
+      const diag = typeof this._world.getResource === 'function' ? this._world.getResource(Diagnostics) : null;
       const systems = this._sortedSystems;
       for (let i = 0; i < systems.length; i++) {
         const system = systems[i];
         if (!system.enabled) continue;
         system._ctx._refresh(dt);
-        system.update(system._ctx, dt);
+        if (diag && system._diagMetricId !== undefined) {
+          diag.scope(system._diagMetricId, () => {
+            system.update(system._ctx, dt);
+          });
+          diag.recordGauge(system._diagEntityMetricId, system._ctx.entityCount);
+          diag.recordGauge(system._diagTableMetricId, system._ctx.tables().length);
+        } else {
+          system.update(system._ctx, dt);
+        }
       }
     } finally {
       this._insideUpdate = false;
