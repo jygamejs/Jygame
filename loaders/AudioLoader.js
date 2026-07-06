@@ -1,9 +1,48 @@
 import { LoadingTask } from "../core/LoadingTask.js";
+import { Diagnostics, MetricCategory, MetricUnit, MetricType }
+  from "../debug/index.js";
+
+let _diagnostics = null;
+let _diagnosticsInitDone = false;
+let _diagAudioClipsId, _diagLoadedId;
+
+function _initAudioDiag(diag) {
+  if (_diagnosticsInitDone) return;
+  _diagnosticsInitDone = true;
+  _diagAudioClipsId = diag.registerDynamicMetric({
+    name: "assets.audioClips",
+    displayName: "Audio Clips",
+    category: MetricCategory.ASSETS,
+    group: "Assets",
+    unit: MetricUnit.COUNT,
+    type: MetricType.GAUGE,
+    tags: Object.freeze(["assets"]),
+  });
+  _diagLoadedId = diag.registerDynamicMetric({
+    name: "assets.loaded",
+    displayName: "Assets Loaded",
+    category: MetricCategory.ASSETS,
+    group: "Assets",
+    unit: MetricUnit.COUNT,
+    type: MetricType.COUNTER,
+    tags: Object.freeze(["assets"]),
+  });
+}
+
+function _recordAudioGauge() {
+  if (!_diagnostics || !_diagnosticsInitDone) return;
+  _diagnostics.recordGauge(_diagAudioClipsId, _cache.size);
+}
 
 const _cache = new Map();
 const _bufferCache = new Map();
 
 export const AudioLoader = {
+  set diagnostics(diag) {
+    _diagnostics = diag;
+    _diagnosticsInitDone = false;
+  },
+
   load(path) {
     if (_cache.has(path)) return Promise.resolve(_cache.get(path));
 
@@ -12,6 +51,11 @@ export const AudioLoader = {
       audio.preload = "auto";
       audio.oncanplaythrough = () => {
         _cache.set(path, audio);
+        if (_diagnostics) {
+          _initAudioDiag(_diagnostics);
+          _diagnostics.recordCounter(_diagLoadedId, 1);
+          if (_diagnostics._active) _recordAudioGauge();
+        }
         resolve(audio);
       };
       audio.onerror = () => reject(new Error(`Failed to load audio: ${path}`));
@@ -47,12 +91,21 @@ export const AudioLoader = {
 
   unload(key) {
     _bufferCache.delete(key);
-    return _cache.delete(key);
+    const result = _cache.delete(key);
+    if (_diagnostics) {
+      _initAudioDiag(_diagnostics);
+      _recordAudioGauge();
+    }
+    return result;
   },
 
   clear() {
     _cache.clear();
     _bufferCache.clear();
+    if (_diagnostics) {
+      _initAudioDiag(_diagnostics);
+      _recordAudioGauge();
+    }
   },
 
   loadBuffer(path, audioContext) {

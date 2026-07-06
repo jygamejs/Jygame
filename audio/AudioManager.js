@@ -8,6 +8,8 @@ import { HtmlAudioBackend } from "./backends/HtmlAudioBackend.js";
 import { EffectChain } from "./effects/EffectChain.js";
 import { AudioScene } from "./AudioScene.js";
 import { ATTENUATION_LINEAR, ATTENUATION_QUADRATIC, ATTENUATION_INVERSE, computeAttenuation } from "./attenuation.js";
+import { Diagnostics, MetricCategory, MetricUnit, MetricType }
+  from "../debug/index.js";
 
 export { ATTENUATION_LINEAR, ATTENUATION_QUADRATIC, ATTENUATION_INVERSE, computeAttenuation };
 
@@ -19,6 +21,7 @@ export class AudioManager {
     this._sounds = new Map();
     this._definitions = new Map();
     this._soundsByDefinition = new Map();
+    this._diagnostics = null;
     this._groups = new Map();
     this._masterVolume = 1;
     this._masterMuted = false;
@@ -317,9 +320,46 @@ export class AudioManager {
     this._backend.resume();
   }
 
+  _initDiag(diag) {
+    if (this._diagInitDone) return;
+    this._diagInitDone = true;
+    this._diagUpdateId = diag.registerDynamicMetric({
+      name: "audio.update",
+      displayName: "Audio Update",
+      category: MetricCategory.AUDIO,
+      group: "Audio",
+      unit: MetricUnit.MILLISECONDS,
+      type: MetricType.TIMER,
+      tags: Object.freeze(["audio"]),
+    });
+    this._diagActiveId = diag.registerDynamicMetric({
+      name: "audio.active",
+      displayName: "Active Sounds",
+      category: MetricCategory.AUDIO,
+      group: "Audio",
+      unit: MetricUnit.COUNT,
+      type: MetricType.GAUGE,
+      tags: Object.freeze(["audio"]),
+    });
+    this._diagPooledId = diag.registerDynamicMetric({
+      name: "audio.pooled",
+      displayName: "Pooled Instances",
+      category: MetricCategory.AUDIO,
+      group: "Audio",
+      unit: MetricUnit.COUNT,
+      type: MetricType.GAUGE,
+      tags: Object.freeze(["audio"]),
+    });
+  }
+
   update(dt) {
+    let activeCount = 0;
+    let pooledCount = 0;
+
     const updateSpatial = (sound) => {
       const instances = sound._activeInstances;
+      activeCount += instances.length;
+      pooledCount += sound._pool.freeCount;
       for (let i = 0; i < instances.length; i++) {
         const inst = instances[i];
         if (inst._spatial) {
@@ -328,15 +368,35 @@ export class AudioManager {
         }
       }
     };
-    for (const sound of this._sounds.values()) updateSpatial(sound);
-    for (const sound of this._soundsByDefinition.values()) updateSpatial(sound);
-    this._backend.setListenerPosition(this._listener.x, this._listener.y);
-    if (dt > 0) {
-      for (const music of this._musicCache.values()) {
-        music.update(dt);
+
+    const doUpdate = () => {
+      for (const sound of this._sounds.values()) updateSpatial(sound);
+      for (const sound of this._soundsByDefinition.values()) updateSpatial(sound);
+      this._backend.setListenerPosition(this._listener.x, this._listener.y);
+      if (dt > 0) {
+        for (const music of this._musicCache.values()) {
+          music.update(dt);
+        }
+        if (this._transition) this._processTransition(dt);
       }
-      if (this._transition) this._processTransition(dt);
+    };
+
+    if (this._diagnostics) {
+      this._initDiag(this._diagnostics);
+      this._diagnostics.scope(this._diagUpdateId, doUpdate);
+      this._diagnostics.recordGauge(this._diagActiveId, activeCount);
+      this._diagnostics.recordGauge(this._diagPooledId, pooledCount);
+    } else {
+      doUpdate();
     }
+  }
+
+  get diagnostics() {
+    return this._diagnostics;
+  }
+
+  set diagnostics(diag) {
+    this._diagnostics = diag;
   }
 
   pauseAll() {

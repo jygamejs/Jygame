@@ -57,6 +57,7 @@ export class SceneManager {
   constructor() {
     this[_registry] = new Map();
     this._stack = [];
+    this._diagnostics = null;
   }
 
   get activeScene() {
@@ -75,6 +76,11 @@ export class SceneManager {
     removeScene(this, name);
   }
 
+  _emitEvent(type, sceneName) {
+    if (!this._diagnostics) return;
+    this._diagnostics.event("scene", type, { scene: sceneName });
+  }
+
   start(name) {
     const scene = findScene(this, name);
 
@@ -85,6 +91,7 @@ export class SceneManager {
 
     this._stack.push(scene);
     scene.onEnter();
+    this._emitEvent("Transition", name);
   }
 
   change(name) {
@@ -93,6 +100,7 @@ export class SceneManager {
     if (this._stack.length === 0) {
       this._stack.push(scene);
       scene.onEnter();
+      this._emitEvent("Transition", name);
       return;
     }
 
@@ -104,6 +112,7 @@ export class SceneManager {
 
     this._stack.push(scene);
     scene.onEnter();
+    this._emitEvent("Transition", name);
   }
 
   replace(name) {
@@ -116,6 +125,7 @@ export class SceneManager {
         scene._created = true;
       }
       scene.onEnter();
+      this._emitEvent("Transition", name);
       return;
     }
 
@@ -134,6 +144,7 @@ export class SceneManager {
     }
     this._stack.push(scene);
     scene.onEnter();
+    this._emitEvent("Transition", name);
   }
 
   push(name) {
@@ -146,6 +157,7 @@ export class SceneManager {
 
     this._stack.push(scene);
     scene.onEnter();
+    this._emitEvent("Push", name);
   }
 
   pop() {
@@ -165,6 +177,15 @@ export class SceneManager {
       const previous = this._stack[this._stack.length - 1];
       previous.onResume();
     }
+    this._emitEvent("Pop", top.name);
+  }
+
+  get diagnostics() {
+    return this._diagnostics;
+  }
+
+  set diagnostics(diag) {
+    this._diagnostics = diag;
   }
 
   update(dt) {

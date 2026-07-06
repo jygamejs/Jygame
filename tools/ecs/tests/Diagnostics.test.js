@@ -16,6 +16,20 @@ import {
 } from "../../../debug/index.js";
 import { World } from "../../../ecs/core/World.js";
 import { System } from "../../../ecs/core/System.js";
+import { RenderSystem } from "../../../ecs/systems/RenderSystem.js";
+import { RenderQueue } from "../../../ecs/render/RenderQueue.js";
+import { CanvasContext } from "../../../ecs/render/CanvasContext.js";
+import { CollisionSystem } from "../../../ecs/systems/CollisionSystem.js";
+import { SpatialHash } from "../../../collision/SpatialHash.js";
+import { Transform } from "../../../ecs/components/Transform.js";
+import { Renderable } from "../../../ecs/components/Renderable.js";
+import { RenderBounds } from "../../../ecs/components/RenderBounds.js";
+import { Visible } from "../../../ecs/components/Visible.js";
+import { Collider } from "../../../ecs/components/Collider.js";
+import { AudioManager } from "../../../audio/AudioManager.js";
+import { ParticleSystem } from "../../../particles/ParticleSystem.js";
+import { StreamingManager } from "../../../ecs/streaming/StreamingManager.js";
+import { SceneManager } from "../../../ecs/scene/SceneManager.js";
 
 // ─── Helpers ──────────────────────────────────────────
 
@@ -844,6 +858,333 @@ describe("Diagnostics ECS Integration", () => {
     const diag = world.getResource(Diagnostics);
     const id = diag.registerDynamicMetric({ name:"late.metric", category:0, unit:0, type:0 });
     assert.strictEqual(diag.metrics.get(id).name, "late.metric");
+  });
+});
+
+// ─── Commit 3: Subsystem Instrumentation ────────────
+
+describe("Diagnostics Subsystem Instrumentation", () => {
+  function mockCanvasCtx() {
+    return {
+      save() {}, restore() {}, translate() {}, rotate() {}, scale() {},
+      fillRect() {}, beginPath() {}, arc() {}, fill() {}, drawImage() {},
+      getTransform() { return { a:1, b:0, c:0, d:1, e:0, f:0 }; },
+      setTransform() {},
+    };
+  }
+
+  // ─── RenderSystem ──────────────────────────────────
+
+  describe("RenderSystem", () => {
+    it("records render.draw timer and render.drawCalls gauge", () => {
+      const world = new World();
+      world.register(Transform);
+      world.register(Renderable);
+      world.register(RenderBounds);
+      world.register(Visible);
+
+      const diag = new Diagnostics();
+      diag.registerMetric({ name:"frame.delta",         category:MetricCategory.FRAME, group:"Frame",  unit:MetricUnit.MILLISECONDS, type:MetricType.GAUGE,   tags:Object.freeze(["frame"]) });
+      diag.registerMetric({ name:"frame.fps",           category:MetricCategory.FRAME, group:"Frame",  unit:MetricUnit.FPS,          type:MetricType.GAUGE,   tags:Object.freeze(["frame"]) });
+      diag.registerMetric({ name:"frame.update",        category:MetricCategory.FRAME, group:"Frame",  unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,   tags:Object.freeze(["frame","ecs"]) });
+      diag.registerMetric({ name:"ecs.world.entities",  category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
+      diag.registerMetric({ name:"ecs.world.systems",   category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
+      diag.registerMetric({ name:"ecs.world.archetypes",category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
+      diag.registerMetric({ name:"ecs.entitiesCreated", category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["ecs"]) });
+      diag.registerMetric({ name:"ecs.entitiesDestroyed",category:MetricCategory.ECS,  group:"World", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["ecs"]) });
+      world.setResource(Diagnostics, diag);
+
+      world.setResource(RenderQueue, new RenderQueue());
+      world.setResource(CanvasContext, mockCanvasCtx());
+      world.addSystem(new RenderSystem());
+      diag.lockRegistry();
+
+      const e = world.createEntity();
+      world.addComponent(e, Transform);
+      world.setComponent(e, Transform, { x:100, y:100 });
+      world.addComponent(e, Renderable);
+      world.addComponent(e, RenderBounds);
+      world.setComponent(e, RenderBounds, { width:32, height:32 });
+      world.addComponent(e, Visible);
+      world.setComponent(e, Visible, { value:1 });
+
+      world.update(1 / 60);
+      const snap = diag.lastSnapshot;
+      const draw = diag.metrics.find("render.draw");
+      const calls = diag.metrics.find("render.drawCalls");
+      assert.ok(draw, "render.draw should be auto-registered");
+      assert.ok(calls, "render.drawCalls should be auto-registered");
+      assert.strictEqual(snap.timerCount(draw.id), 1);
+      assert.ok(snap.gauge(calls.id) >= 1);
+    });
+
+    it("works without Diagnostics (no crash)", () => {
+      const world = new World();
+      world.register(Transform);
+      world.register(Renderable);
+      world.register(RenderBounds);
+      world.register(Visible);
+      world.setResource(RenderQueue, new RenderQueue());
+      const canvasCtx = {
+        save() {}, restore() {}, translate() {}, rotate() {}, scale() {},
+        fillRect() {}, beginPath() {}, arc() {}, fill() {}, drawImage() {},
+        getTransform() { return { a:1, b:0, c:0, d:1, e:0, f:0 }; },
+        setTransform() {},
+      };
+      world.setResource(CanvasContext, canvasCtx);
+      world.addSystem(new RenderSystem());
+
+      const e = world.createEntity();
+      world.addComponent(e, Transform);
+      world.setComponent(e, Transform, { x:100, y:100 });
+      world.addComponent(e, Renderable);
+      world.addComponent(e, RenderBounds);
+      world.setComponent(e, RenderBounds, { width:32, height:32 });
+      world.addComponent(e, Visible);
+      world.setComponent(e, Visible, { value:1 });
+
+      world.update(1 / 60);
+      assert.ok(true, "RenderSystem update completes without Diagnostics");
+    });
+  });
+
+  // ─── CollisionSystem ───────────────────────────────
+
+  describe("CollisionSystem", () => {
+    it("records physics.broadphase timer and physics.bodies gauge", () => {
+      const world = new World();
+      world.register(Transform);
+      world.register(Collider);
+      world.register(Visible);
+
+      const diag = new Diagnostics();
+      diag.registerMetric({ name:"frame.delta",         category:MetricCategory.FRAME, group:"Frame",  unit:MetricUnit.MILLISECONDS, type:MetricType.GAUGE,   tags:Object.freeze(["frame"]) });
+      diag.registerMetric({ name:"frame.fps",           category:MetricCategory.FRAME, group:"Frame",  unit:MetricUnit.FPS,          type:MetricType.GAUGE,   tags:Object.freeze(["frame"]) });
+      diag.registerMetric({ name:"frame.update",        category:MetricCategory.FRAME, group:"Frame",  unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,   tags:Object.freeze(["frame","ecs"]) });
+      diag.registerMetric({ name:"ecs.world.entities",  category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
+      diag.registerMetric({ name:"ecs.world.systems",   category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
+      diag.registerMetric({ name:"ecs.world.archetypes",category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
+      diag.registerMetric({ name:"ecs.entitiesCreated", category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["ecs"]) });
+      diag.registerMetric({ name:"ecs.entitiesDestroyed",category:MetricCategory.ECS,  group:"World", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["ecs"]) });
+      world.setResource(Diagnostics, diag);
+
+      world.setResource(SpatialHash, new SpatialHash());
+      world.addSystem(new CollisionSystem());
+      diag.lockRegistry();
+
+      const e = world.createEntity();
+      world.addComponent(e, Transform);
+      world.setComponent(e, Transform, { x:100, y:100 });
+      world.addComponent(e, Collider);
+      world.setComponent(e, Collider, { width:32, height:32 });
+      world.addComponent(e, Visible);
+      world.setComponent(e, Visible, { value:1 });
+
+      world.update(1 / 60);
+      const snap = diag.lastSnapshot;
+      const bp = diag.metrics.find("physics.broadphase");
+      const bodies = diag.metrics.find("physics.bodies");
+      assert.ok(bp, "physics.broadphase should be auto-registered");
+      assert.ok(bodies, "physics.bodies should be auto-registered");
+      assert.strictEqual(snap.timerCount(bp.id), 1);
+      assert.ok(snap.gauge(bodies.id) >= 1);
+    });
+  });
+
+  // ─── AudioManager ──────────────────────────────────
+
+  describe("AudioManager", () => {
+    it("records audio.update, audio.active, audio.pooled via diagnostics", () => {
+      const am = new AudioManager();
+      const diag = new Diagnostics();
+      diag.registerMetric({ name:"frame.delta", category:MetricCategory.FRAME, group:"Frame", unit:MetricUnit.MILLISECONDS, type:MetricType.GAUGE, tags:Object.freeze(["frame"]) });
+      diag.registerMetric({ name:"frame.fps",   category:MetricCategory.FRAME, group:"Frame", unit:MetricUnit.FPS,          type:MetricType.GAUGE, tags:Object.freeze(["frame"]) });
+      diag.lockRegistry();
+
+      am.diagnostics = diag;
+
+      diag.beginFrame(1, 16.6);
+      am.update(1 / 60);
+      diag.endFrame();
+
+      const snap = diag.lastSnapshot;
+      const update = diag.metrics.find("audio.update");
+      const active = diag.metrics.find("audio.active");
+      const pooled = diag.metrics.find("audio.pooled");
+      assert.ok(update, "audio.update should exist");
+      assert.ok(active, "audio.active should exist");
+      assert.ok(pooled, "audio.pooled should exist");
+      assert.strictEqual(snap.timerCount(update.id), 1);
+      assert.strictEqual(snap.gauge(active.id), 0);
+      assert.ok(snap.gauge(pooled.id) >= 0);
+    });
+  });
+
+  // ─── ParticleSystem ────────────────────────────────
+
+  describe("ParticleSystem", () => {
+    it("records particles.* metrics via diagnostics", () => {
+      const ps = new ParticleSystem();
+      const diag = new Diagnostics();
+      diag.registerMetric({ name:"frame.delta", category:MetricCategory.FRAME, group:"Frame", unit:MetricUnit.MILLISECONDS, type:MetricType.GAUGE, tags:Object.freeze(["frame"]) });
+      diag.registerMetric({ name:"frame.fps",   category:MetricCategory.FRAME, group:"Frame", unit:MetricUnit.FPS,          type:MetricType.GAUGE, tags:Object.freeze(["frame"]) });
+      diag.lockRegistry();
+
+      ps.diagnostics = diag;
+
+      diag.beginFrame(1, 16.6);
+      ps.update(1 / 60);
+      ps.render(null);
+      diag.endFrame();
+
+      const snap = diag.lastSnapshot;
+      const sim = diag.metrics.find("particles.simulation");
+      const draw = diag.metrics.find("particles.draw");
+      const alive = diag.metrics.find("particles.alive");
+      assert.ok(sim, "particles.simulation should exist");
+      assert.ok(draw, "particles.draw should exist");
+      assert.ok(alive, "particles.alive should exist");
+      assert.strictEqual(snap.timerCount(sim.id), 1);
+      assert.strictEqual(snap.timerCount(draw.id), 1);
+      assert.strictEqual(snap.gauge(alive.id), 0);
+    });
+
+    it("records particles.emitted counter on emit", () => {
+      const ps = new ParticleSystem();
+      const diag = new Diagnostics();
+      diag.registerMetric({ name:"frame.delta", category:MetricCategory.FRAME, group:"Frame", unit:MetricUnit.MILLISECONDS, type:MetricType.GAUGE, tags:Object.freeze(["frame"]) });
+      diag.registerMetric({ name:"frame.fps",   category:MetricCategory.FRAME, group:"Frame", unit:MetricUnit.FPS,          type:MetricType.GAUGE, tags:Object.freeze(["frame"]) });
+      diag.lockRegistry();
+
+      ps.diagnostics = diag;
+
+      diag.beginFrame(1, 16.6);
+      ps.emit(5, () => ({ x:0, y:0, vx:0, vy:0, life:1 }));
+      diag.endFrame();
+
+      const snap = diag.lastSnapshot;
+      const emitted = diag.metrics.find("particles.emitted");
+      assert.ok(emitted, "particles.emitted should exist");
+      assert.strictEqual(snap.counter(emitted.id), 5);
+    });
+  });
+
+  // ─── SpatialHash ───────────────────────────────────
+
+  describe("SpatialHash", () => {
+    it("records physics.narrowphase timer when diagnostics is set", () => {
+      const diag = new Diagnostics();
+      diag.registerMetric({ name:"frame.delta", category:MetricCategory.FRAME, group:"Frame", unit:MetricUnit.MILLISECONDS, type:MetricType.GAUGE, tags:Object.freeze(["frame"]) });
+      diag.registerMetric({ name:"frame.fps",   category:MetricCategory.FRAME, group:"Frame", unit:MetricUnit.FPS,          type:MetricType.GAUGE, tags:Object.freeze(["frame"]) });
+      diag.lockRegistry();
+
+      const hash = new SpatialHash();
+      hash.diagnostics = diag;
+
+      hash.insert(1, 100, 100, 32, 32);
+
+      diag.beginFrame(1, 16.6);
+      const hits = hash.queryRect({ left:80, right:120, top:80, bottom:120 });
+      diag.endFrame();
+
+      const snap = diag.lastSnapshot;
+      const np = diag.metrics.find("physics.narrowphase");
+      assert.ok(np, "physics.narrowphase should be auto-registered");
+      assert.strictEqual(snap.timerCount(np.id), 1);
+      assert.deepStrictEqual(hits, [1]);
+    });
+  });
+
+  // ─── StreamingManager ──────────────────────────────
+
+  describe("StreamingManager", () => {
+    it("records streaming.* counters and gauges on load/unload", () => {
+      const world = new World();
+      const sm = new StreamingManager(world);
+      const diag = new Diagnostics();
+      diag.lockRegistry();
+
+      sm.diagnostics = diag;
+
+      sm.createCell("town");
+      sm.createCell("forest");
+
+      diag.beginFrame(1, 16.6);
+      sm.load("town");
+      diag.endFrame();
+
+      let snap = diag.lastSnapshot;
+      const loadedCells = diag.metrics.find("streaming.loadedCells");
+      const cellsLoaded = diag.metrics.find("streaming.cellsLoaded");
+      assert.ok(loadedCells, "streaming.loadedCells should exist");
+      assert.ok(cellsLoaded, "streaming.cellsLoaded should exist");
+      assert.strictEqual(snap.counter(cellsLoaded.id), 1);
+      assert.strictEqual(snap.gauge(loadedCells.id), 1);
+
+      diag.beginFrame(2, 16.6);
+      sm.load("forest");
+      diag.endFrame();
+
+      snap = diag.lastSnapshot;
+      assert.strictEqual(snap.counter(cellsLoaded.id), 1);
+      assert.strictEqual(snap.gauge(loadedCells.id), 2);
+
+      diag.beginFrame(3, 16.6);
+      sm.unload("town");
+      diag.endFrame();
+
+      snap = diag.lastSnapshot;
+      const cellsUnloaded = diag.metrics.find("streaming.cellsUnloaded");
+      assert.ok(cellsUnloaded, "streaming.cellsUnloaded should exist");
+      assert.strictEqual(snap.counter(cellsUnloaded.id), 1);
+      assert.strictEqual(snap.gauge(loadedCells.id), 1);
+    });
+  });
+
+  // ─── SceneManager ──────────────────────────────────
+
+  describe("SceneManager", () => {
+    it("emits frame events on scene transitions", () => {
+      const mgr = new SceneManager();
+      const diag = new Diagnostics();
+      diag.registerMetric({ name:"frame.delta", category:MetricCategory.FRAME, group:"Frame", unit:MetricUnit.MILLISECONDS, type:MetricType.GAUGE, tags:Object.freeze(["frame"]) });
+      diag.registerMetric({ name:"frame.fps",   category:MetricCategory.FRAME, group:"Frame", unit:MetricUnit.FPS,          type:MetricType.GAUGE, tags:Object.freeze(["frame"]) });
+      diag.lockRegistry();
+
+      mgr.diagnostics = diag;
+
+      const sceneA = { name:"SceneA", onCreate(){}, onEnter(){}, onExit(){}, onDestroy(){}, onPause(){}, onResume(){} };
+      const sceneB = { name:"SceneB", onCreate(){}, onEnter(){}, onExit(){}, onDestroy(){}, onPause(){}, onResume(){} };
+      mgr.add(sceneA);
+      mgr.add(sceneB);
+
+      diag.beginFrame(1, 16.6);
+      mgr.start("SceneA");
+      diag.endFrame();
+
+      let snap = diag.lastSnapshot;
+      assert.strictEqual(snap.events.length, 1);
+      assert.strictEqual(snap.events[0].category, "scene");
+      assert.strictEqual(snap.events[0].name, "Transition");
+      assert.strictEqual(snap.events[0].metadata.scene, "SceneA");
+
+      diag.beginFrame(2, 16.6);
+      mgr.push("SceneB");
+      diag.endFrame();
+
+      snap = diag.lastSnapshot;
+      assert.strictEqual(snap.events.length, 1);
+      assert.strictEqual(snap.events[0].name, "Push");
+      assert.strictEqual(snap.events[0].metadata.scene, "SceneB");
+
+      diag.beginFrame(3, 16.6);
+      mgr.pop();
+      diag.endFrame();
+
+      snap = diag.lastSnapshot;
+      assert.strictEqual(snap.events.length, 1);
+      assert.strictEqual(snap.events[0].name, "Pop");
+    });
   });
 });
 

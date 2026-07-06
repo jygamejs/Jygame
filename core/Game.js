@@ -1,6 +1,8 @@
 import { Clock } from "../time/Clock.js";
 import { Input, InputContext } from "../input/Input.js";
 import { Scene } from "./Scene.js";
+import { Diagnostics, MetricCategory, MetricUnit, MetricType }
+  from "../debug/index.js";
 
 export class Game {
   constructor({ parent, width, height, fps = 60, maxTicks = 5, autoPause = true, scaleToFit = null }) {

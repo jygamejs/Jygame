@@ -6,10 +6,35 @@ import { Visible } from "../components/Visible.js";
 import { Camera } from "../../camera/Camera.js";
 import { RenderQueue } from "../render/RenderQueue.js";
 import { CanvasContext } from "../render/CanvasContext.js";
+import { Diagnostics, MetricCategory, MetricUnit, MetricType }
+  from "../../debug/index.js";
 
 export class RenderSystem extends System {
   static query = { all: [Transform, Renderable, RenderBounds, Visible] };
   static priority = 3;
+
+  _initDiag(diag) {
+    if (this._diagInitDone) return;
+    this._diagInitDone = true;
+    this._diagDrawId = diag.registerDynamicMetric({
+      name: "render.draw",
+      displayName: "Render Draw",
+      category: MetricCategory.RENDER,
+      group: "Render",
+      unit: MetricUnit.MILLISECONDS,
+      type: MetricType.TIMER,
+      tags: Object.freeze(["render"]),
+    });
+    this._diagDrawCallsId = diag.registerDynamicMetric({
+      name: "render.drawCalls",
+      displayName: "Draw Calls",
+      category: MetricCategory.RENDER,
+      group: "Render",
+      unit: MetricUnit.COUNT,
+      type: MetricType.GAUGE,
+      tags: Object.freeze(["render"]),
+    });
+  }
 
   update(ctx, dt) {
     const tid = this._compiled.componentIds.get(Transform);
@@ -17,6 +42,9 @@ export class RenderSystem extends System {
     const rbid = this._compiled.componentIds.get(RenderBounds);
     const vid = this._compiled.componentIds.get(Visible);
     if (tid === undefined || rid === undefined || rbid === undefined || vid === undefined) return;
+
+    const diag = ctx.resources.get(Diagnostics);
+    if (diag) this._initDiag(diag);
 
     const queue = ctx.resources.get(RenderQueue);
     if (!queue) {
@@ -65,6 +93,16 @@ export class RenderSystem extends System {
       }
     }
 
-    queue.execute(canvas, camera);
+    if (diag && this._diagDrawId !== undefined) {
+      diag.scope(this._diagDrawId, () => {
+        queue.execute(canvas, camera);
+      });
+    } else {
+      queue.execute(canvas, camera);
+    }
+
+    if (diag && this._diagDrawCallsId !== undefined) {
+      diag.recordGauge(this._diagDrawCallsId, queue.count);
+    }
   }
 }
