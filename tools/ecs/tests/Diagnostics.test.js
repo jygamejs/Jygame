@@ -1667,6 +1667,106 @@ describe("Diagnostics Aggregate Timing", () => {
   });
 });
 
+// ─── Commit 4: World-State Gauges ────────────
+
+describe("Diagnostics World-State Gauges", () => {
+  function _registerWorldGaugeMetrics(diag) {
+    diag.registerMetric({ name:"frame.delta",         category:MetricCategory.FRAME, group:"Frame",  unit:MetricUnit.MILLISECONDS, type:MetricType.GAUGE,   tags:Object.freeze(["frame"]) });
+    diag.registerMetric({ name:"frame.fps",           category:MetricCategory.FRAME, group:"Frame",  unit:MetricUnit.FPS,          type:MetricType.GAUGE,   tags:Object.freeze(["frame"]) });
+    diag.registerMetric({ name:"frame.update",        category:MetricCategory.FRAME, group:"Frame",  unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,   tags:Object.freeze(["frame","ecs"]) });
+    diag.registerMetric({ name:"ecs.world.entities",  category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
+    diag.registerMetric({ name:"ecs.world.archetypes",category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
+    diag.registerMetric({ name:"ecs.world.systems",   category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
+    diag.registerMetric({ name:"ecs.world.components",category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
+    diag.registerMetric({ name:"ecs.world.tables",    category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
+    diag.registerMetric({ name:"ecs.world.capacity",  category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
+    diag.registerMetric({ name:"ecs.entitiesCreated", category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["ecs"]) });
+    diag.registerMetric({ name:"ecs.entitiesDestroyed",category:MetricCategory.ECS,  group:"World", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["ecs"]) });
+    diag.registerMetric({ name:"ecs.systems.total",   category:MetricCategory.ECS,   group:"Scheduler", unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,   tags:Object.freeze(["ecs","scheduler"]) });
+  }
+
+  it("records component count matching registered component types", () => {
+    const world = new World();
+    world.register(FakeC1);
+    world.register(FakeC2);
+    const diag = new Diagnostics();
+    _registerWorldGaugeMetrics(diag);
+    world.setResource(Diagnostics, diag);
+
+    class DummySys extends System {
+      update(ctx, dt) {}
+    }
+    world.addSystem(new DummySys());
+    diag.lockRegistry();
+
+    world.update(1 / 60);
+    const snap = diag.lastSnapshot;
+    const compGauge = diag.metrics.find("ecs.world.components");
+    assert.ok(compGauge, "ecs.world.components should be registered");
+    assert.strictEqual(snap.gauge(compGauge.id), 2, "should equal registered component types (FakeC1, FakeC2)");
+  });
+
+  it("table count grows as archetypes are created", () => {
+    const world = new World();
+    world.register(FakeC1);
+    world.register(FakeC2);
+    const diag = new Diagnostics();
+    _registerWorldGaugeMetrics(diag);
+    world.setResource(Diagnostics, diag);
+
+    let e, step;
+    class ArchCreator extends System {
+      update(ctx, dt) {
+        if (e === undefined) {
+          e = ctx.world.createEntity();
+          step = 0;
+        }
+        if (step === 0) {
+          ctx.world.addComponent(e, FakeC1);
+          step = 1;
+        } else if (step === 1) {
+          ctx.world.addComponent(e, FakeC2);
+          step = 2;
+        }
+      }
+    }
+    world.addSystem(new ArchCreator());
+    diag.lockRegistry();
+
+    const tablesGauge = diag.metrics.find("ecs.world.tables");
+
+    // Frame 1: entity in empty archetype (1 table exists from construction)
+    world.update(1 / 60);
+    let snap = diag.lastSnapshot;
+    assert.strictEqual(snap.gauge(tablesGauge.id), 2, "empty + {FakeC1} = 2 tables");
+
+    // Frame 2: add FakeC2 → {FakeC1,FakeC2} archetype created
+    world.update(1 / 60);
+    snap = diag.lastSnapshot;
+    assert.strictEqual(snap.gauge(tablesGauge.id), 3, "empty + {FakeC1} + {FakeC1,FakeC2} = 3 tables");
+  });
+
+  it("entity capacity reflects EntityManager pre-allocation", () => {
+    const world = new World({ initialCapacity: 128 });
+    world.register(FakeC1);
+    const diag = new Diagnostics();
+    _registerWorldGaugeMetrics(diag);
+    world.setResource(Diagnostics, diag);
+
+    class DummySys extends System {
+      update(ctx, dt) {}
+    }
+    world.addSystem(new DummySys());
+    diag.lockRegistry();
+
+    world.update(1 / 60);
+    const snap = diag.lastSnapshot;
+    const capGauge = diag.metrics.find("ecs.world.capacity");
+    assert.ok(capGauge, "ecs.world.capacity should be registered");
+    assert.strictEqual(snap.gauge(capGauge.id), 128, "capacity should match initialCapacity option");
+  });
+});
+
 // ─── Commit 3: Query Instrumentation ───────────
 
 describe("Diagnostics Query Instrumentation", () => {

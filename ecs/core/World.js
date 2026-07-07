@@ -682,6 +682,9 @@ export class World {
       entitiesDestroyed: diag.metrics.find("ecs.entitiesDestroyed"),
       componentsAdded: diag.metrics.find("ecs.componentsAdded"),
       componentsRemoved: diag.metrics.find("ecs.componentsRemoved"),
+      worldComponents: diag.metrics.find("ecs.world.components"),
+      worldTables: diag.metrics.find("ecs.world.tables"),
+      worldCapacity: diag.metrics.find("ecs.world.capacity"),
     };
     this._diagMetricIds = mids;
     return mids;
@@ -711,6 +714,9 @@ export class World {
         if (mids.worldEntities) diag.recordGauge(mids.worldEntities.id, this._entityManager.aliveCount);
         if (mids.worldArchetypes) diag.recordGauge(mids.worldArchetypes.id, this._archetypeSystem.archetypeCount);
         if (mids.worldSystems) diag.recordGauge(mids.worldSystems.id, this._scheduler.systemCount);
+        if (mids.worldComponents) diag.recordGauge(mids.worldComponents.id, this._registry.componentCount);
+        if (mids.worldTables) diag.recordGauge(mids.worldTables.id, this._archetypeSystem.archetypeCount);
+        if (mids.worldCapacity) diag.recordGauge(mids.worldCapacity.id, this._entityManager.capacity);
         diag.endFrame();
       }
       this._events.clear();
