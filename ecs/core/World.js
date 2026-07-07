@@ -696,23 +696,24 @@ export class World {
       diag.beginFrame(this._frameCount++, dtMs);
     }
 
-    if (diag && mids && mids.frameUpdate) {
-      diag.scope(mids.frameUpdate.id, () => {
+    try {
+      if (diag && mids && mids.frameUpdate) {
+        diag.scope(mids.frameUpdate.id, () => {
+          this._scheduler.update(dt);
+        });
+      } else {
         this._scheduler.update(dt);
-      });
-    } else {
-      this._scheduler.update(dt);
-    }
-
-    this._events.clear();
-
-    if (diag && mids) {
-      if (mids.frameDelta) diag.recordGauge(mids.frameDelta.id, dtMs);
-      if (mids.frameFps) diag.recordGauge(mids.frameFps.id, dtMs > 0 ? 1000 / dtMs : 0);
-      if (mids.worldEntities) diag.recordGauge(mids.worldEntities.id, this._entityManager.aliveCount);
-      if (mids.worldArchetypes) diag.recordGauge(mids.worldArchetypes.id, this._archetypeSystem.archetypeCount);
-      if (mids.worldSystems) diag.recordGauge(mids.worldSystems.id, this._scheduler.systemCount);
-      diag.endFrame();
+      }
+    } finally {
+      if (diag && mids) {
+        if (mids.frameDelta) diag.recordGauge(mids.frameDelta.id, dtMs);
+        if (mids.frameFps) diag.recordGauge(mids.frameFps.id, dtMs > 0 ? 1000 / dtMs : 0);
+        if (mids.worldEntities) diag.recordGauge(mids.worldEntities.id, this._entityManager.aliveCount);
+        if (mids.worldArchetypes) diag.recordGauge(mids.worldArchetypes.id, this._archetypeSystem.archetypeCount);
+        if (mids.worldSystems) diag.recordGauge(mids.worldSystems.id, this._scheduler.systemCount);
+        diag.endFrame();
+      }
+      this._events.clear();
     }
   }
 

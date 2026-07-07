@@ -25,6 +25,7 @@ export class SystemScheduler {
     this._needsSort = false;
     this._insideUpdate = false;
     this._world = null;
+    this._ecsSystemsTotalId = undefined;
   }
 
   get systemCount() {
@@ -178,23 +179,38 @@ export class SystemScheduler {
       }
 
       const diag = typeof this._world.getResource === 'function' ? this._world.getResource(Diagnostics) : null;
-      const systems = this._sortedSystems;
-      for (let i = 0; i < systems.length; i++) {
-        const system = systems[i];
-        if (!system.enabled) continue;
-        system._ctx._refresh(dt);
-        if (diag && system._diagMetricId !== undefined) {
-          diag.scope(system._diagMetricId, () => {
-            system.update(system._ctx, dt);
-          });
-          diag.recordGauge(system._diagEntityMetricId, system._ctx.entityCount);
-          diag.recordGauge(system._diagTableMetricId, system._ctx.tables().length);
-        } else {
-          system.update(system._ctx, dt);
-        }
+      if (diag && this._ecsSystemsTotalId === undefined) {
+        const m = diag.metrics.find("ecs.systems.total");
+        if (m) this._ecsSystemsTotalId = m.id;
+      }
+
+      if (diag && this._ecsSystemsTotalId !== undefined) {
+        diag.scope(this._ecsSystemsTotalId, () => {
+          this._executeSystems(diag, dt);
+        });
+      } else {
+        this._executeSystems(diag, dt);
       }
     } finally {
       this._insideUpdate = false;
+    }
+  }
+
+  _executeSystems(diag, dt) {
+    const systems = this._sortedSystems;
+    for (let i = 0; i < systems.length; i++) {
+      const system = systems[i];
+      if (!system.enabled) continue;
+      system._ctx._refresh(dt);
+      if (diag && system._diagMetricId !== undefined) {
+        diag.scope(system._diagMetricId, () => {
+          system.update(system._ctx, dt);
+        });
+        diag.recordGauge(system._diagEntityMetricId, system._ctx.entityCount);
+        diag.recordGauge(system._diagTableMetricId, system._ctx.tables().length);
+      } else {
+        system.update(system._ctx, dt);
+      }
     }
   }
 

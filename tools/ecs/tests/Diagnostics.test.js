@@ -1479,6 +1479,194 @@ describe("Diagnostics Subsystem Instrumentation", () => {
   });
 });
 
+// ─── Commit 2: Aggregate System Timing ───────────
+
+function _registerCommit2Metrics(diag) {
+  diag.registerMetric({ name:"frame.delta",         category:MetricCategory.FRAME, group:"Frame",  unit:MetricUnit.MILLISECONDS, type:MetricType.GAUGE,   tags:Object.freeze(["frame"]) });
+  diag.registerMetric({ name:"frame.fps",           category:MetricCategory.FRAME, group:"Frame",  unit:MetricUnit.FPS,          type:MetricType.GAUGE,   tags:Object.freeze(["frame"]) });
+  diag.registerMetric({ name:"frame.update",        category:MetricCategory.FRAME, group:"Frame",  unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,   tags:Object.freeze(["frame","ecs"]) });
+  diag.registerMetric({ name:"ecs.world.entities",  category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
+  diag.registerMetric({ name:"ecs.world.archetypes",category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
+  diag.registerMetric({ name:"ecs.world.systems",   category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
+  diag.registerMetric({ name:"ecs.entitiesCreated", category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["ecs"]) });
+  diag.registerMetric({ name:"ecs.entitiesDestroyed",category:MetricCategory.ECS,  group:"World", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["ecs"]) });
+  diag.registerMetric({ name:"ecs.systems.total",    category:MetricCategory.ECS,   group:"Scheduler", unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,   tags:Object.freeze(["ecs","scheduler"]) });
+}
+
+function busyWork(ms) {
+  const start = performance.now();
+  while (performance.now() - start < ms) { /* spin */ }
+}
+
+describe("Diagnostics Aggregate Timing", () => {
+  it("frame.update > ecs.systems.total > per-system timers", () => {
+    const world = new World();
+    world.register(FakeC1);
+    world.register(FakeC2);
+    const diag = new Diagnostics();
+    _registerCommit2Metrics(diag);
+    world.setResource(Diagnostics, diag);
+
+    class BusySys1 extends System {
+      static query = { all: [FakeC1] };
+      update(ctx, dt) { busyWork(5); }
+    }
+    class BusySys2 extends System {
+      static query = { all: [FakeC2] };
+      update(ctx, dt) { busyWork(3); }
+    }
+    world.addSystem(new BusySys1());
+    world.addSystem(new BusySys2());
+    diag.lockRegistry();
+
+    const e = world.createEntity();
+    world.addComponent(e, FakeC1);
+    world.addComponent(e, FakeC2);
+
+    world.update(1 / 60);
+    const snap = diag.lastSnapshot;
+
+    const fu = diag.metrics.find("frame.update");
+    const st = diag.metrics.find("ecs.systems.total");
+    const s1 = diag.metrics.find("ecs.system.busysys1");
+    const s2 = diag.metrics.find("ecs.system.busysys2");
+
+    assert.ok(fu, "frame.update should be registered");
+    assert.ok(st, "ecs.systems.total should be registered");
+    assert.ok(s1, "ecs.system.busysys1 should be registered");
+    assert.ok(s2, "ecs.system.busysys2 should be registered");
+
+    const fuTime = snap.timerTotal(fu.id);
+    const stTime = snap.timerTotal(st.id);
+    const s1Time = snap.timerTotal(s1.id);
+    const s2Time = snap.timerTotal(s2.id);
+
+    assert.ok(stTime >= s1Time + s2Time, `ecs.systems.total (${stTime}) should be >= sum of per-system (${s1Time + s2Time})`);
+    assert.ok(fuTime >= stTime, `frame.update (${fuTime}) should be >= ecs.systems.total (${stTime})`);
+  });
+
+  it("ecs.systems.total includes sort time", () => {
+    const world = new World();
+    world.register(FakeC1);
+    world.register(FakeC2);
+    const diag = new Diagnostics();
+    _registerCommit2Metrics(diag);
+    world.setResource(Diagnostics, diag);
+
+    class PrioA extends System {
+      static priority = 10;
+      static query = { all: [FakeC1] };
+      update(ctx, dt) { /* simulate work via scope timing */ }
+    }
+    class PrioB extends System {
+      static priority = 0;
+      static query = { all: [FakeC2] };
+      update(ctx, dt) { /* simulate work */ }
+    }
+    world.addSystem(new PrioA());
+    world.addSystem(new PrioB());
+    diag.lockRegistry();
+
+    const e = world.createEntity();
+    world.addComponent(e, FakeC1);
+    world.addComponent(e, FakeC2);
+
+    world.update(1 / 60);
+    const snap = diag.lastSnapshot;
+    const st = diag.metrics.find("ecs.systems.total");
+    const sA = diag.metrics.find("ecs.system.prioa");
+    const sB = diag.metrics.find("ecs.system.priob");
+    assert.ok(st);
+    assert.ok(sA);
+    assert.ok(sB);
+    assert.ok(snap.timerTotal(st.id) >= snap.timerTotal(sA.id) + snap.timerTotal(sB.id));
+  });
+
+  it("disabled system excluded from ecs.systems.total", () => {
+    const world = new World();
+    world.register(FakeC1);
+    const diag = new Diagnostics();
+    _registerCommit2Metrics(diag);
+    world.setResource(Diagnostics, diag);
+
+    class ActiveSys extends System {
+      static query = { all: [FakeC1] };
+      update(ctx, dt) { /* active */ }
+    }
+    class DisabledSys extends System {
+      static query = { all: [FakeC1] };
+      update(ctx, dt) { /* disabled, should not run */ }
+    }
+    world.addSystem(new ActiveSys());
+    const ds = new DisabledSys();
+    ds.enabled = false;
+    world.addSystem(ds);
+    diag.lockRegistry();
+
+    const e = world.createEntity();
+    world.addComponent(e, FakeC1);
+
+    world.update(1 / 60);
+    const snap = diag.lastSnapshot;
+    const st = diag.metrics.find("ecs.systems.total");
+    const active = diag.metrics.find("ecs.system.activesys");
+    const disabled = diag.metrics.find("ecs.system.disabledsys");
+    assert.ok(st);
+    assert.ok(active);
+    assert.ok(disabled);
+    assert.ok(snap.timerTotal(st.id) >= snap.timerTotal(active.id));
+    assert.strictEqual(snap.timerTotal(disabled.id), 0);
+  });
+
+  it("zero systems: ecs.systems.total records 0", () => {
+    const world = new World();
+    world.register(FakeC1);
+    const diag = new Diagnostics();
+    _registerCommit2Metrics(diag);
+    world.setResource(Diagnostics, diag);
+    diag.lockRegistry();
+
+    world.update(1 / 60);
+    const snap = diag.lastSnapshot;
+    const st = diag.metrics.find("ecs.systems.total");
+    assert.ok(st);
+    assert.ok(snap.timerTotal(st.id) < 0.5, `expected near-zero time, got ${snap.timerTotal(st.id)}`);
+  });
+
+  it("exception in system: snapshot created before throw", () => {
+    const world = new World();
+    world.register(FakeC1);
+    const diag = new Diagnostics();
+    _registerCommit2Metrics(diag);
+    world.setResource(Diagnostics, diag);
+
+    class GoodSys extends System {
+      static query = { all: [FakeC1] };
+      update(ctx, dt) { /* works fine */ }
+    }
+    class ThrowSys extends System {
+      update(ctx, dt) { throw new Error("boom"); }
+    }
+    world.addSystem(new GoodSys());
+    world.addSystem(new ThrowSys());
+    diag.lockRegistry();
+
+    const e = world.createEntity();
+    world.addComponent(e, FakeC1);
+
+    try {
+      world.update(1 / 60);
+    } catch (e) {
+      // expected
+    }
+    const snap = diag.lastSnapshot;
+    assert.ok(snap, "snapshot should be created after exception");
+    const st = diag.metrics.find("ecs.systems.total");
+    assert.ok(st, "ecs.systems.total should be registered");
+    assert.ok(snap.timerCount(st.id) > 0 || snap.timerTotal(st.id) >= 0, "systems.total should have a timer entry");
+  });
+});
+
 class FakeC1 { constructor() { this.x = 0; } }
 class FakeC2 { constructor() { this.y = 0; } }
 

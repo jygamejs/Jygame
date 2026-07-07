@@ -45,6 +45,7 @@ function _registerStandardMetrics(diag) {
   diag.registerMetric({ name:"ecs.world.components", displayName:"Components",       category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT, type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
   diag.registerMetric({ name:"ecs.world.tables",     displayName:"Tables",           category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT, type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
   diag.registerMetric({ name:"ecs.world.capacity",   displayName:"Entity Capacity",  category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT, type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
+  diag.registerMetric({ name:"ecs.systems.total",    displayName:"Systems Total",    category:MetricCategory.ECS,   group:"Scheduler", unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,  tags:Object.freeze(["ecs","scheduler"]) });
 }
 
 export class DefaultWorldBuilder {
