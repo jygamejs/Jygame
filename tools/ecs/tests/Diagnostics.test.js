@@ -22,6 +22,7 @@ import { CanvasContext } from "../../../ecs/render/CanvasContext.js";
 import { CollisionSystem } from "../../../ecs/systems/CollisionSystem.js";
 import { SpatialHash } from "../../../collision/SpatialHash.js";
 import { Transform } from "../../../ecs/components/Transform.js";
+import { Velocity } from "../../../ecs/components/Velocity.js";
 import { Renderable } from "../../../ecs/components/Renderable.js";
 import { RenderBounds } from "../../../ecs/components/RenderBounds.js";
 import { Visible } from "../../../ecs/components/Visible.js";
@@ -861,6 +862,296 @@ describe("Diagnostics ECS Integration", () => {
   });
 });
 
+// ─── Commit 1: Structural Change Metrics (Phase 2) ──
+
+function _registerStructuralMetrics(diag) {
+  diag.registerMetric({ name:"frame.delta",         category:MetricCategory.FRAME, group:"Frame",  unit:MetricUnit.MILLISECONDS, type:MetricType.GAUGE,   tags:Object.freeze(["frame"]) });
+  diag.registerMetric({ name:"frame.fps",           category:MetricCategory.FRAME, group:"Frame",  unit:MetricUnit.FPS,          type:MetricType.GAUGE,   tags:Object.freeze(["frame"]) });
+  diag.registerMetric({ name:"frame.update",        category:MetricCategory.FRAME, group:"Frame",  unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,   tags:Object.freeze(["frame","ecs"]) });
+  diag.registerMetric({ name:"ecs.world.entities",  category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
+  diag.registerMetric({ name:"ecs.world.archetypes",category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
+  diag.registerMetric({ name:"ecs.world.systems",   category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
+  diag.registerMetric({ name:"ecs.entitiesCreated", category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["ecs"]) });
+  diag.registerMetric({ name:"ecs.entitiesDestroyed",category:MetricCategory.ECS,  group:"World", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["ecs"]) });
+  diag.registerMetric({ name:"ecs.componentsAdded",  category:MetricCategory.ECS,   group:"Changes", unit:MetricUnit.COUNT, type:MetricType.COUNTER, tags:Object.freeze(["ecs"]) });
+  diag.registerMetric({ name:"ecs.componentsRemoved",category:MetricCategory.ECS,  group:"Changes", unit:MetricUnit.COUNT, type:MetricType.COUNTER, tags:Object.freeze(["ecs"]) });
+  diag.registerMetric({ name:"ecs.entitiesMigrated", category:MetricCategory.ECS,  group:"Changes", unit:MetricUnit.COUNT, type:MetricType.COUNTER, tags:Object.freeze(["ecs"]) });
+  diag.registerMetric({ name:"ecs.archetypesCreated",category:MetricCategory.ECS,  group:"Changes", unit:MetricUnit.COUNT, type:MetricType.COUNTER, tags:Object.freeze(["ecs"]) });
+}
+
+describe("Diagnostics Structural Changes", () => {
+  it("records componentsAdded counter on addComponent", () => {
+    const world = new World();
+    world.register(Transform);
+    const diag = new Diagnostics();
+    _registerStructuralMetrics(diag);
+    world.setResource(Diagnostics, diag);
+
+    let e;
+    class Adder extends System {
+      update(ctx, dt) {
+        if (e === undefined) e = ctx.world.createEntity();
+        ctx.world.addComponent(e, Transform);
+      }
+    }
+    world.addSystem(new Adder());
+    diag.lockRegistry();
+
+    world.update(1 / 60);
+    const snap = diag.lastSnapshot;
+    const addedId = diag.metrics.find("ecs.componentsAdded").id;
+    assert.strictEqual(snap.counter(addedId), 1);
+  });
+
+  it("records componentsRemoved counter on removeComponent", () => {
+    const world = new World();
+    world.register(Transform);
+    const diag = new Diagnostics();
+    _registerStructuralMetrics(diag);
+    world.setResource(Diagnostics, diag);
+
+    let e;
+    class Remover extends System {
+      update(ctx, dt) {
+        if (e === undefined) {
+          e = ctx.world.createEntity();
+          ctx.world.addComponent(e, Transform);
+        } else {
+          ctx.world.removeComponent(e, Transform);
+        }
+      }
+    }
+    world.addSystem(new Remover());
+    diag.lockRegistry();
+
+    world.update(1 / 60); // first frame: create + add
+    world.update(1 / 60); // second frame: remove
+    const snap = diag.lastSnapshot;
+    const removedId = diag.metrics.find("ecs.componentsRemoved").id;
+    assert.strictEqual(snap.counter(removedId), 1);
+  });
+
+  it("records componentsAdded for addMany and componentsRemoved for removeMany", () => {
+    const world = new World();
+    world.register(Transform);
+    world.register(Velocity);
+    const diag = new Diagnostics();
+    _registerStructuralMetrics(diag);
+    world.setResource(Diagnostics, diag);
+
+    let e, phase;
+    class Batch extends System {
+      update(ctx, dt) {
+        if (e === undefined) {
+          e = ctx.world.createEntity();
+          phase = 0;
+        }
+        if (phase === 0) {
+          ctx.world.addMany(e, Transform, Velocity);
+          phase = 1;
+        } else if (phase === 1) {
+          ctx.world.removeMany(e, Transform, Velocity);
+          phase = 2;
+        }
+      }
+    }
+    world.addSystem(new Batch());
+    diag.lockRegistry();
+
+    world.update(1 / 60); // addMany
+    let snap = diag.lastSnapshot;
+    const addedId = diag.metrics.find("ecs.componentsAdded").id;
+    assert.strictEqual(snap.counter(addedId), 2);
+
+    world.update(1 / 60); // removeMany
+    snap = diag.lastSnapshot;
+    const removedId = diag.metrics.find("ecs.componentsRemoved").id;
+    assert.strictEqual(snap.counter(removedId), 2);
+  });
+
+  it("records entitiesMigrated counter on component add/remove", () => {
+    const world = new World();
+    world.register(Transform);
+    const diag = new Diagnostics();
+    _registerStructuralMetrics(diag);
+    world.setResource(Diagnostics, diag);
+
+    let e, step;
+    class Migrator extends System {
+      update(ctx, dt) {
+        if (e === undefined) {
+          e = ctx.world.createEntity();
+          step = 0;
+        }
+        if (step === 0) {
+          ctx.world.addComponent(e, Transform);
+          step = 1;
+        }
+      }
+    }
+    world.addSystem(new Migrator());
+    diag.lockRegistry();
+
+    world.update(1 / 60);
+    const snap = diag.lastSnapshot;
+    const migratedId = diag.metrics.find("ecs.entitiesMigrated").id;
+    assert.ok(snap.counter(migratedId) >= 1);
+  });
+
+  it("records entitiesMigrated counter on clear", () => {
+    const world = new World();
+    world.register(Transform);
+    const diag = new Diagnostics();
+    _registerStructuralMetrics(diag);
+    world.setResource(Diagnostics, diag);
+
+    let e, step;
+    class Clearer extends System {
+      update(ctx, dt) {
+        if (e === undefined) {
+          e = ctx.world.createEntity();
+          step = 0;
+        }
+        if (step === 0) {
+          ctx.world.addComponent(e, Transform);
+          step = 1;
+          return;
+        }
+        if (step === 1) {
+          ctx.world.clear(e);
+          step = 2;
+        }
+      }
+    }
+    world.addSystem(new Clearer());
+    diag.lockRegistry();
+
+    const migratedId = diag.metrics.find("ecs.entitiesMigrated").id;
+
+    world.update(1 / 60); // create + addComponent
+    world.update(1 / 60); // clear
+    const snap = diag.lastSnapshot;
+    assert.strictEqual(snap.counter(migratedId), 1);
+
+    world.update(1 / 60); // no changes → resets
+    const snap2 = diag.lastSnapshot;
+    assert.strictEqual(snap2.counter(migratedId), 0);
+  });
+
+  it("counters reset each frame (autoReset)", () => {
+    const world = new World();
+    world.register(Transform);
+    const diag = new Diagnostics();
+    _registerStructuralMetrics(diag);
+    world.setResource(Diagnostics, diag);
+
+    let e;
+    class OneShot extends System {
+      update(ctx, dt) {
+        if (e === undefined) {
+          e = ctx.world.createEntity();
+          ctx.world.addComponent(e, Transform);
+        }
+      }
+    }
+    world.addSystem(new OneShot());
+    diag.lockRegistry();
+
+    const addedId = diag.metrics.find("ecs.componentsAdded").id;
+    const migratedId = diag.metrics.find("ecs.entitiesMigrated").id;
+
+    world.update(1 / 60);
+    let snap = diag.lastSnapshot;
+    assert.strictEqual(snap.counter(addedId), 1);
+    assert.ok(snap.counter(migratedId) >= 1);
+
+    world.update(1 / 60);
+    snap = diag.lastSnapshot;
+    assert.strictEqual(snap.counter(addedId), 0);
+    assert.strictEqual(snap.counter(migratedId), 0);
+  });
+
+  it("archetypesCreated counter increments on new signature", () => {
+    const world = new World();
+    world.register(Transform);
+    world.register(Velocity);
+    const diag = new Diagnostics();
+    _registerStructuralMetrics(diag);
+    world.setResource(Diagnostics, diag);
+
+    let e, step;
+    class ArchCreator extends System {
+      update(ctx, dt) {
+        if (e === undefined) {
+          e = ctx.world.createEntity();
+          step = 0;
+        }
+        if (step === 0) {
+          ctx.world.addComponent(e, Transform);
+          step = 1;
+        }
+      }
+    }
+    world.addSystem(new ArchCreator());
+    diag.lockRegistry();
+
+    const archCreatedId = diag.metrics.find("ecs.archetypesCreated").id;
+
+    world.update(1 / 60);
+    const snap = diag.lastSnapshot;
+    assert.strictEqual(snap.counter(archCreatedId), 1, "addComponent should create one archetype");
+  });
+
+  it("archetypesCreated does not increment for existing archetype", () => {
+    const world = new World();
+    world.register(Transform);
+    const diag = new Diagnostics();
+    _registerStructuralMetrics(diag);
+    world.setResource(Diagnostics, diag);
+
+    let e1, e2, step;
+    class DuplicateArch extends System {
+      update(ctx, dt) {
+        if (e1 === undefined) {
+          e1 = ctx.world.createEntity();
+          e2 = ctx.world.createEntity();
+          step = 0;
+        }
+        if (step === 0) {
+          ctx.world.addComponent(e1, Transform);
+          step = 1;
+        } else if (step === 1) {
+          ctx.world.addComponent(e2, Transform);
+          step = 2;
+        }
+      }
+    }
+    world.addSystem(new DuplicateArch());
+    diag.lockRegistry();
+
+    const archCreatedId = diag.metrics.find("ecs.archetypesCreated").id;
+
+    world.update(1 / 60); // first addComponent creates archetype
+    world.update(1 / 60); // second addComponent reuses it
+    const snap = diag.lastSnapshot;
+    assert.strictEqual(snap.counter(archCreatedId), 0, "reusing existing archetype should not create new one");
+  });
+
+  it("does not record when Diagnostics is not set", () => {
+    const world = new World();
+    world.register(Transform);
+
+    class SafeSystem extends System {
+      update(ctx, dt) {
+        const e = ctx.world.createEntity();
+        ctx.world.addComponent(e, Transform);
+      }
+    }
+    world.addSystem(new SafeSystem());
+    world.update(1 / 60);
+  });
+});
+
 // ─── Commit 3: Subsystem Instrumentation ────────────
 
 describe("Diagnostics Subsystem Instrumentation", () => {
@@ -876,7 +1167,7 @@ describe("Diagnostics Subsystem Instrumentation", () => {
   // ─── RenderSystem ──────────────────────────────────
 
   describe("RenderSystem", () => {
-    it("records render.draw timer and render.drawCalls gauge", () => {
+    it("records render.draw timer and render.drawCalls counter", () => {
       const world = new World();
       world.register(Transform);
       world.register(Renderable);
@@ -915,7 +1206,7 @@ describe("Diagnostics Subsystem Instrumentation", () => {
       assert.ok(draw, "render.draw should be auto-registered");
       assert.ok(calls, "render.drawCalls should be auto-registered");
       assert.strictEqual(snap.timerCount(draw.id), 1);
-      assert.ok(snap.gauge(calls.id) >= 1);
+      assert.ok(snap.counter(calls.id) >= 1);
     });
 
     it("works without Diagnostics (no crash)", () => {

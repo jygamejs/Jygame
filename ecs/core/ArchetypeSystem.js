@@ -1,5 +1,8 @@
 import { ComponentSignature } from "./ComponentSignature.js";
 import { Table } from "./Table.js";
+import {
+  Diagnostics, MetricCategory, MetricUnit, MetricType,
+} from "../../debug/index.js";
 
 class Archetype {
   constructor(id, signature, table) {
@@ -41,6 +44,9 @@ export class ArchetypeSystem {
     this._idToArchetype = [];
     this._idToArchetype[0] = null;
     this.onArchetypeCreated = null;
+    this._diag = null;
+    this._diagMigrationsId = undefined;
+    this._diagArchetypesCreatedId = undefined;
 
     const emptySignature = new ComponentSignature([]);
     const emptyTable = new Table(registry, emptySignature, initialTableCapacity);
@@ -56,6 +62,36 @@ export class ArchetypeSystem {
 
   get version() {
     return this._nextArchetypeId - 1;
+  }
+
+  set diagnostics(diag) {
+    this._diag = diag;
+    if (diag) {
+      this._initDiag(diag);
+    }
+  }
+
+  _initDiag(diag) {
+    if (this._diagInitDone) return;
+    this._diagInitDone = true;
+    this._diagMigrationsId = diag.registerDynamicMetric({
+      name: "ecs.entitiesMigrated",
+      displayName: "Entities Migrated",
+      category: MetricCategory.ECS,
+      group: "Changes",
+      unit: MetricUnit.COUNT,
+      type: MetricType.COUNTER,
+      tags: Object.freeze(["ecs"]),
+    });
+    this._diagArchetypesCreatedId = diag.registerDynamicMetric({
+      name: "ecs.archetypesCreated",
+      displayName: "Archetypes Created",
+      category: MetricCategory.ECS,
+      group: "Changes",
+      unit: MetricUnit.COUNT,
+      type: MetricType.COUNTER,
+      tags: Object.freeze(["ecs"]),
+    });
   }
 
   getTable(signature) {
@@ -198,6 +234,10 @@ export class ArchetypeSystem {
       this.onArchetypeCreated(archetype);
     }
 
+    if (this._diag && this._diagArchetypesCreatedId !== undefined) {
+      this._diag.recordCounter(this._diagArchetypesCreatedId, 1);
+    }
+
     return archetype;
   }
 
@@ -237,6 +277,10 @@ export class ArchetypeSystem {
 
     if (sourceArchetype === targetArchetype) {
       return sourceRow;
+    }
+
+    if (this._diag && this._diagMigrationsId !== undefined) {
+      this._diag.recordCounter(this._diagMigrationsId, 1);
     }
 
     const targetTable = targetArchetype.table;

@@ -38,6 +38,13 @@ function _registerStandardMetrics(diag) {
   diag.registerMetric({ name:"ecs.world.systems",   displayName:"Systems",         category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
   diag.registerMetric({ name:"ecs.entitiesCreated", displayName:"Entities Created",category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["ecs"]) });
   diag.registerMetric({ name:"ecs.entitiesDestroyed",displayName:"Entities Destroyed",category:MetricCategory.ECS,group:"World", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["ecs"]) });
+  diag.registerMetric({ name:"ecs.componentsAdded",  displayName:"Components Added", category:MetricCategory.ECS,   group:"Changes", unit:MetricUnit.COUNT, type:MetricType.COUNTER, tags:Object.freeze(["ecs"]) });
+  diag.registerMetric({ name:"ecs.componentsRemoved",displayName:"Components Removed",category:MetricCategory.ECS, group:"Changes", unit:MetricUnit.COUNT, type:MetricType.COUNTER, tags:Object.freeze(["ecs"]) });
+  diag.registerMetric({ name:"ecs.entitiesMigrated", displayName:"Entities Migrated",category:MetricCategory.ECS,  group:"Changes", unit:MetricUnit.COUNT, type:MetricType.COUNTER, tags:Object.freeze(["ecs"]) });
+  diag.registerMetric({ name:"ecs.archetypesCreated",displayName:"Archetypes Created",category:MetricCategory.ECS, group:"Changes", unit:MetricUnit.COUNT, type:MetricType.COUNTER, tags:Object.freeze(["ecs"]) });
+  diag.registerMetric({ name:"ecs.world.components", displayName:"Components",       category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT, type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
+  diag.registerMetric({ name:"ecs.world.tables",     displayName:"Tables",           category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT, type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
+  diag.registerMetric({ name:"ecs.world.capacity",   displayName:"Entity Capacity",  category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT, type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
 }
 
 export class DefaultWorldBuilder {

@@ -31,7 +31,7 @@ export class RenderSystem extends System {
       category: MetricCategory.RENDER,
       group: "Render",
       unit: MetricUnit.COUNT,
-      type: MetricType.GAUGE,
+      type: MetricType.COUNTER,
       tags: Object.freeze(["render"]),
     });
   }
@@ -102,7 +102,7 @@ export class RenderSystem extends System {
     }
 
     if (diag && this._diagDrawCallsId !== undefined) {
-      diag.recordGauge(this._diagDrawCallsId, queue.count);
+      diag.recordCounter(this._diagDrawCallsId, queue.count);
     }
   }
 }

@@ -153,6 +153,10 @@ export class World {
         `World.setResource failed: resource key cannot be null or undefined.`
       );
     }
+    if (key === Diagnostics) {
+      this._archetypeSystem.diagnostics = value;
+      this._queryEngine.diagnostics = value;
+    }
     this._resources.set(key, value);
   }
 
@@ -257,6 +261,14 @@ export class World {
       return;
     }
 
+    const diag = this._resources.get(Diagnostics);
+    if (diag) {
+      const mids = this._diagMetricIds || this._initDiagMetricIds();
+      if (mids && mids.componentsAdded) {
+        diag.recordCounter(mids.componentsAdded.id, 1);
+      }
+    }
+
     const newSig = currentSig.add(componentId);
 
     this._clearEntityCache(entity);
@@ -295,6 +307,14 @@ export class World {
 
     if (!currentSig.contains(componentId)) {
       return;
+    }
+
+    const diag = this._resources.get(Diagnostics);
+    if (diag) {
+      const mids = this._diagMetricIds || this._initDiagMetricIds();
+      if (mids && mids.componentsRemoved) {
+        diag.recordCounter(mids.componentsRemoved.id, 1);
+      }
     }
 
     const newSig = currentSig.remove(componentId);
@@ -469,6 +489,14 @@ export class World {
     while (ni < newIds.length) result[ri++] = newIds[ni++];
     result.length = ri;
 
+    const diag = this._resources.get(Diagnostics);
+    if (diag && newIds.length > 0) {
+      const mids = this._diagMetricIds || this._initDiagMetricIds();
+      if (mids && mids.componentsAdded) {
+        diag.recordCounter(mids.componentsAdded.id, newIds.length);
+      }
+    }
+
     const newSig = new ComponentSignature(result);
     this._clearEntityCache(entity);
     this._archetypeSystem.moveEntity(entity, newSig);
@@ -510,6 +538,15 @@ export class World {
     keep.length = ki;
 
     if (keep.length === comps.length) return;
+
+    const removed = comps.length - keep.length;
+    const diag = this._resources.get(Diagnostics);
+    if (diag && removed > 0) {
+      const mids = this._diagMetricIds || this._initDiagMetricIds();
+      if (mids && mids.componentsRemoved) {
+        diag.recordCounter(mids.componentsRemoved.id, removed);
+      }
+    }
 
     const newSig = new ComponentSignature(keep);
     this._clearEntityCache(entity);
@@ -643,6 +680,8 @@ export class World {
       worldSystems: diag.metrics.find("ecs.world.systems"),
       entitiesCreated: diag.metrics.find("ecs.entitiesCreated"),
       entitiesDestroyed: diag.metrics.find("ecs.entitiesDestroyed"),
+      componentsAdded: diag.metrics.find("ecs.componentsAdded"),
+      componentsRemoved: diag.metrics.find("ecs.componentsRemoved"),
     };
     this._diagMetricIds = mids;
     return mids;
