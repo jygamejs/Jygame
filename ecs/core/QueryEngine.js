@@ -63,6 +63,19 @@ export class QueryEngine {
     this._queryCache = new Map();
     this._nextQueryId = 1;
     this._matchData = new Map();
+    this._diag = null;
+    this._diagScanCountId = undefined;
+    this._diagScanTimeId = undefined;
+  }
+
+  set diagnostics(diag) {
+    this._diag = diag;
+    if (diag) {
+      const scans = diag.metrics.find("ecs.query.scans");
+      const scanTime = diag.metrics.find("ecs.query.scanTime");
+      if (scans) this._diagScanCountId = scans.id;
+      if (scanTime) this._diagScanTimeId = scanTime.id;
+    }
   }
 
   createQuery({ all = [], any = [], none = [] } = {}) {
@@ -119,19 +132,27 @@ export class QueryEngine {
   }
 
   _scanAllArchetypes(query) {
-    const archetypes = [];
-    const count = this._archetypeSystem.archetypeCount;
+    const doScan = () => {
+      const archetypes = [];
+      const count = this._archetypeSystem.archetypeCount;
 
-    for (let id = 1; id <= count; id++) {
-      const archetype = this._archetypeSystem.getArchetypeById(id);
-      if (!archetype) continue;
+      for (let id = 1; id <= count; id++) {
+        const archetype = this._archetypeSystem.getArchetypeById(id);
+        if (!archetype) continue;
 
-      if (this._matchesSignature(archetype.signature, query)) {
-        archetypes.push(archetype);
+        if (this._matchesSignature(archetype.signature, query)) {
+          archetypes.push(archetype);
+        }
       }
-    }
 
-    return archetypes;
+      return archetypes;
+    };
+
+    if (this._diag && this._diagScanCountId !== undefined) {
+      this._diag.recordCounter(this._diagScanCountId, 1);
+      return this._diag.scope(this._diagScanTimeId, doScan);
+    }
+    return doScan();
   }
 
   _matchesSignature(signature, query) {

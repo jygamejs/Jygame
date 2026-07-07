@@ -1667,6 +1667,160 @@ describe("Diagnostics Aggregate Timing", () => {
   });
 });
 
+// ─── Commit 3: Query Instrumentation ───────────
+
+describe("Diagnostics Query Instrumentation", () => {
+  function _registerQueryMetrics(diag) {
+    diag.registerMetric({ name:"frame.delta",         category:MetricCategory.FRAME, group:"Frame",  unit:MetricUnit.MILLISECONDS, type:MetricType.GAUGE,   tags:Object.freeze(["frame"]) });
+    diag.registerMetric({ name:"frame.fps",           category:MetricCategory.FRAME, group:"Frame",  unit:MetricUnit.FPS,          type:MetricType.GAUGE,   tags:Object.freeze(["frame"]) });
+    diag.registerMetric({ name:"frame.update",        category:MetricCategory.FRAME, group:"Frame",  unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,   tags:Object.freeze(["frame","ecs"]) });
+    diag.registerMetric({ name:"ecs.world.entities",  category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
+    diag.registerMetric({ name:"ecs.world.archetypes",category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
+    diag.registerMetric({ name:"ecs.world.systems",   category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
+    diag.registerMetric({ name:"ecs.entitiesCreated", category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["ecs"]) });
+    diag.registerMetric({ name:"ecs.entitiesDestroyed",category:MetricCategory.ECS,  group:"World", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["ecs"]) });
+    diag.registerMetric({ name:"ecs.systems.total",   category:MetricCategory.ECS,   group:"Scheduler", unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,   tags:Object.freeze(["ecs","scheduler"]) });
+    diag.registerMetric({ name:"ecs.query.scans",     category:MetricCategory.ECS,   group:"Queries", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["ecs","query"]) });
+    diag.registerMetric({ name:"ecs.query.scanTime",  category:MetricCategory.ECS,   group:"Queries", unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,   tags:Object.freeze(["ecs","query"]) });
+  }
+
+  it("re-scan after archetype creation records counter and timer", () => {
+    const world = new World();
+    world.register(FakeC1);
+    world.register(FakeC2);
+    const diag = new Diagnostics();
+    _registerQueryMetrics(diag);
+    world.setResource(Diagnostics, diag);
+
+    let e, step;
+    class QueryUser extends System {
+      static query = { all: [FakeC1] };
+      update(ctx, dt) {
+        if (e === undefined) {
+          e = ctx.world.createEntity();
+          step = 0;
+        }
+        if (step === 0) {
+          ctx.world.addComponent(e, FakeC1);
+          step = 1;
+        } else if (step === 1) {
+          ctx.world.addComponent(e, FakeC2);
+          step = 2;
+        }
+      }
+    }
+    world.addSystem(new QueryUser());
+    diag.lockRegistry();
+
+    const scansId = diag.metrics.find("ecs.query.scans").id;
+    const scanTimeId = diag.metrics.find("ecs.query.scanTime").id;
+
+    // Frame 1: create entity + add FakeC1 → archetype {FakeC1} created → version 1→2
+    // _refresh happens BEFORE update, so version hasn't changed yet → no re-scan
+    world.update(1 / 60);
+    let snap = diag.lastSnapshot;
+    assert.strictEqual(snap.counter(scansId), 0, "no scan in frame 1 (version unchanged at _refresh time)");
+
+    // Frame 2: add FakeC2 → archetype {FakeC1,FakeC2} created → version 2→3
+    // _refresh sees version mismatch → re-scan recorded!
+    world.update(1 / 60);
+    snap = diag.lastSnapshot;
+    assert.strictEqual(snap.counter(scansId), 1, "re-scan triggered in frame 2 after version bump");
+    assert.strictEqual(snap.timerCount(scanTimeId), 1, "scan timer recorded one hit");
+    assert.ok(snap.timerTotal(scanTimeId) > 0, "scan time > 0");
+  });
+
+  it("re-scan timer total is non-negative", () => {
+    const world = new World();
+    world.register(FakeC1);
+    world.register(FakeC2);
+    const diag = new Diagnostics();
+    _registerQueryMetrics(diag);
+    world.setResource(Diagnostics, diag);
+
+    let e, step;
+    class QueryUser extends System {
+      static query = { all: [FakeC1] };
+      update(ctx, dt) {
+        if (e === undefined) {
+          e = ctx.world.createEntity();
+          step = 0;
+        }
+        if (step === 0) {
+          ctx.world.addComponent(e, FakeC1);
+          step = 1;
+        }
+      }
+    }
+    world.addSystem(new QueryUser());
+    diag.lockRegistry();
+
+    const scanTimeId = diag.metrics.find("ecs.query.scanTime").id;
+
+    world.update(1 / 60);
+    world.update(1 / 60);
+    const snap = diag.lastSnapshot;
+    assert.ok(snap.timerCount(scanTimeId) >= 1, "scan timer should have been recorded");
+    assert.ok(snap.timerTotal(scanTimeId) >= 0, "scan time should be non-negative");
+  });
+
+  it("stable archetype version does not re-scan", () => {
+    const world = new World();
+    world.register(FakeC1);
+    const diag = new Diagnostics();
+    _registerQueryMetrics(diag);
+    world.setResource(Diagnostics, diag);
+
+    let e;
+    class QueryUser extends System {
+      static query = { all: [FakeC1] };
+      update(ctx, dt) {
+        if (e === undefined) {
+          e = ctx.world.createEntity();
+          ctx.world.addComponent(e, FakeC1);
+        }
+      }
+    }
+    world.addSystem(new QueryUser());
+    diag.lockRegistry();
+
+    const scansId = diag.metrics.find("ecs.query.scans").id;
+
+    // Frame 1: create entity + add FakeC1 → version bump outside _refresh
+    world.update(1 / 60);
+    let snap = diag.lastSnapshot;
+    assert.strictEqual(snap.counter(scansId), 0);
+
+    // Frame 2: re-scan due to version change from frame 1
+    world.update(1 / 60);
+    snap = diag.lastSnapshot;
+    assert.strictEqual(snap.counter(scansId), 1);
+
+    // Frame 3: stable version → no re-scan
+    world.update(1 / 60);
+    snap = diag.lastSnapshot;
+    assert.strictEqual(snap.counter(scansId), 0, "stable version produces no re-scan");
+  });
+
+  it("no Diagnostics: scan still works, no recording", () => {
+    const world = new World();
+    world.register(FakeC1);
+    world.register(FakeC2);
+
+    class SilentSys extends System {
+      static query = { all: [FakeC1] };
+      update(ctx, dt) {
+        const e = ctx.world.createEntity();
+        ctx.world.addComponent(e, FakeC1);
+      }
+    }
+    world.addSystem(new SilentSys());
+
+    world.update(1 / 60);
+    assert.ok(true, "query engine works without diagnostics");
+  });
+});
+
 class FakeC1 { constructor() { this.x = 0; } }
 class FakeC2 { constructor() { this.y = 0; } }
 
