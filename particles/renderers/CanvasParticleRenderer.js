@@ -9,6 +9,16 @@ export class CanvasParticleRenderer extends ParticleRenderer {
     this._cmdBuffer = new ParticleRenderCommandBuffer();
   }
 
+  set diagnostics(diag) {
+    this._diag = diag;
+    if (diag) {
+      const sprites = diag.metrics.find("render.particles.sprites");
+      if (sprites) this._diagSpritesId = sprites.id;
+      const primitives = diag.metrics.find("render.particles.primitives");
+      if (primitives) this._diagPrimitivesId = primitives.id;
+    }
+  }
+
   render(data, ctx) {
     if (data.count === 0) return;
 
@@ -34,6 +44,8 @@ export class CanvasParticleRenderer extends ParticleRenderer {
       ctx.restore();
       return;
     }
+
+    let sprites = 0, primitives = 0;
 
     for (let i = 0; i < buffer.count; i++) {
       const off = i * stride;
@@ -69,12 +81,21 @@ export class CanvasParticleRenderer extends ParticleRenderer {
           ctx.drawImage(texture, -w * originX, -h * originY, w, h);
         }
         ctx.restore();
+        sprites++;
       } else {
         ctx.fillStyle = `rgb(${r},${g},${b})`;
         ctx.fillRect(x - size * 0.5, y - size * 0.5, size, size);
+        primitives++;
       }
     }
 
     ctx.restore();
+
+    if (this._diag) {
+      if (this._diagSpritesId !== undefined)
+        this._diag.recordCounter(this._diagSpritesId, sprites);
+      if (this._diagPrimitivesId !== undefined)
+        this._diag.recordCounter(this._diagPrimitivesId, primitives);
+    }
   }
 }

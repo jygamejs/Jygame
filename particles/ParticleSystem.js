@@ -104,9 +104,16 @@ export class ParticleSystem {
   }
 
   render(ctx) {
-    if (this._diagnostics) {
-      this._initDiag(this._diagnostics);
-      this._diagnostics.scope(this._diagDrawId, () => {
+    const diag = this._diagnostics;
+
+    if (diag) {
+      this._initDiag(diag);
+
+      if (this._backend._renderer && this._backend._renderer.diagnostics !== diag) {
+        this._backend._renderer.diagnostics = diag;
+      }
+
+      diag.scope(this._diagDrawId, () => {
         this._backend.render(ctx);
       });
     } else {

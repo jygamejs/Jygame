@@ -32,6 +32,8 @@ import { Visible } from "../../../ecs/components/Visible.js";
 import { Collider } from "../../../ecs/components/Collider.js";
 import { AudioManager } from "../../../audio/AudioManager.js";
 import { ParticleSystem } from "../../../particles/ParticleSystem.js";
+import { CanvasParticleRenderer } from "../../../particles/renderers/CanvasParticleRenderer.js";
+import { ParticleRenderCommandBuffer } from "../../../particles/renderdata/ParticleRenderCommandBuffer.js";
 import { StreamingManager } from "../../../ecs/streaming/StreamingManager.js";
 import { SceneManager } from "../../../ecs/scene/SceneManager.js";
 
@@ -1226,6 +1228,7 @@ describe("Diagnostics Subsystem Instrumentation", () => {
       assert.ok(snap.timerCount(batch.id) === 1, "batch scope recorded");
       assert.ok(snap.counter(img.id) === 0, "shape entity: 0 images");
       assert.ok(snap.counter(prim.id) >= 1, "shape entity: primitives >= 1");
+      assert.strictEqual(snap.counter(cmds.id), snap.counter(img.id) + snap.counter(prim.id), "commands === images + primitives");
     });
 
     it("works without Diagnostics (no crash)", () => {
@@ -1574,6 +1577,150 @@ describe("Diagnostics Subsystem Instrumentation", () => {
       const emitted = diag.metrics.find("particles.emitted");
       assert.ok(emitted, "particles.emitted should exist");
       assert.strictEqual(snap.counter(emitted.id), 5);
+    });
+  });
+
+  // ─── Particle Renderer Counters ────────────────────
+
+  describe("Particle Renderer Counters", () => {
+    function particleCtx() {
+      return {
+        save() {}, restore() {}, translate() {}, rotate() {}, scale() {},
+        fillRect() {}, beginPath() {}, arc() {}, fill() {}, drawImage() {},
+        moveTo() {}, lineTo() {}, stroke() {},
+        set fillStyle(v) {}, set strokeStyle(v) {}, set lineWidth(v) {},
+        set globalAlpha(v) {},
+        getTransform() { return { a:1, b:0, c:0, d:1, e:0, f:0 }; },
+        setTransform() {},
+      };
+    }
+
+    it("records sprites counter for textured particles", () => {
+      const renderer = new CanvasParticleRenderer();
+      const diag = new Diagnostics();
+      diag.registerMetric({ name:"frame.delta", category:MetricCategory.FRAME, group:"Frame", unit:MetricUnit.MILLISECONDS, type:MetricType.GAUGE, tags:Object.freeze(["frame"]) });
+      diag.registerMetric({ name:"frame.fps",   category:MetricCategory.FRAME, group:"Frame", unit:MetricUnit.FPS,          type:MetricType.GAUGE, tags:Object.freeze(["frame"]) });
+      diag.registerMetric({ name:"render.particles.sprites",    category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.COUNT, type:MetricType.COUNTER, tags:Object.freeze(["render"]) });
+      diag.registerMetric({ name:"render.particles.primitives", category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.COUNT, type:MetricType.COUNTER, tags:Object.freeze(["render"]) });
+      diag.lockRegistry();
+      renderer.diagnostics = diag;
+
+      const buf = new ParticleRenderCommandBuffer();
+      buf.append({ x:0, y:0, rotation:0, size:16, width:0, height:0, alpha:1, r:255, g:0, b:0, originX:0.5, originY:0.5, depth:0, frameX:0, frameY:0, frameWidth:0, frameHeight:0, texture:"mock" });
+      buf.append({ x:50, y:0, rotation:0, size:16, width:0, height:0, alpha:1, r:0, g:255, b:0, originX:0.5, originY:0.5, depth:0, frameX:0, frameY:0, frameWidth:0, frameHeight:0, texture:"mock2" });
+
+      diag.beginFrame(1, 16.6);
+      renderer.render(buf, particleCtx());
+      diag.endFrame();
+
+      const snap = diag.lastSnapshot;
+      const sprites = diag.metrics.find("render.particles.sprites");
+      const primitives = diag.metrics.find("render.particles.primitives");
+      assert.strictEqual(snap.counter(sprites.id), 2);
+      assert.strictEqual(snap.counter(primitives.id), 0);
+    });
+
+    it("records primitives counter for untextured particles", () => {
+      const renderer = new CanvasParticleRenderer();
+      const diag = new Diagnostics();
+      diag.registerMetric({ name:"frame.delta", category:MetricCategory.FRAME, group:"Frame", unit:MetricUnit.MILLISECONDS, type:MetricType.GAUGE, tags:Object.freeze(["frame"]) });
+      diag.registerMetric({ name:"frame.fps",   category:MetricCategory.FRAME, group:"Frame", unit:MetricUnit.FPS,          type:MetricType.GAUGE, tags:Object.freeze(["frame"]) });
+      diag.registerMetric({ name:"render.particles.sprites",    category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.COUNT, type:MetricType.COUNTER, tags:Object.freeze(["render"]) });
+      diag.registerMetric({ name:"render.particles.primitives", category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.COUNT, type:MetricType.COUNTER, tags:Object.freeze(["render"]) });
+      diag.lockRegistry();
+      renderer.diagnostics = diag;
+
+      const buf = new ParticleRenderCommandBuffer();
+      buf.append({ x:0, y:0, rotation:0, size:16, width:0, height:0, alpha:1, r:255, g:0, b:0, originX:0.5, originY:0.5, depth:0, frameX:0, frameY:0, frameWidth:0, frameHeight:0, texture:null });
+      buf.append({ x:50, y:0, rotation:0, size:16, width:0, height:0, alpha:1, r:0, g:255, b:0, originX:0.5, originY:0.5, depth:0, frameX:0, frameY:0, frameWidth:0, frameHeight:0, texture:null });
+
+      diag.beginFrame(1, 16.6);
+      renderer.render(buf, particleCtx());
+      diag.endFrame();
+
+      const snap = diag.lastSnapshot;
+      const sprites = diag.metrics.find("render.particles.sprites");
+      const primitives = diag.metrics.find("render.particles.primitives");
+      assert.strictEqual(snap.counter(sprites.id), 0);
+      assert.strictEqual(snap.counter(primitives.id), 2);
+    });
+
+    it("records both sprites and primitives in mixed frame", () => {
+      const renderer = new CanvasParticleRenderer();
+      const diag = new Diagnostics();
+      diag.registerMetric({ name:"frame.delta", category:MetricCategory.FRAME, group:"Frame", unit:MetricUnit.MILLISECONDS, type:MetricType.GAUGE, tags:Object.freeze(["frame"]) });
+      diag.registerMetric({ name:"frame.fps",   category:MetricCategory.FRAME, group:"Frame", unit:MetricUnit.FPS,          type:MetricType.GAUGE, tags:Object.freeze(["frame"]) });
+      diag.registerMetric({ name:"render.particles.sprites",    category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.COUNT, type:MetricType.COUNTER, tags:Object.freeze(["render"]) });
+      diag.registerMetric({ name:"render.particles.primitives", category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.COUNT, type:MetricType.COUNTER, tags:Object.freeze(["render"]) });
+      diag.lockRegistry();
+      renderer.diagnostics = diag;
+
+      const buf = new ParticleRenderCommandBuffer();
+      buf.append({ x:0, y:0, rotation:0, size:16, width:0, height:0, alpha:1, r:255, g:0, b:0, originX:0.5, originY:0.5, depth:0, frameX:0, frameY:0, frameWidth:0, frameHeight:0, texture:"mock" });
+      buf.append({ x:50, y:0, rotation:0, size:16, width:0, height:0, alpha:1, r:0, g:255, b:0, originX:0.5, originY:0.5, depth:0, frameX:0, frameY:0, frameWidth:0, frameHeight:0, texture:null });
+
+      diag.beginFrame(1, 16.6);
+      renderer.render(buf, particleCtx());
+      diag.endFrame();
+
+      const snap = diag.lastSnapshot;
+      const sprites = diag.metrics.find("render.particles.sprites");
+      const primitives = diag.metrics.find("render.particles.primitives");
+      assert.strictEqual(snap.counter(sprites.id), 1);
+      assert.strictEqual(snap.counter(primitives.id), 1);
+    });
+
+    it("records zero with empty buffer", () => {
+      const renderer = new CanvasParticleRenderer();
+      const diag = new Diagnostics();
+      diag.registerMetric({ name:"frame.delta", category:MetricCategory.FRAME, group:"Frame", unit:MetricUnit.MILLISECONDS, type:MetricType.GAUGE, tags:Object.freeze(["frame"]) });
+      diag.registerMetric({ name:"frame.fps",   category:MetricCategory.FRAME, group:"Frame", unit:MetricUnit.FPS,          type:MetricType.GAUGE, tags:Object.freeze(["frame"]) });
+      diag.registerMetric({ name:"render.particles.sprites",    category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.COUNT, type:MetricType.COUNTER, tags:Object.freeze(["render"]) });
+      diag.registerMetric({ name:"render.particles.primitives", category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.COUNT, type:MetricType.COUNTER, tags:Object.freeze(["render"]) });
+      diag.lockRegistry();
+      renderer.diagnostics = diag;
+
+      const buf = new ParticleRenderCommandBuffer();
+
+      diag.beginFrame(1, 16.6);
+      renderer.render(buf, particleCtx());
+      diag.endFrame();
+
+      const snap = diag.lastSnapshot;
+      const sprites = diag.metrics.find("render.particles.sprites");
+      const primitives = diag.metrics.find("render.particles.primitives");
+      assert.strictEqual(snap.counter(sprites.id), 0);
+      assert.strictEqual(snap.counter(primitives.id), 0);
+    });
+
+    it("works without Diagnostics (no crash)", () => {
+      const renderer = new CanvasParticleRenderer();
+      const buf = new ParticleRenderCommandBuffer();
+      buf.append({ x:0, y:0, rotation:0, size:16, width:0, height:0, alpha:1, r:255, g:0, b:0, originX:0.5, originY:0.5, depth:0, frameX:0, frameY:0, frameWidth:0, frameHeight:0, texture:"mock" });
+      renderer.render(buf, particleCtx());
+      assert.ok(true, "CanvasParticleRenderer render completes without Diagnostics");
+    });
+
+    it("wires diagnostics from ParticleSystem to renderer", () => {
+      const ps = new ParticleSystem();
+      const diag = new Diagnostics();
+      diag.registerMetric({ name:"frame.delta", category:MetricCategory.FRAME, group:"Frame", unit:MetricUnit.MILLISECONDS, type:MetricType.GAUGE, tags:Object.freeze(["frame"]) });
+      diag.registerMetric({ name:"frame.fps",   category:MetricCategory.FRAME, group:"Frame", unit:MetricUnit.FPS,          type:MetricType.GAUGE, tags:Object.freeze(["frame"]) });
+      diag.registerMetric({ name:"render.particles.sprites",    category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.COUNT, type:MetricType.COUNTER, tags:Object.freeze(["render"]) });
+      diag.registerMetric({ name:"render.particles.primitives", category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.COUNT, type:MetricType.COUNTER, tags:Object.freeze(["render"]) });
+      diag.lockRegistry();
+
+      ps.diagnostics = diag;
+
+      diag.beginFrame(1, 16.6);
+      ps.render(particleCtx());
+      diag.endFrame();
+
+      const snap = diag.lastSnapshot;
+      const sprites = diag.metrics.find("render.particles.sprites");
+      const primitives = diag.metrics.find("render.particles.primitives");
+      assert.ok(snap.counter(sprites.id) !== undefined, "sprites counter recorded (0 is valid)");
+      assert.ok(snap.counter(primitives.id) !== undefined, "primitives counter recorded (0 is valid)");
     });
   });
 

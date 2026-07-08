@@ -273,6 +273,14 @@ export class GpuParticleRenderer extends ParticleRenderer {
     }
   }
 
+  set diagnostics(diag) {
+    this._diag = diag;
+    if (diag) {
+      const sprites = diag.metrics.find("render.particles.sprites");
+      if (sprites) this._diagSpritesId = sprites.id;
+    }
+  }
+
   render(data, ctx) {
     const gl = this._gl;
 
@@ -345,6 +353,10 @@ export class GpuParticleRenderer extends ParticleRenderer {
           currentTexGL = tex ? this._getGLTexture(tex) : this._whiteTexture;
         }
       }
+    }
+
+    if (this._diag && this._diagSpritesId !== undefined) {
+      this._diag.recordCounter(this._diagSpritesId, count);
     }
   }
 

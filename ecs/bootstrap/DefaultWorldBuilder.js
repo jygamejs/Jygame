@@ -59,6 +59,8 @@ function _registerStandardMetrics(diag) {
   diag.registerMetric({ name:"render.trails.segments",displayName:"Trail Segments",   category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["render"]) });
   diag.registerMetric({ name:"render.trails.lines",   displayName:"Trail Lines",      category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["render"]) });
   diag.registerMetric({ name:"render.trails.ribbons", displayName:"Trail Ribbons",    category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["render"]) });
+  diag.registerMetric({ name:"render.particles.sprites",    displayName:"Particle Sprites",   category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.COUNT, type:MetricType.COUNTER, tags:Object.freeze(["render"]) });
+  diag.registerMetric({ name:"render.particles.primitives", displayName:"Particle Primitives",category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.COUNT, type:MetricType.COUNTER, tags:Object.freeze(["render"]) });
 }
 
 export class DefaultWorldBuilder {
