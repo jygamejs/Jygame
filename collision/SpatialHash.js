@@ -14,29 +14,16 @@ export class SpatialHash {
   _initDiag(diag) {
     if (this._diagInitDone) return;
     this._diagInitDone = true;
-    this._diagNarrowphaseId = diag.registerDynamicMetric({
-      name: "physics.narrowphase",
-      displayName: "Narrowphase",
-      category: MetricCategory.PHYSICS,
-      group: "Physics",
-      unit: MetricUnit.MILLISECONDS,
-      type: MetricType.TIMER,
-      tags: Object.freeze(["physics"]),
-    });
-    this._diagContactsId = diag.registerDynamicMetric({
-      name: "physics.contacts",
-      displayName: "Contact Pairs",
-      category: MetricCategory.PHYSICS,
-      group: "Physics",
-      unit: MetricUnit.COUNT,
-      type: MetricType.GAUGE,
-      tags: Object.freeze(["physics"]),
-    });
+    const narrow = diag.metrics.find("physics.narrowphase");
+    if (narrow) this._diagNarrowphaseId = narrow.id;
+    const queries = diag.metrics.find("physics.queries");
+    if (queries) this._diagQueriesId = queries.id;
   }
 
   _timeQuery(fn) {
     if (!this._diagnostics) return fn();
     this._initDiag(this._diagnostics);
+    if (this._diagQueriesId !== undefined) this._diagnostics.recordCounter(this._diagQueriesId, 1);
     return this._diagnostics.scope(this._diagNarrowphaseId, fn);
   }
 

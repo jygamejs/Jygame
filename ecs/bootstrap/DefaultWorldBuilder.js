@@ -73,6 +73,12 @@ function _registerStandardMetrics(diag) {
   diag.registerMetric({ name:"assets.loaded",   displayName:"Assets Loaded",   category:MetricCategory.ASSETS, group:"Assets", unit:MetricUnit.COUNT, type:MetricType.COUNTER, tags:Object.freeze(["assets"]) });
   diag.registerMetric({ name:"assets.pending",  displayName:"Pending Loads",   category:MetricCategory.ASSETS, group:"Assets", unit:MetricUnit.COUNT, type:MetricType.GAUGE,   tags:Object.freeze(["assets"]) });
   diag.registerMetric({ name:"assets.loadErrors", displayName:"Load Errors",   category:MetricCategory.ASSETS, group:"Assets", unit:MetricUnit.COUNT, type:MetricType.COUNTER, tags:Object.freeze(["assets"]) });
+
+  diag.registerMetric({ name:"physics.broadphase",        displayName:"Broadphase",        category:MetricCategory.PHYSICS, group:"Physics", unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,   tags:Object.freeze(["physics"]) });
+  diag.registerMetric({ name:"physics.bodies",             displayName:"Collision Bodies",  category:MetricCategory.PHYSICS, group:"Physics", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["physics"]) });
+  diag.registerMetric({ name:"physics.narrowphase",        displayName:"Narrowphase",        category:MetricCategory.PHYSICS, group:"Physics", unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,   tags:Object.freeze(["physics"]) });
+  diag.registerMetric({ name:"physics.queries",            displayName:"Spatial Queries",    category:MetricCategory.PHYSICS, group:"Physics", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["physics"]) });
+  diag.registerMetric({ name:"physics.broadphase.inserts", displayName:"Spatial Inserts",    category:MetricCategory.PHYSICS, group:"Physics", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["physics"]) });
 }
 
 export class DefaultWorldBuilder {

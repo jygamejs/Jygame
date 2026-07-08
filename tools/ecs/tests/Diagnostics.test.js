@@ -1279,6 +1279,9 @@ describe("Diagnostics Subsystem Instrumentation", () => {
       diag.registerMetric({ name:"ecs.world.archetypes",category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
       diag.registerMetric({ name:"ecs.entitiesCreated", category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["ecs"]) });
       diag.registerMetric({ name:"ecs.entitiesDestroyed",category:MetricCategory.ECS,  group:"World", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["ecs"]) });
+      diag.registerMetric({ name:"physics.broadphase",  category:MetricCategory.PHYSICS, group:"Physics", unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,   tags:Object.freeze(["physics"]) });
+      diag.registerMetric({ name:"physics.bodies",       category:MetricCategory.PHYSICS, group:"Physics", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["physics"]) });
+      diag.registerMetric({ name:"physics.broadphase.inserts", category:MetricCategory.PHYSICS, group:"Physics", unit:MetricUnit.COUNT, type:MetricType.COUNTER, tags:Object.freeze(["physics"]) });
       world.setResource(Diagnostics, diag);
 
       world.setResource(SpatialHash, new SpatialHash());
@@ -1741,6 +1744,8 @@ describe("Diagnostics Subsystem Instrumentation", () => {
       const diag = new Diagnostics();
       diag.registerMetric({ name:"frame.delta", category:MetricCategory.FRAME, group:"Frame", unit:MetricUnit.MILLISECONDS, type:MetricType.GAUGE, tags:Object.freeze(["frame"]) });
       diag.registerMetric({ name:"frame.fps",   category:MetricCategory.FRAME, group:"Frame", unit:MetricUnit.FPS,          type:MetricType.GAUGE, tags:Object.freeze(["frame"]) });
+      diag.registerMetric({ name:"physics.narrowphase", category:MetricCategory.PHYSICS, group:"Physics", unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,   tags:Object.freeze(["physics"]) });
+      diag.registerMetric({ name:"physics.queries",     category:MetricCategory.PHYSICS, group:"Physics", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["physics"]) });
       diag.lockRegistry();
 
       const hash = new SpatialHash();
@@ -1754,8 +1759,11 @@ describe("Diagnostics Subsystem Instrumentation", () => {
 
       const snap = diag.lastSnapshot;
       const np = diag.metrics.find("physics.narrowphase");
-      assert.ok(np, "physics.narrowphase should be auto-registered");
+      const queries = diag.metrics.find("physics.queries");
+      assert.ok(np, "physics.narrowphase should exist");
+      assert.ok(queries, "physics.queries should exist");
       assert.strictEqual(snap.timerCount(np.id), 1);
+      assert.strictEqual(snap.counter(queries.id), 1);
       assert.deepStrictEqual(hits, [1]);
     });
   });

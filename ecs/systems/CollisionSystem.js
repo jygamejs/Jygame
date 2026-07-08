@@ -14,24 +14,12 @@ export class CollisionSystem extends System {
   _initDiag(diag) {
     if (this._diagInitDone) return;
     this._diagInitDone = true;
-    this._diagBroadphaseId = diag.registerDynamicMetric({
-      name: "physics.broadphase",
-      displayName: "Broadphase",
-      category: MetricCategory.PHYSICS,
-      group: "Physics",
-      unit: MetricUnit.MILLISECONDS,
-      type: MetricType.TIMER,
-      tags: Object.freeze(["physics"]),
-    });
-    this._diagBodiesId = diag.registerDynamicMetric({
-      name: "physics.bodies",
-      displayName: "Collision Bodies",
-      category: MetricCategory.PHYSICS,
-      group: "Physics",
-      unit: MetricUnit.COUNT,
-      type: MetricType.GAUGE,
-      tags: Object.freeze(["physics"]),
-    });
+    const bp = diag.metrics.find("physics.broadphase");
+    if (bp) this._diagBroadphaseId = bp.id;
+    const bodies = diag.metrics.find("physics.bodies");
+    if (bodies) this._diagBodiesId = bodies.id;
+    const inserts = diag.metrics.find("physics.broadphase.inserts");
+    if (inserts) this._diagInsertsId = inserts.id;
   }
 
   update(ctx, dt) {
@@ -51,6 +39,8 @@ export class CollisionSystem extends System {
       );
     }
 
+    let insertCount = 0;
+
     const doInsert = () => {
       spatialHash.clear();
       for (const table of ctx) {
@@ -67,6 +57,7 @@ export class CollisionSystem extends System {
         for (let r = 0; r < count; r++) {
           if (!visible[r]) continue;
           spatialHash.insert(table.getEntity(r), tx[r], ty[r], cw[r], ch[r]);
+          insertCount++;
         }
       }
     };
@@ -75,6 +66,10 @@ export class CollisionSystem extends System {
       diag.scope(this._diagBroadphaseId, doInsert);
     } else {
       doInsert();
+    }
+
+    if (diag && this._diagInsertsId !== undefined) {
+      diag.recordCounter(this._diagInsertsId, insertCount);
     }
 
     if (diag && this._diagBodiesId !== undefined) {
