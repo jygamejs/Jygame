@@ -1775,6 +1775,15 @@ describe("Diagnostics Subsystem Instrumentation", () => {
       const world = new World();
       const sm = new StreamingManager(world);
       const diag = new Diagnostics();
+      const reg = (name, type, unit) =>
+        diag.registerMetric({ name, category:MetricCategory.STREAMING, group:"Streaming", unit, type, tags:Object.freeze(["streaming"]) });
+      reg("streaming.loadedCells",   MetricType.GAUGE,   MetricUnit.COUNT);
+      reg("streaming.pending",       MetricType.GAUGE,   MetricUnit.COUNT);
+      reg("streaming.entities",      MetricType.GAUGE,   MetricUnit.COUNT);
+      reg("streaming.cellsLoaded",   MetricType.COUNTER, MetricUnit.COUNT);
+      reg("streaming.cellsUnloaded", MetricType.COUNTER, MetricUnit.COUNT);
+      reg("streaming.cells",         MetricType.GAUGE,   MetricUnit.COUNT);
+      reg("streaming.loadTime",      MetricType.TIMER,   MetricUnit.MILLISECONDS);
       diag.lockRegistry();
 
       sm.diagnostics = diag;
@@ -1789,10 +1798,16 @@ describe("Diagnostics Subsystem Instrumentation", () => {
       let snap = diag.lastSnapshot;
       const loadedCells = diag.metrics.find("streaming.loadedCells");
       const cellsLoaded = diag.metrics.find("streaming.cellsLoaded");
+      const cells = diag.metrics.find("streaming.cells");
+      const loadTime = diag.metrics.find("streaming.loadTime");
       assert.ok(loadedCells, "streaming.loadedCells should exist");
       assert.ok(cellsLoaded, "streaming.cellsLoaded should exist");
+      assert.ok(cells, "streaming.cells should exist");
+      assert.ok(loadTime, "streaming.loadTime should exist");
       assert.strictEqual(snap.counter(cellsLoaded.id), 1);
       assert.strictEqual(snap.gauge(loadedCells.id), 1);
+      assert.strictEqual(snap.gauge(cells.id), 2);
+      assert.ok(snap.timerTotal(loadTime.id) >= 0);
 
       diag.beginFrame(2, 16.6);
       sm.load("forest");
@@ -1801,6 +1816,7 @@ describe("Diagnostics Subsystem Instrumentation", () => {
       snap = diag.lastSnapshot;
       assert.strictEqual(snap.counter(cellsLoaded.id), 1);
       assert.strictEqual(snap.gauge(loadedCells.id), 2);
+      assert.strictEqual(snap.gauge(cells.id), 2);
 
       diag.beginFrame(3, 16.6);
       sm.unload("town");
@@ -1811,6 +1827,7 @@ describe("Diagnostics Subsystem Instrumentation", () => {
       assert.ok(cellsUnloaded, "streaming.cellsUnloaded should exist");
       assert.strictEqual(snap.counter(cellsUnloaded.id), 1);
       assert.strictEqual(snap.gauge(loadedCells.id), 1);
+      assert.strictEqual(snap.gauge(cells.id), 2);
     });
   });
 

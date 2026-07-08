@@ -16,51 +16,20 @@ export class StreamingManager {
   _initDiag(diag) {
     if (this._diagInitDone) return;
     this._diagInitDone = true;
-    this._diagLoadedCellsId = diag.registerDynamicMetric({
-      name: "streaming.loadedCells",
-      displayName: "Loaded Cells",
-      category: MetricCategory.STREAMING,
-      group: "Streaming",
-      unit: MetricUnit.COUNT,
-      type: MetricType.GAUGE,
-      tags: Object.freeze(["streaming"]),
-    });
-    this._diagPendingId = diag.registerDynamicMetric({
-      name: "streaming.pending",
-      displayName: "Pending Loads",
-      category: MetricCategory.STREAMING,
-      group: "Streaming",
-      unit: MetricUnit.COUNT,
-      type: MetricType.GAUGE,
-      tags: Object.freeze(["streaming"]),
-    });
-    this._diagEntitiesId = diag.registerDynamicMetric({
-      name: "streaming.entities",
-      displayName: "Streaming Entities",
-      category: MetricCategory.STREAMING,
-      group: "Streaming",
-      unit: MetricUnit.COUNT,
-      type: MetricType.GAUGE,
-      tags: Object.freeze(["streaming"]),
-    });
-    this._diagCellsLoadedId = diag.registerDynamicMetric({
-      name: "streaming.cellsLoaded",
-      displayName: "Cells Loaded",
-      category: MetricCategory.STREAMING,
-      group: "Streaming",
-      unit: MetricUnit.COUNT,
-      type: MetricType.COUNTER,
-      tags: Object.freeze(["streaming"]),
-    });
-    this._diagCellsUnloadedId = diag.registerDynamicMetric({
-      name: "streaming.cellsUnloaded",
-      displayName: "Cells Unloaded",
-      category: MetricCategory.STREAMING,
-      group: "Streaming",
-      unit: MetricUnit.COUNT,
-      type: MetricType.COUNTER,
-      tags: Object.freeze(["streaming"]),
-    });
+    const lc = diag.metrics.find("streaming.loadedCells");
+    if (lc) this._diagLoadedCellsId = lc.id;
+    const pd = diag.metrics.find("streaming.pending");
+    if (pd) this._diagPendingId = pd.id;
+    const en = diag.metrics.find("streaming.entities");
+    if (en) this._diagEntitiesId = en.id;
+    const cl = diag.metrics.find("streaming.cellsLoaded");
+    if (cl) this._diagCellsLoadedId = cl.id;
+    const cu = diag.metrics.find("streaming.cellsUnloaded");
+    if (cu) this._diagCellsUnloadedId = cu.id;
+    const tc = diag.metrics.find("streaming.cells");
+    if (tc) this._diagCellsId = tc.id;
+    const lt = diag.metrics.find("streaming.loadTime");
+    if (lt) this._diagLoadTimeId = lt.id;
   }
 
   _recordGauges() {
@@ -76,6 +45,7 @@ export class StreamingManager {
     this._diagnostics.recordGauge(this._diagLoadedCellsId, loaded);
     this._diagnostics.recordGauge(this._diagPendingId, 0);
     this._diagnostics.recordGauge(this._diagEntitiesId, entityCount);
+    if (this._diagCellsId !== undefined) this._diagnostics.recordGauge(this._diagCellsId, this._cells.size);
   }
 
   createCell(name) {
@@ -127,11 +97,17 @@ export class StreamingManager {
       );
     }
 
-    cell._loaded = true;
+    const doLoad = () => { cell._loaded = true; };
+
+    if (this._diagnostics && this._diagLoadTimeId !== undefined) {
+      this._diagnostics.scope(this._diagLoadTimeId, doLoad);
+    } else {
+      doLoad();
+    }
 
     if (this._diagnostics) {
       this._initDiag(this._diagnostics);
-      this._diagnostics.recordCounter(this._diagCellsLoadedId, 1);
+      if (this._diagCellsLoadedId !== undefined) this._diagnostics.recordCounter(this._diagCellsLoadedId, 1);
       this._recordGauges();
     }
   }

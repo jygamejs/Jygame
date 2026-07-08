@@ -79,6 +79,14 @@ function _registerStandardMetrics(diag) {
   diag.registerMetric({ name:"physics.narrowphase",        displayName:"Narrowphase",        category:MetricCategory.PHYSICS, group:"Physics", unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,   tags:Object.freeze(["physics"]) });
   diag.registerMetric({ name:"physics.queries",            displayName:"Spatial Queries",    category:MetricCategory.PHYSICS, group:"Physics", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["physics"]) });
   diag.registerMetric({ name:"physics.broadphase.inserts", displayName:"Spatial Inserts",    category:MetricCategory.PHYSICS, group:"Physics", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["physics"]) });
+
+  diag.registerMetric({ name:"streaming.loadedCells",   displayName:"Loaded Cells",     category:MetricCategory.STREAMING, group:"Streaming", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["streaming"]) });
+  diag.registerMetric({ name:"streaming.pending",       displayName:"Pending Loads",    category:MetricCategory.STREAMING, group:"Streaming", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["streaming"]) });
+  diag.registerMetric({ name:"streaming.entities",      displayName:"Streaming Entities",category:MetricCategory.STREAMING, group:"Streaming", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["streaming"]) });
+  diag.registerMetric({ name:"streaming.cellsLoaded",   displayName:"Cells Loaded",     category:MetricCategory.STREAMING, group:"Streaming", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["streaming"]) });
+  diag.registerMetric({ name:"streaming.cellsUnloaded", displayName:"Cells Unloaded",   category:MetricCategory.STREAMING, group:"Streaming", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["streaming"]) });
+  diag.registerMetric({ name:"streaming.cells",         displayName:"Total Cells",      category:MetricCategory.STREAMING, group:"Streaming", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["streaming"]) });
+  diag.registerMetric({ name:"streaming.loadTime",      displayName:"Load Time",        category:MetricCategory.STREAMING, group:"Streaming", unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,   tags:Object.freeze(["streaming"]) });
 }
 
 export class DefaultWorldBuilder {
