@@ -7,6 +7,9 @@ export const MetricCategory = Object.freeze({
   PHYSICS:   5,
   STREAMING: 6,
   ASSETS:    7,
-  USER:      8,
-  PLUGIN:    9,
+  SCENE:     8,
+  INPUT:     9,
+
+  USER:      100,
+  PLUGIN:    101,
 });

@@ -87,6 +87,9 @@ function _registerStandardMetrics(diag) {
   diag.registerMetric({ name:"streaming.cellsUnloaded", displayName:"Cells Unloaded",   category:MetricCategory.STREAMING, group:"Streaming", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["streaming"]) });
   diag.registerMetric({ name:"streaming.cells",         displayName:"Total Cells",      category:MetricCategory.STREAMING, group:"Streaming", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["streaming"]) });
   diag.registerMetric({ name:"streaming.loadTime",      displayName:"Load Time",        category:MetricCategory.STREAMING, group:"Streaming", unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,   tags:Object.freeze(["streaming"]) });
+
+  diag.registerMetric({ name:"scene.transitions",  displayName:"Scene Transitions", category:MetricCategory.SCENE, group:"Scene", unit:MetricUnit.COUNT, type:MetricType.COUNTER, tags:Object.freeze(["scene"]) });
+  diag.registerMetric({ name:"scene.activeScenes", displayName:"Active Scenes",     category:MetricCategory.SCENE, group:"Scene", unit:MetricUnit.COUNT, type:MetricType.GAUGE,   tags:Object.freeze(["scene"]) });
 }
 
 export class DefaultWorldBuilder {

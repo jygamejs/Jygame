@@ -167,8 +167,10 @@ describe("MetricCategory", () => {
     assert.strictEqual(MetricCategory.PHYSICS, 5);
     assert.strictEqual(MetricCategory.STREAMING, 6);
     assert.strictEqual(MetricCategory.ASSETS, 7);
-    assert.strictEqual(MetricCategory.USER, 8);
-    assert.strictEqual(MetricCategory.PLUGIN, 9);
+    assert.strictEqual(MetricCategory.SCENE, 8);
+    assert.strictEqual(MetricCategory.INPUT, 9);
+    assert.strictEqual(MetricCategory.USER, 100);
+    assert.strictEqual(MetricCategory.PLUGIN, 101);
   });
 });
 
@@ -1834,11 +1836,13 @@ describe("Diagnostics Subsystem Instrumentation", () => {
   // ─── SceneManager ──────────────────────────────────
 
   describe("SceneManager", () => {
-    it("emits frame events on scene transitions", () => {
+    it("records scene.transitions and scene.activeScenes on stack mutations", () => {
       const mgr = new SceneManager();
       const diag = new Diagnostics();
-      diag.registerMetric({ name:"frame.delta", category:MetricCategory.FRAME, group:"Frame", unit:MetricUnit.MILLISECONDS, type:MetricType.GAUGE, tags:Object.freeze(["frame"]) });
-      diag.registerMetric({ name:"frame.fps",   category:MetricCategory.FRAME, group:"Frame", unit:MetricUnit.FPS,          type:MetricType.GAUGE, tags:Object.freeze(["frame"]) });
+      diag.registerMetric({ name:"frame.delta",      category:MetricCategory.FRAME, group:"Frame",  unit:MetricUnit.MILLISECONDS, type:MetricType.GAUGE,   tags:Object.freeze(["frame"]) });
+      diag.registerMetric({ name:"frame.fps",        category:MetricCategory.FRAME, group:"Frame",  unit:MetricUnit.FPS,          type:MetricType.GAUGE,   tags:Object.freeze(["frame"]) });
+      diag.registerMetric({ name:"scene.transitions",category:MetricCategory.SCENE, group:"Scene", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["scene"]) });
+      diag.registerMetric({ name:"scene.activeScenes",category:MetricCategory.SCENE,group:"Scene", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["scene"]) });
       diag.lockRegistry();
 
       mgr.diagnostics = diag;
@@ -1853,6 +1857,12 @@ describe("Diagnostics Subsystem Instrumentation", () => {
       diag.endFrame();
 
       let snap = diag.lastSnapshot;
+      let trans = diag.metrics.find("scene.transitions");
+      let active = diag.metrics.find("scene.activeScenes");
+      assert.ok(trans, "scene.transitions should exist");
+      assert.ok(active, "scene.activeScenes should exist");
+      assert.strictEqual(snap.counter(trans.id), 1);
+      assert.strictEqual(snap.gauge(active.id), 1);
       assert.strictEqual(snap.events.length, 1);
       assert.strictEqual(snap.events[0].category, "scene");
       assert.strictEqual(snap.events[0].name, "Transition");
@@ -1863,6 +1873,8 @@ describe("Diagnostics Subsystem Instrumentation", () => {
       diag.endFrame();
 
       snap = diag.lastSnapshot;
+      assert.strictEqual(snap.counter(trans.id), 1);
+      assert.strictEqual(snap.gauge(active.id), 2);
       assert.strictEqual(snap.events.length, 1);
       assert.strictEqual(snap.events[0].name, "Push");
       assert.strictEqual(snap.events[0].metadata.scene, "SceneB");
@@ -1872,6 +1884,8 @@ describe("Diagnostics Subsystem Instrumentation", () => {
       diag.endFrame();
 
       snap = diag.lastSnapshot;
+      assert.strictEqual(snap.counter(trans.id), 1);
+      assert.strictEqual(snap.gauge(active.id), 1);
       assert.strictEqual(snap.events.length, 1);
       assert.strictEqual(snap.events[0].name, "Pop");
     });

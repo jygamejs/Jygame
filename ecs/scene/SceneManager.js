@@ -81,6 +81,22 @@ export class SceneManager {
     this._diagnostics.event("scene", type, { scene: sceneName });
   }
 
+  _initDiag(diag) {
+    if (this._diagInitDone) return;
+    this._diagInitDone = true;
+    const t = diag.metrics.find("scene.transitions");
+    if (t) this._diagTransitionsId = t.id;
+    const a = diag.metrics.find("scene.activeScenes");
+    if (a) this._diagActiveScenesId = a.id;
+  }
+
+  _recordTransition() {
+    if (!this._diagnostics) return;
+    this._initDiag(this._diagnostics);
+    if (this._diagTransitionsId !== undefined) this._diagnostics.recordCounter(this._diagTransitionsId, 1);
+    if (this._diagActiveScenesId !== undefined) this._diagnostics.recordGauge(this._diagActiveScenesId, this._stack.length);
+  }
+
   start(name) {
     const scene = findScene(this, name);
 
@@ -92,6 +108,7 @@ export class SceneManager {
     this._stack.push(scene);
     scene.onEnter();
     this._emitEvent("Transition", name);
+    this._recordTransition();
   }
 
   change(name) {
@@ -101,6 +118,7 @@ export class SceneManager {
       this._stack.push(scene);
       scene.onEnter();
       this._emitEvent("Transition", name);
+      this._recordTransition();
       return;
     }
 
@@ -113,6 +131,7 @@ export class SceneManager {
     this._stack.push(scene);
     scene.onEnter();
     this._emitEvent("Transition", name);
+    this._recordTransition();
   }
 
   replace(name) {
@@ -126,6 +145,7 @@ export class SceneManager {
       }
       scene.onEnter();
       this._emitEvent("Transition", name);
+      this._recordTransition();
       return;
     }
 
@@ -145,6 +165,7 @@ export class SceneManager {
     this._stack.push(scene);
     scene.onEnter();
     this._emitEvent("Transition", name);
+    this._recordTransition();
   }
 
   push(name) {
@@ -158,6 +179,7 @@ export class SceneManager {
     this._stack.push(scene);
     scene.onEnter();
     this._emitEvent("Push", name);
+    this._recordTransition();
   }
 
   pop() {
@@ -178,6 +200,7 @@ export class SceneManager {
       previous.onResume();
     }
     this._emitEvent("Pop", top.name);
+    this._recordTransition();
   }
 
   get diagnostics() {
