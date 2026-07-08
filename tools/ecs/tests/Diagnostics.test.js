@@ -20,6 +20,9 @@ import { RenderSystem } from "../../../ecs/systems/RenderSystem.js";
 import { RenderQueue } from "../../../ecs/render/RenderQueue.js";
 import { CanvasContext } from "../../../ecs/render/CanvasContext.js";
 import { CollisionSystem } from "../../../ecs/systems/CollisionSystem.js";
+import { TrailSystem } from "../../../ecs/systems/TrailSystem.js";
+import { TrailManager } from "../../../ecs/trails/TrailManager.js";
+import { Trail } from "../../../ecs/components/Trail.js";
 import { SpatialHash } from "../../../collision/SpatialHash.js";
 import { Transform } from "../../../ecs/components/Transform.js";
 import { Velocity } from "../../../ecs/components/Velocity.js";
@@ -1295,6 +1298,204 @@ describe("Diagnostics Subsystem Instrumentation", () => {
       assert.ok(bodies, "physics.bodies should be auto-registered");
       assert.strictEqual(snap.timerCount(bp.id), 1);
       assert.ok(snap.gauge(bodies.id) >= 1);
+    });
+  });
+
+  // ─── TrailSystem ──────────────────────────────────
+
+  describe("TrailSystem", () => {
+    it("records render.trails timer and segment/line/ribbon counters", () => {
+      const world = new World();
+      world.register(Transform);
+      world.register(Visible);
+      world.register(Trail);
+
+      const diag = new Diagnostics();
+      diag.registerMetric({ name:"frame.delta",         category:MetricCategory.FRAME, group:"Frame",  unit:MetricUnit.MILLISECONDS, type:MetricType.GAUGE,   tags:Object.freeze(["frame"]) });
+      diag.registerMetric({ name:"frame.fps",           category:MetricCategory.FRAME, group:"Frame",  unit:MetricUnit.FPS,          type:MetricType.GAUGE,   tags:Object.freeze(["frame"]) });
+      diag.registerMetric({ name:"frame.update",        category:MetricCategory.FRAME, group:"Frame",  unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,   tags:Object.freeze(["frame","ecs"]) });
+      diag.registerMetric({ name:"ecs.world.entities",  category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
+      diag.registerMetric({ name:"ecs.world.systems",   category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
+      diag.registerMetric({ name:"ecs.world.archetypes",category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
+      diag.registerMetric({ name:"ecs.entitiesCreated", category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["ecs"]) });
+      diag.registerMetric({ name:"ecs.entitiesDestroyed",category:MetricCategory.ECS,  group:"World", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["ecs"]) });
+      diag.registerMetric({ name:"render.trails",        category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,  tags:Object.freeze(["render"]) });
+      diag.registerMetric({ name:"render.trails.segments",category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.COUNT,  type:MetricType.COUNTER, tags:Object.freeze(["render"]) });
+      diag.registerMetric({ name:"render.trails.lines",   category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.COUNT,  type:MetricType.COUNTER, tags:Object.freeze(["render"]) });
+      diag.registerMetric({ name:"render.trails.ribbons", category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.COUNT,  type:MetricType.COUNTER, tags:Object.freeze(["render"]) });
+      world.setResource(Diagnostics, diag);
+
+      const manager = new TrailManager();
+      const canvasCtx = {
+        save() {}, restore() {}, translate() {}, rotate() {}, scale() {},
+        fillRect() {}, beginPath() {}, arc() {}, fill() {}, drawImage() {},
+        moveTo() {}, lineTo() {}, stroke() {},
+        set fillStyle(v) {}, set strokeStyle(v) {}, set lineWidth(v) {},
+        getTransform() { return { a:1, b:0, c:0, d:1, e:0, f:0 }; },
+        setTransform() {},
+      };
+      world.setResource(TrailManager, manager);
+      world.setResource(CanvasContext, canvasCtx);
+      world.addSystem(new TrailSystem());
+      diag.lockRegistry();
+
+      const e = world.createEntity();
+      world.addComponent(e, Transform);
+      world.setComponent(e, Transform, { x:0, y:0 });
+      world.addComponent(e, Visible);
+      world.setComponent(e, Visible, { value:1 });
+      world.addComponent(e, Trail);
+      world.setComponent(e, Trail, { enabled:1, maxPoints:64, spacing:4, width:4, color:0xffffff, mode:0 });
+
+      // Move entity multiple times to accumulate trail points
+      world.update(1 / 60);
+      world.setComponent(e, Transform, { x:50, y:0 });
+      world.update(1 / 60);
+      world.setComponent(e, Transform, { x:100, y:0 });
+      world.update(1 / 60);
+
+      const snap = diag.lastSnapshot;
+      const trails = diag.metrics.find("render.trails");
+      const seg = diag.metrics.find("render.trails.segments");
+      const lines = diag.metrics.find("render.trails.lines");
+      const ribs = diag.metrics.find("render.trails.ribbons");
+      assert.ok(trails, "render.trails should exist");
+      assert.ok(seg, "render.trails.segments should exist");
+      assert.ok(lines, "render.trails.lines should exist");
+      assert.ok(ribs, "render.trails.ribbons should exist");
+      assert.strictEqual(snap.timerCount(trails.id), 1);
+      assert.ok(snap.counter(seg.id) > 0, "segments counter > 0");
+      assert.ok(snap.counter(lines.id) > 0, "line counter > 0 for line-mode trail");
+      assert.strictEqual(snap.counter(ribs.id), 0, "ribbon counter = 0 for line-mode trail");
+    });
+
+    it("records ribbon mode counters", () => {
+      const world = new World();
+      world.register(Transform);
+      world.register(Visible);
+      world.register(Trail);
+
+      const diag = new Diagnostics();
+      diag.registerMetric({ name:"frame.delta",         category:MetricCategory.FRAME, group:"Frame",  unit:MetricUnit.MILLISECONDS, type:MetricType.GAUGE,   tags:Object.freeze(["frame"]) });
+      diag.registerMetric({ name:"frame.fps",           category:MetricCategory.FRAME, group:"Frame",  unit:MetricUnit.FPS,          type:MetricType.GAUGE,   tags:Object.freeze(["frame"]) });
+      diag.registerMetric({ name:"frame.update",        category:MetricCategory.FRAME, group:"Frame",  unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,   tags:Object.freeze(["frame","ecs"]) });
+      diag.registerMetric({ name:"ecs.world.entities",  category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
+      diag.registerMetric({ name:"ecs.world.systems",   category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
+      diag.registerMetric({ name:"ecs.world.archetypes",category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
+      diag.registerMetric({ name:"ecs.entitiesCreated", category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["ecs"]) });
+      diag.registerMetric({ name:"ecs.entitiesDestroyed",category:MetricCategory.ECS,  group:"World", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["ecs"]) });
+      diag.registerMetric({ name:"render.trails",        category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,  tags:Object.freeze(["render"]) });
+      diag.registerMetric({ name:"render.trails.segments",category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.COUNT,  type:MetricType.COUNTER, tags:Object.freeze(["render"]) });
+      diag.registerMetric({ name:"render.trails.lines",   category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.COUNT,  type:MetricType.COUNTER, tags:Object.freeze(["render"]) });
+      diag.registerMetric({ name:"render.trails.ribbons", category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.COUNT,  type:MetricType.COUNTER, tags:Object.freeze(["render"]) });
+      world.setResource(Diagnostics, diag);
+
+      const manager = new TrailManager();
+      const canvasCtx = {
+        save() {}, restore() {}, translate() {}, rotate() {}, scale() {},
+        fillRect() {}, beginPath() {}, arc() {}, fill() {}, drawImage() {},
+        moveTo() {}, lineTo() {}, stroke() {},
+        set fillStyle(v) {}, set strokeStyle(v) {}, set lineWidth(v) {},
+        getTransform() { return { a:1, b:0, c:0, d:1, e:0, f:0 }; },
+        setTransform() {},
+      };
+      world.setResource(TrailManager, manager);
+      world.setResource(CanvasContext, canvasCtx);
+      world.addSystem(new TrailSystem());
+      diag.lockRegistry();
+
+      const e = world.createEntity();
+      world.addComponent(e, Transform);
+      world.setComponent(e, Transform, { x:0, y:0 });
+      world.addComponent(e, Visible);
+      world.setComponent(e, Visible, { value:1 });
+      world.addComponent(e, Trail);
+      world.setComponent(e, Trail, { enabled:1, maxPoints:64, spacing:4, width:4, color:0xffffff, mode:1 });
+
+      world.update(1 / 60);
+      world.setComponent(e, Transform, { x:50, y:0 });
+      world.update(1 / 60);
+
+      const snap = diag.lastSnapshot;
+      const ribs = diag.metrics.find("render.trails.ribbons");
+      const lines = diag.metrics.find("render.trails.lines");
+      assert.ok(snap.counter(ribs.id) > 0, "ribbon counter > 0 for ribbon-mode trail");
+      assert.strictEqual(snap.counter(lines.id), 0, "line counter = 0 for ribbon-mode trail");
+    });
+
+    it("records zero counters with no trail entities", () => {
+      const world = new World();
+      world.register(Transform);
+      world.register(Visible);
+      world.register(Trail);
+
+      const diag = new Diagnostics();
+      diag.registerMetric({ name:"frame.delta",         category:MetricCategory.FRAME, group:"Frame",  unit:MetricUnit.MILLISECONDS, type:MetricType.GAUGE,   tags:Object.freeze(["frame"]) });
+      diag.registerMetric({ name:"frame.fps",           category:MetricCategory.FRAME, group:"Frame",  unit:MetricUnit.FPS,          type:MetricType.GAUGE,   tags:Object.freeze(["frame"]) });
+      diag.registerMetric({ name:"frame.update",        category:MetricCategory.FRAME, group:"Frame",  unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,   tags:Object.freeze(["frame","ecs"]) });
+      diag.registerMetric({ name:"ecs.world.entities",  category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
+      diag.registerMetric({ name:"ecs.world.systems",   category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
+      diag.registerMetric({ name:"ecs.world.archetypes",category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
+      diag.registerMetric({ name:"ecs.entitiesCreated", category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["ecs"]) });
+      diag.registerMetric({ name:"ecs.entitiesDestroyed",category:MetricCategory.ECS,  group:"World", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["ecs"]) });
+      diag.registerMetric({ name:"render.trails",        category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,  tags:Object.freeze(["render"]) });
+      diag.registerMetric({ name:"render.trails.segments",category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.COUNT,  type:MetricType.COUNTER, tags:Object.freeze(["render"]) });
+      diag.registerMetric({ name:"render.trails.lines",   category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.COUNT,  type:MetricType.COUNTER, tags:Object.freeze(["render"]) });
+      diag.registerMetric({ name:"render.trails.ribbons", category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.COUNT,  type:MetricType.COUNTER, tags:Object.freeze(["render"]) });
+      world.setResource(Diagnostics, diag);
+
+      const manager = new TrailManager();
+      const canvasCtx = {
+        save() {}, restore() {}, translate() {}, rotate() {}, scale() {},
+        fillRect() {}, beginPath() {}, arc() {} , fill() {}, drawImage() {},
+        moveTo() {}, lineTo() {}, stroke() {},
+        set fillStyle(v) {}, set strokeStyle(v) {}, set lineWidth(v) {},
+        getTransform() { return { a:1, b:0, c:0, d:1, e:0, f:0 }; },
+        setTransform() {},
+      };
+      world.setResource(TrailManager, manager);
+      world.setResource(CanvasContext, canvasCtx);
+      world.addSystem(new TrailSystem());
+      diag.lockRegistry();
+
+      world.update(1 / 60);
+      const snap = diag.lastSnapshot;
+      const seg = diag.metrics.find("render.trails.segments");
+      const lines = diag.metrics.find("render.trails.lines");
+      const ribs = diag.metrics.find("render.trails.ribbons");
+      assert.strictEqual(snap.counter(seg.id), 0);
+      assert.strictEqual(snap.counter(lines.id), 0);
+      assert.strictEqual(snap.counter(ribs.id), 0);
+    });
+
+    it("works without Diagnostics (no crash)", () => {
+      const world = new World();
+      world.register(Transform);
+      world.register(Visible);
+      world.register(Trail);
+      const manager = new TrailManager();
+      const canvasCtx = {
+        save() {}, restore() {}, translate() {}, rotate() {}, scale() {},
+        fillRect() {}, beginPath() {}, arc() {} , fill() {}, drawImage() {},
+        moveTo() {}, lineTo() {}, stroke() {},
+        set fillStyle(v) {}, set strokeStyle(v) {}, set lineWidth(v) {},
+        getTransform() { return { a:1, b:0, c:0, d:1, e:0, f:0 }; },
+        setTransform() {},
+      };
+      world.setResource(TrailManager, manager);
+      world.setResource(CanvasContext, canvasCtx);
+      world.addSystem(new TrailSystem());
+
+      const e = world.createEntity();
+      world.addComponent(e, Transform);
+      world.setComponent(e, Transform, { x:0, y:0 });
+      world.addComponent(e, Visible);
+      world.setComponent(e, Visible, { value:1 });
+      world.addComponent(e, Trail);
+      world.setComponent(e, Trail, { enabled:1, maxPoints:64, spacing:4, width:4, color:0xffffff, mode:0 });
+
+      world.update(1 / 60);
+      assert.ok(true, "TrailSystem update completes without Diagnostics");
     });
   });
 

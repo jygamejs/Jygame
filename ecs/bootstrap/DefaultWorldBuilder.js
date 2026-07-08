@@ -55,6 +55,10 @@ function _registerStandardMetrics(diag) {
   diag.registerMetric({ name:"render.batch",         displayName:"Batch Draw",       category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,   tags:Object.freeze(["render"]) });
   diag.registerMetric({ name:"render.images",        displayName:"Images Drawn",     category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["render"]) });
   diag.registerMetric({ name:"render.primitives",    displayName:"Primitives Drawn", category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["render"]) });
+  diag.registerMetric({ name:"render.trails",         displayName:"Trails",           category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,   tags:Object.freeze(["render"]) });
+  diag.registerMetric({ name:"render.trails.segments",displayName:"Trail Segments",   category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["render"]) });
+  diag.registerMetric({ name:"render.trails.lines",   displayName:"Trail Lines",      category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["render"]) });
+  diag.registerMetric({ name:"render.trails.ribbons", displayName:"Trail Ribbons",    category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["render"]) });
 }
 
 export class DefaultWorldBuilder {
