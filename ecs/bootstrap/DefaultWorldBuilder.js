@@ -48,6 +48,13 @@ function _registerStandardMetrics(diag) {
   diag.registerMetric({ name:"ecs.systems.total",    displayName:"Systems Total",    category:MetricCategory.ECS,   group:"Scheduler", unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,  tags:Object.freeze(["ecs","scheduler"]) });
   diag.registerMetric({ name:"ecs.query.scans",      displayName:"Query Rescans",    category:MetricCategory.ECS,   group:"Queries", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["ecs","query"]) });
   diag.registerMetric({ name:"ecs.query.scanTime",   displayName:"Query Rescan Time",category:MetricCategory.ECS,   group:"Queries", unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,  tags:Object.freeze(["ecs","query"]) });
+
+  diag.registerMetric({ name:"render.draw",          displayName:"Render Draw",      category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,   tags:Object.freeze(["render"]) });
+  diag.registerMetric({ name:"render.commands",      displayName:"Draw Commands",    category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["render"]) });
+  diag.registerMetric({ name:"render.populate",      displayName:"Populate Queue",   category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,   tags:Object.freeze(["render"]) });
+  diag.registerMetric({ name:"render.batch",         displayName:"Batch Draw",       category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,   tags:Object.freeze(["render"]) });
+  diag.registerMetric({ name:"render.images",        displayName:"Images Drawn",     category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["render"]) });
+  diag.registerMetric({ name:"render.primitives",    displayName:"Primitives Drawn", category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["render"]) });
 }
 
 export class DefaultWorldBuilder {

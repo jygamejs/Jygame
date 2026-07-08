@@ -626,13 +626,13 @@ describe("RenderSystem (ECS)", () => {
       assert.ok(!src.includes("ctx.column ("));
     });
 
-    it("uses for-of ctx iteration", () => {
-      const src = RenderSystem.prototype.update.toString();
+    it("uses for-of ctx iteration in _populateQueue", () => {
+      const src = RenderSystem.prototype._populateQueue.toString();
       assert.ok(src.includes("for (const table of ctx)"));
     });
 
-    it("uses table.getColumn for column access", () => {
-      const src = RenderSystem.prototype.update.toString();
+    it("uses table.getColumn for column access in _populateQueue", () => {
+      const src = RenderSystem.prototype._populateQueue.toString();
       assert.ok(src.includes("table.getColumn("));
     });
 
@@ -641,8 +641,8 @@ describe("RenderSystem (ECS)", () => {
       assert.ok(src.includes("_compiled.componentIds"));
     });
 
-    it("iterates rows per table with for loop", () => {
-      const src = RenderSystem.prototype.update.toString();
+    it("iterates rows per table with for loop in _populateQueue", () => {
+      const src = RenderSystem.prototype._populateQueue.toString();
       assert.ok(src.includes("for (let r = 0; r < count; r"));
     });
 

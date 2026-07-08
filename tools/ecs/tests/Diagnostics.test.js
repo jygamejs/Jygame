@@ -1167,7 +1167,7 @@ describe("Diagnostics Subsystem Instrumentation", () => {
   // ─── RenderSystem ──────────────────────────────────
 
   describe("RenderSystem", () => {
-    it("records render.draw timer and render.drawCalls counter", () => {
+    it("records render.draw timer with nested populate/batch and per-type counters", () => {
       const world = new World();
       world.register(Transform);
       world.register(Renderable);
@@ -1183,6 +1183,12 @@ describe("Diagnostics Subsystem Instrumentation", () => {
       diag.registerMetric({ name:"ecs.world.archetypes",category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["ecs","world"]) });
       diag.registerMetric({ name:"ecs.entitiesCreated", category:MetricCategory.ECS,   group:"World", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["ecs"]) });
       diag.registerMetric({ name:"ecs.entitiesDestroyed",category:MetricCategory.ECS,  group:"World", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["ecs"]) });
+      diag.registerMetric({ name:"render.draw",         category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,   tags:Object.freeze(["render"]) });
+      diag.registerMetric({ name:"render.commands",     category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["render"]) });
+      diag.registerMetric({ name:"render.populate",     category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,   tags:Object.freeze(["render"]) });
+      diag.registerMetric({ name:"render.batch",        category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,   tags:Object.freeze(["render"]) });
+      diag.registerMetric({ name:"render.images",       category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["render"]) });
+      diag.registerMetric({ name:"render.primitives",   category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["render"]) });
       world.setResource(Diagnostics, diag);
 
       world.setResource(RenderQueue, new RenderQueue());
@@ -1202,11 +1208,21 @@ describe("Diagnostics Subsystem Instrumentation", () => {
       world.update(1 / 60);
       const snap = diag.lastSnapshot;
       const draw = diag.metrics.find("render.draw");
-      const calls = diag.metrics.find("render.drawCalls");
-      assert.ok(draw, "render.draw should be auto-registered");
-      assert.ok(calls, "render.drawCalls should be auto-registered");
+      const cmds = diag.metrics.find("render.commands");
+      const pop = diag.metrics.find("render.populate");
+      const batch = diag.metrics.find("render.batch");
+      const img = diag.metrics.find("render.images");
+      const prim = diag.metrics.find("render.primitives");
+      assert.ok(draw, "render.draw should exist");
+      assert.ok(cmds, "render.commands should exist");
+      assert.ok(pop, "render.populate should exist");
+      assert.ok(batch, "render.batch should exist");
       assert.strictEqual(snap.timerCount(draw.id), 1);
-      assert.ok(snap.counter(calls.id) >= 1);
+      assert.ok(snap.counter(cmds.id) >= 1);
+      assert.ok(snap.timerCount(pop.id) === 1, "populate scope recorded");
+      assert.ok(snap.timerCount(batch.id) === 1, "batch scope recorded");
+      assert.ok(snap.counter(img.id) === 0, "shape entity: 0 images");
+      assert.ok(snap.counter(prim.id) >= 1, "shape entity: primitives >= 1");
     });
 
     it("works without Diagnostics (no crash)", () => {

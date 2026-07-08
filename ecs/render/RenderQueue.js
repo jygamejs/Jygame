@@ -2,6 +2,8 @@ export class RenderQueue {
   constructor() {
     this._commands = [];
     this._count = 0;
+    this.imagesDrawn = 0;
+    this.primitivesDrawn = 0;
   }
 
   get count() {
@@ -12,6 +14,8 @@ export class RenderQueue {
     const cmds = this._commands;
     for (let i = this._count - 1; i >= 0; i--) cmds[i].image = 0;
     this._count = 0;
+    this.imagesDrawn = 0;
+    this.primitivesDrawn = 0;
   }
 
   push(image, x, y, rotation, scaleX, scaleY, width, height, fillColor, shape, layer) {
@@ -40,6 +44,7 @@ export class RenderQueue {
     const mat = ctx.getTransform();
     const cache = this._fillStyleCache || (this._fillStyleCache = new Map());
     let lastColor = -1;
+    let images = 0, primitives = 0;
     for (let i = 0; i < this._count; i++) {
       const cmd = this._commands[i];
       const rot = cmd.rotation;
@@ -67,6 +72,7 @@ export class RenderQueue {
       }
       if (cmd.image) {
         ctx.drawImage(cmd.image, -cmd.width / 2, -cmd.height / 2, cmd.width, cmd.height);
+        images++;
       } else {
         const hw = cmd.width * 0.5;
         const hh = cmd.height * 0.5;
@@ -86,8 +92,11 @@ export class RenderQueue {
         } else {
           ctx.fillRect(-hw, -hh, cmd.width, cmd.height);
         }
+        primitives++;
       }
     }
     ctx.restore();
+    this.imagesDrawn = images;
+    this.primitivesDrawn = primitives;
   }
 }
