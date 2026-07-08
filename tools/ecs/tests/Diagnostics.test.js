@@ -36,6 +36,7 @@ import { CanvasParticleRenderer } from "../../../particles/renderers/CanvasParti
 import { ParticleRenderCommandBuffer } from "../../../particles/renderdata/ParticleRenderCommandBuffer.js";
 import { StreamingManager } from "../../../ecs/streaming/StreamingManager.js";
 import { SceneManager } from "../../../ecs/scene/SceneManager.js";
+import { InputContext } from "../../../input/InputContext.js";
 
 // ─── Helpers ──────────────────────────────────────────
 
@@ -1889,6 +1890,77 @@ describe("Diagnostics Subsystem Instrumentation", () => {
       assert.strictEqual(snap.events.length, 1);
       assert.strictEqual(snap.events[0].name, "Pop");
     });
+  });
+});
+
+// ─── InputContext ──────────────────────────────────
+
+describe("InputContext", () => {
+  it("records input metrics via updateFrame", () => {
+    const ic = new InputContext();
+    const diag = new Diagnostics();
+    diag.registerMetric({ name:"input.actionQueries", category:MetricCategory.INPUT, group:"Input", unit:MetricUnit.COUNT, type:MetricType.COUNTER, tags:Object.freeze(["input"]) });
+    diag.registerMetric({ name:"input.pointerEvents", category:MetricCategory.INPUT, group:"Input", unit:MetricUnit.COUNT, type:MetricType.COUNTER, tags:Object.freeze(["input"]) });
+    diag.registerMetric({ name:"input.keyEvents",     category:MetricCategory.INPUT, group:"Input", unit:MetricUnit.COUNT, type:MetricType.COUNTER, tags:Object.freeze(["input"]) });
+    diag.registerMetric({ name:"input.activePointers",category:MetricCategory.INPUT, group:"Input", unit:MetricUnit.COUNT, type:MetricType.GAUGE,   tags:Object.freeze(["input"]) });
+    diag.lockRegistry();
+
+    ic.diagnostics = diag;
+
+    // Simulate 2 key down events
+    ic._handleKeyDown({ key:"a", preventDefault(){}, stopPropagation(){} });
+    ic._handleKeyDown({ key:"d", preventDefault(){}, stopPropagation(){} });
+
+    // Simulate 1 pointer down
+    ic._handlePointerDown({ pointerId:1, clientX:100, clientY:200, cancelable:false });
+
+    // Simulate 1 pointer move
+    ic._handlePointerMove({ pointerId:1, clientX:110, clientY:210, cancelable:false });
+
+    // 3 key events, 2 pointer events, 1 active pointer
+    diag.beginFrame(1, 16.6);
+    ic.updateFrame();
+    diag.endFrame();
+
+    let snap = diag.lastSnapshot;
+    const ke = diag.metrics.find("input.keyEvents");
+    const pe = diag.metrics.find("input.pointerEvents");
+    const ap = diag.metrics.find("input.activePointers");
+    const aq = diag.metrics.find("input.actionQueries");
+    assert.ok(ke);
+    assert.ok(pe);
+    assert.ok(ap);
+    assert.ok(aq);
+    assert.strictEqual(snap.counter(ke.id), 2);
+    assert.strictEqual(snap.counter(pe.id), 2);
+    assert.strictEqual(snap.gauge(ap.id), 1);
+    assert.strictEqual(snap.counter(aq.id), 0);
+
+    // Simulate justPressed queries that match
+    ic._handleKeyDown({ key:"w", preventDefault(){}, stopPropagation(){} });
+    let r1 = ic.justPressed("w");
+    let r2 = ic.justPressed("UP");   // "w" maps to "UP" — should match
+    assert.ok(r1);
+    assert.ok(r2);
+
+    diag.beginFrame(2, 16.6);
+    ic.updateFrame();
+    diag.endFrame();
+
+    snap = diag.lastSnapshot;
+    assert.strictEqual(snap.counter(ke.id), 1);
+    assert.strictEqual(snap.counter(pe.id), 0);
+    assert.strictEqual(snap.counter(aq.id), 2);
+
+    // Clear frame counters: next frame should be 0
+    diag.beginFrame(3, 16.6);
+    ic.updateFrame();
+    diag.endFrame();
+
+    snap = diag.lastSnapshot;
+    assert.strictEqual(snap.counter(ke.id), 0);
+    assert.strictEqual(snap.counter(pe.id), 0);
+    assert.strictEqual(snap.counter(aq.id), 0);
   });
 });
 

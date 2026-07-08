@@ -31,6 +31,12 @@ export class InputContext {
     this._keyMap = new Map(Object.entries(DEFAULT_KEY_MAP));
     this.buffer = [];
 
+    this._diagnostics = null;
+    this._diagInitDone = false;
+    this._frameKeyEvents = 0;
+    this._framePointerEvents = 0;
+    this._frameActions = 0;
+
     this.swipeThreshold = options.swipeThreshold ?? 30;
     this.tapTimeout = options.tapTimeout ?? 300;
 
@@ -80,7 +86,30 @@ export class InputContext {
     this.buffer = [];
   }
 
+  _initDiag(diag) {
+    if (this._diagInitDone) return;
+    this._diagInitDone = true;
+    const aq = diag.metrics.find("input.actionQueries");
+    if (aq) this._diagActionsId = aq.id;
+    const pe = diag.metrics.find("input.pointerEvents");
+    if (pe) this._diagPointerEventsId = pe.id;
+    const ke = diag.metrics.find("input.keyEvents");
+    if (ke) this._diagKeyEventsId = ke.id;
+    const ap = diag.metrics.find("input.activePointers");
+    if (ap) this._diagActivePointersId = ap.id;
+  }
+
   updateFrame() {
+    if (this._diagnostics) {
+      this._initDiag(this._diagnostics);
+      if (this._diagKeyEventsId !== undefined) this._diagnostics.recordCounter(this._diagKeyEventsId, this._frameKeyEvents);
+      if (this._diagPointerEventsId !== undefined) this._diagnostics.recordCounter(this._diagPointerEventsId, this._framePointerEvents);
+      if (this._diagActionsId !== undefined) this._diagnostics.recordCounter(this._diagActionsId, this._frameActions);
+      if (this._diagActivePointersId !== undefined) this._diagnostics.recordGauge(this._diagActivePointersId, this._pointers.size);
+    }
+    this._frameKeyEvents = 0;
+    this._framePointerEvents = 0;
+    this._frameActions = 0;
     this._justPressed.clear();
     this._justReleased.clear();
   }
@@ -147,11 +176,15 @@ export class InputContext {
   }
 
   justPressed(key) {
-    return this._resolve(key, this._justPressed);
+    const result = this._resolve(key, this._justPressed);
+    if (result) this._frameActions++;
+    return result;
   }
 
   justReleased(key) {
-    return this._resolve(key, this._justReleased);
+    const result = this._resolve(key, this._justReleased);
+    if (result) this._frameActions++;
+    return result;
   }
 
   consumeBuffer() {
@@ -162,6 +195,12 @@ export class InputContext {
   peekBuffer() {
     if (this.buffer.length === 0) return null;
     return this.buffer[0];
+  }
+
+  get diagnostics() { return this._diagnostics; }
+  set diagnostics(diag) {
+    this._diagnostics = diag;
+    this._diagInitDone = false;
   }
 
   getPointer(id) {
@@ -199,6 +238,7 @@ export class InputContext {
   }
 
   _handleKeyDown(e) {
+    this._frameKeyEvents++;
     const raw = e.key;
     if (!this._pressed.get(raw)) this._justPressed.set(raw, true);
     this._pressed.set(raw, true);
@@ -215,6 +255,7 @@ export class InputContext {
   }
 
   _handleKeyUp(e) {
+    this._frameKeyEvents++;
     const raw = e.key;
     if (this._pressed.get(raw)) this._justReleased.set(raw, true);
     this._pressed.set(raw, false);
@@ -227,6 +268,7 @@ export class InputContext {
   }
 
   _handlePointerDown(e) {
+    this._framePointerEvents++;
     this._pointers.set(e.pointerId, {
       id: e.pointerId,
       x: e.clientX,
@@ -243,6 +285,7 @@ export class InputContext {
   }
 
   _handlePointerMove(e) {
+    this._framePointerEvents++;
     const p = this._pointers.get(e.pointerId);
     if (!p) return;
     p.x = e.clientX;
@@ -253,6 +296,7 @@ export class InputContext {
   }
 
   _handlePointerUp(e) {
+    this._framePointerEvents++;
     const p = this._pointers.get(e.pointerId);
     if (!p || !p.isDown) return;
     p.x = e.clientX;
@@ -281,6 +325,7 @@ export class InputContext {
   }
 
   _handlePointerCancel(e) {
+    this._framePointerEvents++;
     this._pointers.delete(e.pointerId);
   }
 }

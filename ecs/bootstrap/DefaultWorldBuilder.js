@@ -90,6 +90,11 @@ function _registerStandardMetrics(diag) {
 
   diag.registerMetric({ name:"scene.transitions",  displayName:"Scene Transitions", category:MetricCategory.SCENE, group:"Scene", unit:MetricUnit.COUNT, type:MetricType.COUNTER, tags:Object.freeze(["scene"]) });
   diag.registerMetric({ name:"scene.activeScenes", displayName:"Active Scenes",     category:MetricCategory.SCENE, group:"Scene", unit:MetricUnit.COUNT, type:MetricType.GAUGE,   tags:Object.freeze(["scene"]) });
+
+  diag.registerMetric({ name:"input.actionQueries", displayName:"Action Queries",    category:MetricCategory.INPUT, group:"Input", unit:MetricUnit.COUNT, type:MetricType.COUNTER, tags:Object.freeze(["input"]) });
+  diag.registerMetric({ name:"input.pointerEvents", displayName:"Pointer Events",     category:MetricCategory.INPUT, group:"Input", unit:MetricUnit.COUNT, type:MetricType.COUNTER, tags:Object.freeze(["input"]) });
+  diag.registerMetric({ name:"input.keyEvents",     displayName:"Key Events",         category:MetricCategory.INPUT, group:"Input", unit:MetricUnit.COUNT, type:MetricType.COUNTER, tags:Object.freeze(["input"]) });
+  diag.registerMetric({ name:"input.activePointers",displayName:"Active Pointers",    category:MetricCategory.INPUT, group:"Input", unit:MetricUnit.COUNT, type:MetricType.GAUGE,   tags:Object.freeze(["input"]) });
 }
 
 export class DefaultWorldBuilder {
