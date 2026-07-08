@@ -4,7 +4,8 @@ import { Diagnostics, MetricCategory, MetricUnit, MetricType }
 
 let _diagnostics = null;
 let _diagnosticsInitDone = false;
-let _diagFontsId;
+let _pendingCount = 0;
+let _diagFontsId, _diagLoadedId, _diagPendingId, _diagLoadErrorsId;
 
 function _initFontDiag(diag) {
   if (_diagnosticsInitDone) return;
@@ -18,6 +19,12 @@ function _initFontDiag(diag) {
     type: MetricType.GAUGE,
     tags: Object.freeze(["assets"]),
   });
+  const loaded = diag.metrics.find("assets.loaded");
+  if (loaded) _diagLoadedId = loaded.id;
+  const pending = diag.metrics.find("assets.pending");
+  if (pending) _diagPendingId = pending.id;
+  const errors = diag.metrics.find("assets.loadErrors");
+  if (errors) _diagLoadErrorsId = errors.id;
 }
 
 function _recordFontGauge() {
@@ -36,13 +43,30 @@ export const FontLoader = {
   async load(family, path) {
     if (_loaded.has(family)) return;
 
-    const font = new FontFace(family, `url(${path})`);
-    await font.load();
-    document.fonts.add(font);
-    _loaded.add(family);
     if (_diagnostics) {
       _initFontDiag(_diagnostics);
-      _recordFontGauge();
+      _pendingCount++;
+      if (_diagPendingId !== undefined) _diagnostics.recordGauge(_diagPendingId, _pendingCount);
+    }
+
+    try {
+      const font = new FontFace(family, `url(${path})`);
+      await font.load();
+      document.fonts.add(font);
+      _loaded.add(family);
+      if (_diagnostics) {
+        if (_diagLoadedId !== undefined) _diagnostics.recordCounter(_diagLoadedId, 1);
+        _pendingCount--;
+        if (_diagPendingId !== undefined) _diagnostics.recordGauge(_diagPendingId, _pendingCount);
+        _recordFontGauge();
+      }
+    } catch (err) {
+      if (_diagnostics) {
+        if (_diagLoadErrorsId !== undefined) _diagnostics.recordCounter(_diagLoadErrorsId, 1);
+        _pendingCount--;
+        if (_diagPendingId !== undefined) _diagnostics.recordGauge(_diagPendingId, _pendingCount);
+      }
+      throw err;
     }
   },
 

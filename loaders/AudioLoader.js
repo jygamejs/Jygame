@@ -4,7 +4,8 @@ import { Diagnostics, MetricCategory, MetricUnit, MetricType }
 
 let _diagnostics = null;
 let _diagnosticsInitDone = false;
-let _diagAudioClipsId, _diagLoadedId;
+let _pendingCount = 0;
+let _diagAudioClipsId, _diagLoadedId, _diagPendingId, _diagLoadErrorsId;
 
 function _initAudioDiag(diag) {
   if (_diagnosticsInitDone) return;
@@ -18,15 +19,12 @@ function _initAudioDiag(diag) {
     type: MetricType.GAUGE,
     tags: Object.freeze(["assets"]),
   });
-  _diagLoadedId = diag.registerDynamicMetric({
-    name: "assets.loaded",
-    displayName: "Assets Loaded",
-    category: MetricCategory.ASSETS,
-    group: "Assets",
-    unit: MetricUnit.COUNT,
-    type: MetricType.COUNTER,
-    tags: Object.freeze(["assets"]),
-  });
+  const loaded = diag.metrics.find("assets.loaded");
+  if (loaded) _diagLoadedId = loaded.id;
+  const pending = diag.metrics.find("assets.pending");
+  if (pending) _diagPendingId = pending.id;
+  const errors = diag.metrics.find("assets.loadErrors");
+  if (errors) _diagLoadErrorsId = errors.id;
 }
 
 function _recordAudioGauge() {
@@ -46,19 +44,33 @@ export const AudioLoader = {
   load(path) {
     if (_cache.has(path)) return Promise.resolve(_cache.get(path));
 
+    if (_diagnostics) {
+      _initAudioDiag(_diagnostics);
+      _pendingCount++;
+      if (_diagPendingId !== undefined) _diagnostics.recordGauge(_diagPendingId, _pendingCount);
+    }
+
     return new Promise((resolve, reject) => {
       const audio = new Audio();
       audio.preload = "auto";
       audio.oncanplaythrough = () => {
         _cache.set(path, audio);
         if (_diagnostics) {
-          _initAudioDiag(_diagnostics);
-          _diagnostics.recordCounter(_diagLoadedId, 1);
-          if (_diagnostics._active) _recordAudioGauge();
+          if (_diagLoadedId !== undefined) _diagnostics.recordCounter(_diagLoadedId, 1);
+          _pendingCount--;
+          if (_diagPendingId !== undefined) _diagnostics.recordGauge(_diagPendingId, _pendingCount);
+          _recordAudioGauge();
         }
         resolve(audio);
       };
-      audio.onerror = () => reject(new Error(`Failed to load audio: ${path}`));
+      audio.onerror = () => {
+        if (_diagnostics) {
+          if (_diagLoadErrorsId !== undefined) _diagnostics.recordCounter(_diagLoadErrorsId, 1);
+          _pendingCount--;
+          if (_diagPendingId !== undefined) _diagnostics.recordGauge(_diagPendingId, _pendingCount);
+        }
+        reject(new Error(`Failed to load audio: ${path}`));
+      };
       audio.src = path;
       audio.load();
     });

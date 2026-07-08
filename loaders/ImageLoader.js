@@ -4,7 +4,8 @@ import { Diagnostics, MetricCategory, MetricUnit, MetricType }
 
 let _diagnostics = null;
 let _diagnosticsInitDone = false;
-let _diagTexturesId, _diagLoadedId;
+let _pendingCount = 0;
+let _diagTexturesId, _diagLoadedId, _diagPendingId, _diagLoadErrorsId;
 
 function _initImageDiag(diag) {
   if (_diagnosticsInitDone) return;
@@ -18,15 +19,12 @@ function _initImageDiag(diag) {
     type: MetricType.GAUGE,
     tags: Object.freeze(["assets"]),
   });
-  _diagLoadedId = diag.registerDynamicMetric({
-    name: "assets.loaded",
-    displayName: "Assets Loaded",
-    category: MetricCategory.ASSETS,
-    group: "Assets",
-    unit: MetricUnit.COUNT,
-    type: MetricType.COUNTER,
-    tags: Object.freeze(["assets"]),
-  });
+  const loaded = diag.metrics.find("assets.loaded");
+  if (loaded) _diagLoadedId = loaded.id;
+  const pending = diag.metrics.find("assets.pending");
+  if (pending) _diagPendingId = pending.id;
+  const errors = diag.metrics.find("assets.loadErrors");
+  if (errors) _diagLoadErrorsId = errors.id;
 }
 
 function _recordTextureGauge() {
@@ -56,19 +54,33 @@ export const ImageLoader = {
 
     if (_cache.has(path)) return Promise.resolve(_cache.get(path));
 
+    if (_diagnostics) {
+      _initImageDiag(_diagnostics);
+      _pendingCount++;
+      if (_diagPendingId !== undefined) _diagnostics.recordGauge(_diagPendingId, _pendingCount);
+    }
+
     return new Promise((resolve, reject) => {
       const img = new Image();
       img.onload = async () => {
         if (decode) await _decode(img, path);
         _cache.set(path, img);
         if (_diagnostics) {
-          _initImageDiag(_diagnostics);
-          _diagnostics.recordCounter(_diagLoadedId, 1);
-          if (_diagnostics._active) _recordTextureGauge();
+          if (_diagLoadedId !== undefined) _diagnostics.recordCounter(_diagLoadedId, 1);
+          _pendingCount--;
+          if (_diagPendingId !== undefined) _diagnostics.recordGauge(_diagPendingId, _pendingCount);
+          _recordTextureGauge();
         }
         resolve(img);
       };
-      img.onerror = () => reject(new Error(`Failed to load image: ${path}`));
+      img.onerror = () => {
+        if (_diagnostics) {
+          if (_diagLoadErrorsId !== undefined) _diagnostics.recordCounter(_diagLoadErrorsId, 1);
+          _pendingCount--;
+          if (_diagPendingId !== undefined) _diagnostics.recordGauge(_diagPendingId, _pendingCount);
+        }
+        reject(new Error(`Failed to load image: ${path}`));
+      };
       img.src = path;
     });
   },

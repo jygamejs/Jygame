@@ -69,6 +69,10 @@ function _registerStandardMetrics(diag) {
   diag.registerMetric({ name:"audio.sfxPlayed",   displayName:"SFX Played",        category:MetricCategory.AUDIO, group:"Audio", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["audio"]) });
   diag.registerMetric({ name:"audio.musicPlayed", displayName:"Music Played",      category:MetricCategory.AUDIO, group:"Audio", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["audio"]) });
   diag.registerMetric({ name:"audio.sfxFinished", displayName:"SFX Finished",      category:MetricCategory.AUDIO, group:"Audio", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["audio"]) });
+
+  diag.registerMetric({ name:"assets.loaded",   displayName:"Assets Loaded",   category:MetricCategory.ASSETS, group:"Assets", unit:MetricUnit.COUNT, type:MetricType.COUNTER, tags:Object.freeze(["assets"]) });
+  diag.registerMetric({ name:"assets.pending",  displayName:"Pending Loads",   category:MetricCategory.ASSETS, group:"Assets", unit:MetricUnit.COUNT, type:MetricType.GAUGE,   tags:Object.freeze(["assets"]) });
+  diag.registerMetric({ name:"assets.loadErrors", displayName:"Load Errors",   category:MetricCategory.ASSETS, group:"Assets", unit:MetricUnit.COUNT, type:MetricType.COUNTER, tags:Object.freeze(["assets"]) });
 }
 
 export class DefaultWorldBuilder {
