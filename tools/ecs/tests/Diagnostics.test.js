@@ -1505,11 +1505,18 @@ describe("Diagnostics Subsystem Instrumentation", () => {
   // ─── AudioManager ──────────────────────────────────
 
   describe("AudioManager", () => {
-    it("records audio.update, audio.active, audio.pooled via diagnostics", () => {
+    it("records audio metrics via diagnostics", () => {
       const am = new AudioManager();
       const diag = new Diagnostics();
-      diag.registerMetric({ name:"frame.delta", category:MetricCategory.FRAME, group:"Frame", unit:MetricUnit.MILLISECONDS, type:MetricType.GAUGE, tags:Object.freeze(["frame"]) });
-      diag.registerMetric({ name:"frame.fps",   category:MetricCategory.FRAME, group:"Frame", unit:MetricUnit.FPS,          type:MetricType.GAUGE, tags:Object.freeze(["frame"]) });
+      const reg = (name, type, unit) =>
+        diag.registerMetric({ name, category:MetricCategory.AUDIO, group:"Audio", unit, type, tags:Object.freeze(["audio"]) });
+      reg("audio.update",      MetricType.TIMER,   MetricUnit.MILLISECONDS);
+      reg("audio.active",      MetricType.GAUGE,   MetricUnit.COUNT);
+      reg("audio.pooled",      MetricType.GAUGE,   MetricUnit.COUNT);
+      reg("audio.channels",    MetricType.GAUGE,   MetricUnit.COUNT);
+      reg("audio.sfxPlayed",   MetricType.COUNTER, MetricUnit.COUNT);
+      reg("audio.musicPlayed", MetricType.COUNTER, MetricUnit.COUNT);
+      reg("audio.sfxFinished", MetricType.COUNTER, MetricUnit.COUNT);
       diag.lockRegistry();
 
       am.diagnostics = diag;
@@ -1522,12 +1529,15 @@ describe("Diagnostics Subsystem Instrumentation", () => {
       const update = diag.metrics.find("audio.update");
       const active = diag.metrics.find("audio.active");
       const pooled = diag.metrics.find("audio.pooled");
+      const channels = diag.metrics.find("audio.channels");
       assert.ok(update, "audio.update should exist");
       assert.ok(active, "audio.active should exist");
       assert.ok(pooled, "audio.pooled should exist");
+      assert.ok(channels, "audio.channels should exist");
       assert.strictEqual(snap.timerCount(update.id), 1);
       assert.strictEqual(snap.gauge(active.id), 0);
       assert.ok(snap.gauge(pooled.id) >= 0);
+      assert.strictEqual(snap.gauge(channels.id), 0);
     });
   });
 

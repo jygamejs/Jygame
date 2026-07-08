@@ -61,6 +61,14 @@ function _registerStandardMetrics(diag) {
   diag.registerMetric({ name:"render.trails.ribbons", displayName:"Trail Ribbons",    category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["render"]) });
   diag.registerMetric({ name:"render.particles.sprites",    displayName:"Particle Sprites",   category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.COUNT, type:MetricType.COUNTER, tags:Object.freeze(["render"]) });
   diag.registerMetric({ name:"render.particles.primitives", displayName:"Particle Primitives",category:MetricCategory.RENDER, group:"Render", unit:MetricUnit.COUNT, type:MetricType.COUNTER, tags:Object.freeze(["render"]) });
+
+  diag.registerMetric({ name:"audio.update",      displayName:"Audio Update",      category:MetricCategory.AUDIO, group:"Audio", unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,   tags:Object.freeze(["audio"]) });
+  diag.registerMetric({ name:"audio.active",      displayName:"Active Sounds",     category:MetricCategory.AUDIO, group:"Audio", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["audio"]) });
+  diag.registerMetric({ name:"audio.pooled",      displayName:"Pooled Instances",  category:MetricCategory.AUDIO, group:"Audio", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["audio"]) });
+  diag.registerMetric({ name:"audio.channels",    displayName:"Audio Channels",    category:MetricCategory.AUDIO, group:"Audio", unit:MetricUnit.COUNT,         type:MetricType.GAUGE,   tags:Object.freeze(["audio"]) });
+  diag.registerMetric({ name:"audio.sfxPlayed",   displayName:"SFX Played",        category:MetricCategory.AUDIO, group:"Audio", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["audio"]) });
+  diag.registerMetric({ name:"audio.musicPlayed", displayName:"Music Played",      category:MetricCategory.AUDIO, group:"Audio", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["audio"]) });
+  diag.registerMetric({ name:"audio.sfxFinished", displayName:"SFX Finished",      category:MetricCategory.AUDIO, group:"Audio", unit:MetricUnit.COUNT,         type:MetricType.COUNTER, tags:Object.freeze(["audio"]) });
 }
 
 export class DefaultWorldBuilder {

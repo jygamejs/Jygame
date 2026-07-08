@@ -50,6 +50,7 @@ export class Music {
       if (this._playback.paused) {
         this._playback.play();
         this._playback.loop = this._loop;
+        if (this._onPlay) this._onPlay();
         return this;
       }
       if (this._playback.ended) {
@@ -63,6 +64,7 @@ export class Music {
     this._playback.onEnded(() => {});
     this._updateVolume();
     this._playback.play();
+    if (this._onPlay) this._onPlay();
     return this;
   }
 

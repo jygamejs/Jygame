@@ -96,6 +96,7 @@ export class Sound {
   _returnInstance(instance) {
     if (instance._returned) return;
     instance._returned = true;
+    if (this._onInstanceFinished) this._onInstanceFinished();
     instance._reset();
 
     let idx = instance._poolIndex;

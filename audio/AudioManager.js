@@ -168,6 +168,7 @@ export class AudioManager {
     if (this._sounds.has(key)) throw new Error("Sound '" + key + "' already exists");
 
     const sound = new Sound(asset, this, { backend: this._backend });
+    sound._onInstanceFinished = () => this._incrementSfxFinished();
     this._sounds.set(key, sound);
     return sound;
   }
@@ -225,6 +226,7 @@ export class AudioManager {
       if (!asset) throw new Error("Asset '" + def.source + "' not loaded. Use AudioLoader.load" + (this._backend.supportsGroupGain ? "Buffer" : "") + "() to load it first.");
 
       sound = new Sound(asset, this, { maxInstances: def.maxInstances, backend: this._backend });
+      sound._onInstanceFinished = () => this._incrementSfxFinished();
       sound.volume = def.volume;
       sound.group = def.group;
       this._soundsByDefinition.set(name, sound);
@@ -242,6 +244,10 @@ export class AudioManager {
 
     const instance = sound.play(spatialOpts);
     if (!instance) return null;
+
+    if (this._diagnostics && this._diagSfxPlayedId !== undefined) {
+      this._diagnostics.recordCounter(this._diagSfxPlayedId, 1);
+    }
 
     if (options.volume !== undefined) {
       instance._overrideSoundVolume = Math.max(0, Math.min(1, options.volume));
@@ -281,6 +287,11 @@ export class AudioManager {
     if (!asset) throw new Error("Sound '" + key + "' not found. Use audio.add() or audio.define() first.");
 
     const music = new Music(asset, this);
+    music._onPlay = () => {
+      if (this._diagnostics && this._diagMusicPlayedId !== undefined) {
+        this._diagnostics.recordCounter(this._diagMusicPlayedId, 1);
+      }
+    };
     this._musicCache.set(key, music);
     return music;
   }
@@ -323,33 +334,20 @@ export class AudioManager {
   _initDiag(diag) {
     if (this._diagInitDone) return;
     this._diagInitDone = true;
-    this._diagUpdateId = diag.registerDynamicMetric({
-      name: "audio.update",
-      displayName: "Audio Update",
-      category: MetricCategory.AUDIO,
-      group: "Audio",
-      unit: MetricUnit.MILLISECONDS,
-      type: MetricType.TIMER,
-      tags: Object.freeze(["audio"]),
-    });
-    this._diagActiveId = diag.registerDynamicMetric({
-      name: "audio.active",
-      displayName: "Active Sounds",
-      category: MetricCategory.AUDIO,
-      group: "Audio",
-      unit: MetricUnit.COUNT,
-      type: MetricType.GAUGE,
-      tags: Object.freeze(["audio"]),
-    });
-    this._diagPooledId = diag.registerDynamicMetric({
-      name: "audio.pooled",
-      displayName: "Pooled Instances",
-      category: MetricCategory.AUDIO,
-      group: "Audio",
-      unit: MetricUnit.COUNT,
-      type: MetricType.GAUGE,
-      tags: Object.freeze(["audio"]),
-    });
+    const u = diag.metrics.find("audio.update");
+    if (u) this._diagUpdateId = u.id;
+    const a = diag.metrics.find("audio.active");
+    if (a) this._diagActiveId = a.id;
+    const p = diag.metrics.find("audio.pooled");
+    if (p) this._diagPooledId = p.id;
+    const c = diag.metrics.find("audio.channels");
+    if (c) this._diagChannelsId = c.id;
+    const s = diag.metrics.find("audio.sfxPlayed");
+    if (s) this._diagSfxPlayedId = s.id;
+    const m = diag.metrics.find("audio.musicPlayed");
+    if (m) this._diagMusicPlayedId = m.id;
+    const f = diag.metrics.find("audio.sfxFinished");
+    if (f) this._diagSfxFinishedId = f.id;
   }
 
   update(dt) {
@@ -386,6 +384,7 @@ export class AudioManager {
       this._diagnostics.scope(this._diagUpdateId, doUpdate);
       this._diagnostics.recordGauge(this._diagActiveId, activeCount);
       this._diagnostics.recordGauge(this._diagPooledId, pooledCount);
+      this._diagnostics.recordGauge(this._diagChannelsId, activeCount + pooledCount);
     } else {
       doUpdate();
     }
@@ -397,6 +396,12 @@ export class AudioManager {
 
   set diagnostics(diag) {
     this._diagnostics = diag;
+  }
+
+  _incrementSfxFinished() {
+    if (this._diagnostics && this._diagSfxFinishedId !== undefined) {
+      this._diagnostics.recordCounter(this._diagSfxFinishedId, 1);
+    }
   }
 
   pauseAll() {
