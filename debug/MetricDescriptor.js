@@ -9,6 +9,11 @@ export class MetricDescriptor {
   #priority;
   #tags;
   #description;
+  #budget;
+  #warnAt;
+  #critAt;
+  #format;
+  #color;
 
   constructor(descriptor) {
     this.#id = descriptor.id;
@@ -21,6 +26,11 @@ export class MetricDescriptor {
     this.#priority = descriptor.priority ?? 0;
     this.#tags = descriptor.tags ? Object.freeze([...descriptor.tags]) : Object.freeze([]);
     this.#description = descriptor.description ?? "";
+    this.#budget = descriptor.budget;
+    this.#warnAt = descriptor.warnAt;
+    this.#critAt = descriptor.critAt;
+    this.#format = descriptor.format;
+    this.#color = descriptor.color;
     Object.freeze(this);
   }
 
@@ -34,4 +44,9 @@ export class MetricDescriptor {
   get priority()     { return this.#priority; }
   get tags()         { return this.#tags; }
   get description()  { return this.#description; }
+  get budget()       { return this.#budget; }
+  get warnAt()       { return this.#warnAt; }
+  get critAt()       { return this.#critAt; }
+  get format()       { return this.#format; }
+  get color()        { return this.#color; }
 }
