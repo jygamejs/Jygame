@@ -7,6 +7,7 @@ import { FrameEvent } from "./FrameEvent.js";
 import { FrameHistory } from "./FrameHistory.js";
 import { TriggerCondition } from "./TriggerCondition.js";
 import { CaptureResult } from "./CaptureResult.js";
+import { Analysis } from "./Analysis.js";
 
 export class Diagnostics {
   constructor(options = {}) {
@@ -331,6 +332,10 @@ export class Diagnostics {
 
   get history() {
     return this._history;
+  }
+
+  get analysis() {
+    return new Analysis(this._history, this._metrics);
   }
 
   // ─── Session control ────────────────────────────────

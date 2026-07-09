@@ -12,4 +12,5 @@ export { FrameEvent } from "./FrameEvent.js";
 export { FrameHistory } from "./FrameHistory.js";
 export { TriggerCondition } from "./TriggerCondition.js";
 export { CaptureResult } from "./CaptureResult.js";
+export { Analysis } from "./Analysis.js";
 export { resolveMetricIds } from "./resolveMetricIds.js";
