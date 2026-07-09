@@ -91,6 +91,11 @@ function _registerStandardMetrics(diag) {
   diag.registerMetric({ name:"scene.transitions",  displayName:"Scene Transitions", category:MetricCategory.SCENE, group:"Scene", unit:MetricUnit.COUNT, type:MetricType.COUNTER, tags:Object.freeze(["scene"]) });
   diag.registerMetric({ name:"scene.activeScenes", displayName:"Active Scenes",     category:MetricCategory.SCENE, group:"Scene", unit:MetricUnit.COUNT, type:MetricType.GAUGE,   tags:Object.freeze(["scene"]) });
 
+  diag.registerMetric({ name:"frame.total",         displayName:"Frame Total",       category:MetricCategory.FRAME, group:"Frame", unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,   tags:Object.freeze(["frame"]) });
+  diag.registerMetric({ name:"frame.input",         displayName:"Frame Input",       category:MetricCategory.FRAME, group:"Frame", unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,   tags:Object.freeze(["frame","input"]) });
+  diag.registerMetric({ name:"frame.render",        displayName:"Frame Render",      category:MetricCategory.FRAME, group:"Frame", unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,   tags:Object.freeze(["frame","render"]) });
+  diag.registerMetric({ name:"frame.canvas",        displayName:"Frame Canvas",      category:MetricCategory.FRAME, group:"Frame", unit:MetricUnit.MILLISECONDS, type:MetricType.TIMER,   tags:Object.freeze(["frame","canvas"]) });
+
   diag.registerMetric({ name:"input.actionQueries", displayName:"Action Queries",    category:MetricCategory.INPUT, group:"Input", unit:MetricUnit.COUNT, type:MetricType.COUNTER, tags:Object.freeze(["input"]) });
   diag.registerMetric({ name:"input.pointerEvents", displayName:"Pointer Events",     category:MetricCategory.INPUT, group:"Input", unit:MetricUnit.COUNT, type:MetricType.COUNTER, tags:Object.freeze(["input"]) });
   diag.registerMetric({ name:"input.keyEvents",     displayName:"Key Events",         category:MetricCategory.INPUT, group:"Input", unit:MetricUnit.COUNT, type:MetricType.COUNTER, tags:Object.freeze(["input"]) });

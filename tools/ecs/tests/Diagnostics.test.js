@@ -765,24 +765,25 @@ describe("Diagnostics ECS Integration", () => {
     assert.ok(snap.gauge(diag.metrics.find("ecs.world.archetypes").id) >= 1);
   });
 
-  it("records frame.delta and frame.fps gauges", () => {
+  it("records frame.delta and frame.fps gauges (from Game, not World)", () => {
     const world = createTestWorld();
     world.update(1 / 60);
     const diag = world.getResource(Diagnostics);
     const snap = diag.lastSnapshot;
-    const expectedMs = (1 / 60) * 1000;
-    assert.ok(Math.abs(snap.gauge(diag.metrics.find("frame.delta").id) - expectedMs) < 0.01);
-    assert.ok(snap.gauge(diag.metrics.find("frame.fps").id) > 0);
+    const deltaId = diag.metrics.find("frame.delta").id;
+    const fpsId = diag.metrics.find("frame.fps").id;
+    assert.strictEqual(snap.gauge(deltaId), 0, "World no longer records frame.delta (moved to Game)");
+    assert.strictEqual(snap.gauge(fpsId), 0, "World no longer records frame.fps (moved to Game)");
   });
 
-  it("records frame.update timer", () => {
+  it("records frame.update timer (from Game, not World)", () => {
     const world = createTestWorld();
     world.update(1 / 60);
     const diag = world.getResource(Diagnostics);
     const snap = diag.lastSnapshot;
     const updateId = diag.metrics.find("frame.update").id;
-    assert.strictEqual(snap.timerCount(updateId), 1);
-    assert.ok(snap.timerTotal(updateId) >= 0);
+    assert.strictEqual(snap.timerCount(updateId), 0, "World no longer records frame.update (moved to Game)");
+    assert.strictEqual(snap.timerTotal(updateId), 0);
   });
 
   it("records ecs.system.* timer per system", () => {
@@ -1984,7 +1985,7 @@ function busyWork(ms) {
 }
 
 describe("Diagnostics Aggregate Timing", () => {
-  it("frame.update > ecs.systems.total > per-system timers", () => {
+  it("ecs.systems.total >= sum of per-system timers", () => {
     const world = new World();
     world.register(FakeC1);
     world.register(FakeC2);
@@ -2011,23 +2012,19 @@ describe("Diagnostics Aggregate Timing", () => {
     world.update(1 / 60);
     const snap = diag.lastSnapshot;
 
-    const fu = diag.metrics.find("frame.update");
     const st = diag.metrics.find("ecs.systems.total");
     const s1 = diag.metrics.find("ecs.system.busysys1");
     const s2 = diag.metrics.find("ecs.system.busysys2");
 
-    assert.ok(fu, "frame.update should be registered");
     assert.ok(st, "ecs.systems.total should be registered");
     assert.ok(s1, "ecs.system.busysys1 should be registered");
     assert.ok(s2, "ecs.system.busysys2 should be registered");
 
-    const fuTime = snap.timerTotal(fu.id);
     const stTime = snap.timerTotal(st.id);
     const s1Time = snap.timerTotal(s1.id);
     const s2Time = snap.timerTotal(s2.id);
 
     assert.ok(stTime >= s1Time + s2Time, `ecs.systems.total (${stTime}) should be >= sum of per-system (${s1Time + s2Time})`);
-    assert.ok(fuTime >= stTime, `frame.update (${fuTime}) should be >= ecs.systems.total (${stTime})`);
   });
 
   it("ecs.systems.total includes sort time", () => {

@@ -665,9 +665,6 @@ export class World {
   _initDiag(diag) {
     if (this._diagIds) return;
     this._diagIds = resolveMetricIds(diag, {
-      frameUpdate: "frame.update",
-      frameDelta: "frame.delta",
-      frameFps: "frame.fps",
       worldEntities: "ecs.world.entities",
       worldArchetypes: "ecs.world.archetypes",
       worldSystems: "ecs.world.systems",
@@ -683,37 +680,24 @@ export class World {
 
   update(dt) {
     const diag = this._resources.get(Diagnostics);
-    const dtMs = dt * 1000;
+    const ownFrame = diag && !diag.isInsideFrame;
 
-    if (diag) {
-      diag.beginFrame(this._frameCount++, dtMs);
-    }
+    if (ownFrame) diag.beginFrame(this._frameCount++, dt * 1000);
 
     try {
       if (diag) this._initDiag(diag);
+      this._scheduler.update(dt);
       const mids = this._diagIds;
-      if (diag && mids && mids.frameUpdate >= 0) {
-        diag.scope(mids.frameUpdate, () => {
-          this._scheduler.update(dt);
-        });
-      } else {
-        this._scheduler.update(dt);
+      if (mids) {
+        if (mids.worldEntities >= 0) diag.recordGauge(mids.worldEntities, this._entityManager.aliveCount);
+        if (mids.worldArchetypes >= 0) diag.recordGauge(mids.worldArchetypes, this._archetypeSystem.archetypeCount);
+        if (mids.worldSystems >= 0) diag.recordGauge(mids.worldSystems, this._scheduler.systemCount);
+        if (mids.worldComponents >= 0) diag.recordGauge(mids.worldComponents, this._registry.componentCount);
+        if (mids.worldTables >= 0) diag.recordGauge(mids.worldTables, this._archetypeSystem.archetypeCount);
+        if (mids.worldCapacity >= 0) diag.recordGauge(mids.worldCapacity, this._entityManager.capacity);
       }
     } finally {
-      if (diag) {
-        const mids = this._diagIds;
-        if (mids) {
-          if (mids.frameDelta >= 0) diag.recordGauge(mids.frameDelta, dtMs);
-          if (mids.frameFps >= 0) diag.recordGauge(mids.frameFps, dtMs > 0 ? 1000 / dtMs : 0);
-          if (mids.worldEntities >= 0) diag.recordGauge(mids.worldEntities, this._entityManager.aliveCount);
-          if (mids.worldArchetypes >= 0) diag.recordGauge(mids.worldArchetypes, this._archetypeSystem.archetypeCount);
-          if (mids.worldSystems >= 0) diag.recordGauge(mids.worldSystems, this._scheduler.systemCount);
-          if (mids.worldComponents >= 0) diag.recordGauge(mids.worldComponents, this._registry.componentCount);
-          if (mids.worldTables >= 0) diag.recordGauge(mids.worldTables, this._archetypeSystem.archetypeCount);
-          if (mids.worldCapacity >= 0) diag.recordGauge(mids.worldCapacity, this._entityManager.capacity);
-        }
-        diag.endFrame();
-      }
+      if (ownFrame) diag.endFrame();
       this._events.clear();
     }
   }

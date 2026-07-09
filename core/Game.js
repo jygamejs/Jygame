@@ -1,7 +1,7 @@
 import { Clock } from "../time/Clock.js";
 import { Input, InputContext } from "../input/Input.js";
 import { Scene } from "./Scene.js";
-import { Diagnostics, MetricCategory, MetricUnit, MetricType }
+import { Diagnostics, MetricCategory, MetricUnit, MetricType, resolveMetricIds }
   from "../debug/index.js";
 
 export class Game {
@@ -41,6 +41,9 @@ export class Game {
     this._lastTime = 0;
     this._rafId = null;
     this._pausedByVisibility = false;
+    this._diagnostics = null;
+    this._diagIds = null;
+    this._frameCount = 0;
     this.fps = 60;
 
     this.input = new InputContext();
@@ -379,38 +382,96 @@ export class Game {
     this._lastTime = time;
 
     const ticks = this.clock.tick(realDt);
-    const updateStart = this._findBlockingIndex("blocksUpdateBelow");
-    const renderStart = this._findBlockingIndex("blocksRenderBelow");
+    const diag = this._getDiag();
+    const mids = this._diagIds;
 
-    this._updating = true;
+    if (diag) diag.beginFrame(this._frameCount++, realDt * 1000);
 
-    if (ticks > 0) {
-      this._updateScenes(this.clock.fixedDt, updateStart);
-      this.input.clearJustPressed();
-      for (let i = 1; i < ticks; i++) {
-        this._updateScenes(this.clock.fixedDt, updateStart);
-      }
+    if (diag && mids && mids.frameTotal >= 0) {
+      diag.scope(mids.frameTotal, () => { this._frame(diag, ticks, realDt); });
+    } else {
+      this._frame(null, ticks, realDt);
     }
 
-    this.input.updateFrame();
-    this._interpolateScenes(this.clock.alpha, updateStart);
+    if (diag && mids) {
+      if (mids.frameDelta >= 0) diag.recordGauge(mids.frameDelta, realDt * 1000);
+      if (mids.frameFps >= 0) diag.recordGauge(mids.frameFps, realDt > 0 ? 1 / realDt : 0);
+      diag.endFrame();
+    }
 
-    this._updating = false;
+    this._rafId = requestAnimationFrame((t) => this._loop(t));
+  }
+
+  _getDiag() {
+    if (!this._diagnostics) {
+      const top = this.scene;
+      if (top && top.world) {
+        this._diagnostics = top.world.getResource(Diagnostics);
+        this._initDiag();
+      }
+    }
+    return this._diagnostics;
+  }
+
+  _initDiag() {
+    if (this._diagIds) return;
+    if (!this._diagnostics) return;
+    this._diagIds = resolveMetricIds(this._diagnostics, {
+      frameTotal: "frame.total",
+      frameInput: "frame.input",
+      frameUpdate: "frame.update",
+      frameRender: "frame.render",
+      frameCanvas: "frame.canvas",
+      frameDelta: "frame.delta",
+      frameFps: "frame.fps",
+    });
+  }
+
+  _frame(diag, ticks, realDt) {
+    const mids = this._diagIds;
+
+    const doInput = () => { this.input.updateFrame(); };
+    if (diag && mids && mids.frameInput >= 0) {
+      diag.scope(mids.frameInput, doInput);
+    } else { doInput(); }
+
+    const doUpdate = () => {
+      const updateStart = this._findBlockingIndex("blocksUpdateBelow");
+      this._updating = true;
+      try {
+        if (ticks > 0) {
+          for (let i = 0; i < ticks; i++) {
+            this._updateScenes(this.clock.fixedDt, updateStart);
+            this.input.clearJustPressed();
+          }
+        }
+      } finally { this._updating = false; }
+      const top = this.scene;
+      if (top && top.world) {
+        top.world.update(this.clock.fixedDt);
+      }
+    };
+    if (diag && mids && mids.frameUpdate >= 0) {
+      diag.scope(mids.frameUpdate, doUpdate);
+    } else { doUpdate(); }
 
     this._flushSceneOps();
 
+    const alpha = this.clock.alpha;
+    const renderStart = this._findBlockingIndex("blocksRenderBelow");
+    this._interpolateScenes(alpha, renderStart);
+
+    const doCanvas = () => { this.ctx.clearRect(0, 0, this.width, this.height); };
+    if (diag && mids && mids.frameCanvas >= 0) {
+      diag.scope(mids.frameCanvas, doCanvas);
+    } else { doCanvas(); }
+
+    const doRender = () => { this._renderScenes(this.ctx, renderStart); };
+    if (diag && mids && mids.frameRender >= 0) {
+      diag.scope(mids.frameRender, doRender);
+    } else { doRender(); }
+
     this.fps += ((1 / Math.max(realDt, 0.001)) - this.fps) * 0.05;
-
-    this.ctx.clearRect(0, 0, this.width, this.height);
-
-    const top = this.scene;
-    if (top && top.world) {
-      top.world.update(this.clock.fixedDt);
-    }
-
-    this._renderScenes(this.ctx, renderStart);
-
-    this._rafId = requestAnimationFrame((t) => this._loop(t));
   }
 
   destroy() {

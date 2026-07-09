@@ -169,6 +169,10 @@ export class Diagnostics {
 
   // ─── Read access ────────────────────────────────────
 
+  get isInsideFrame() {
+    return this._insideFrame;
+  }
+
   get lastSnapshot() {
     return this._history.latest();
   }
