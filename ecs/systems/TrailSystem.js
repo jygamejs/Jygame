@@ -5,7 +5,7 @@ import { Visible } from "../components/Visible.js";
 import { TrailManager } from "../trails/TrailManager.js";
 import { CanvasContext } from "../render/CanvasContext.js";
 import { Camera } from "../../camera/Camera.js";
-import { Diagnostics } from "../../debug/index.js";
+import { Diagnostics, resolveMetricIds } from "../../debug/index.js";
 
 export class TrailSystem extends System {
   static query = { all: [Transform, Trail, Visible] };
@@ -19,16 +19,13 @@ export class TrailSystem extends System {
   }
 
   _initDiag(diag) {
-    if (this._diagInitDone) return;
-    this._diagInitDone = true;
-    const trails = diag.metrics.find("render.trails");
-    if (trails) this._diagTrailsId = trails.id;
-    const seg = diag.metrics.find("render.trails.segments");
-    if (seg) this._diagSegmentsId = seg.id;
-    const lines = diag.metrics.find("render.trails.lines");
-    if (lines) this._diagLinesId = lines.id;
-    const ribs = diag.metrics.find("render.trails.ribbons");
-    if (ribs) this._diagRibbonsId = ribs.id;
+    if (this._diagIds) return;
+    this._diagIds = resolveMetricIds(diag, {
+      trails:   "render.trails",
+      segments: "render.trails.segments",
+      lines:    "render.trails.lines",
+      ribbons:  "render.trails.ribbons",
+    });
   }
 
   _getColorString(color) {
@@ -142,19 +139,17 @@ export class TrailSystem extends System {
       canvas.restore();
     };
 
-    if (diag && this._diagTrailsId !== undefined) {
-      diag.scope(this._diagTrailsId, doRender);
+    const ids = this._diagIds;
+    if (diag && ids && ids.trails >= 0) {
+      diag.scope(ids.trails, doRender);
     } else {
       doRender();
     }
 
-    if (diag) {
-      if (this._diagSegmentsId !== undefined)
-        diag.recordCounter(this._diagSegmentsId, segments);
-      if (this._diagLinesId !== undefined)
-        diag.recordCounter(this._diagLinesId, lines);
-      if (this._diagRibbonsId !== undefined)
-        diag.recordCounter(this._diagRibbonsId, ribbons);
+    if (diag && ids) {
+      if (ids.segments >= 0) diag.recordCounter(ids.segments, segments);
+      if (ids.lines >= 0) diag.recordCounter(ids.lines, lines);
+      if (ids.ribbons >= 0) diag.recordCounter(ids.ribbons, ribbons);
     }
 
     for (const eid of this._prevSet) {

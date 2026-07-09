@@ -6,27 +6,22 @@ import { Visible } from "../components/Visible.js";
 import { Camera } from "../../camera/Camera.js";
 import { RenderQueue } from "../render/RenderQueue.js";
 import { CanvasContext } from "../render/CanvasContext.js";
-import { Diagnostics } from "../../debug/index.js";
+import { Diagnostics, resolveMetricIds } from "../../debug/index.js";
 
 export class RenderSystem extends System {
   static query = { all: [Transform, Renderable, RenderBounds, Visible] };
   static priority = 3;
 
   _initDiag(diag) {
-    if (this._diagInitDone) return;
-    this._diagInitDone = true;
-    const draw = diag.metrics.find("render.draw");
-    if (draw) this._diagDrawId = draw.id;
-    const cmds = diag.metrics.find("render.commands");
-    if (cmds) this._diagCommandsId = cmds.id;
-    const pop = diag.metrics.find("render.populate");
-    if (pop) this._diagPopulateId = pop.id;
-    const batch = diag.metrics.find("render.batch");
-    if (batch) this._diagBatchId = batch.id;
-    const img = diag.metrics.find("render.images");
-    if (img) this._diagImagesId = img.id;
-    const prim = diag.metrics.find("render.primitives");
-    if (prim) this._diagPrimitivesId = prim.id;
+    if (this._diagIds) return;
+    this._diagIds = resolveMetricIds(diag, {
+      draw:       "render.draw",
+      commands:   "render.commands",
+      populate:   "render.populate",
+      batch:      "render.batch",
+      images:     "render.images",
+      primitives: "render.primitives",
+    });
   }
 
   update(ctx, dt) {
@@ -59,36 +54,35 @@ export class RenderSystem extends System {
 
     queue.clear();
 
-    if (diag && this._diagDrawId !== undefined) {
-      diag.scope(this._diagDrawId, () => {
-        this._renderAll(diag, queue, canvas, camera, ctx);
+    const ids = this._diagIds;
+    if (diag && ids && ids.draw >= 0) {
+      diag.scope(ids.draw, () => {
+        this._renderAll(ids, diag, queue, canvas, camera, ctx);
       });
     } else {
-      this._renderAll(null, queue, canvas, camera, ctx);
+      this._renderAll(ids, null, queue, canvas, camera, ctx);
     }
 
-    if (diag && this._diagCommandsId !== undefined) {
-      diag.recordCounter(this._diagCommandsId, queue.count);
+    if (diag && ids && ids.commands >= 0) {
+      diag.recordCounter(ids.commands, queue.count);
     }
   }
 
-  _renderAll(diag, queue, canvas, camera, ctx) {
-    if (diag && this._diagPopulateId !== undefined) {
-      diag.scope(this._diagPopulateId, () => {
+  _renderAll(ids, diag, queue, canvas, camera, ctx) {
+    if (diag && ids && ids.populate >= 0) {
+      diag.scope(ids.populate, () => {
         this._populateQueue(queue, ctx);
       });
     } else {
       this._populateQueue(queue, ctx);
     }
 
-    if (diag && this._diagBatchId !== undefined) {
-      diag.scope(this._diagBatchId, () => {
+    if (diag && ids && ids.batch >= 0) {
+      diag.scope(ids.batch, () => {
         queue.execute(canvas, camera);
       });
-      if (this._diagImagesId !== undefined)
-        diag.recordCounter(this._diagImagesId, queue.imagesDrawn);
-      if (this._diagPrimitivesId !== undefined)
-        diag.recordCounter(this._diagPrimitivesId, queue.primitivesDrawn);
+      if (ids.images >= 0) diag.recordCounter(ids.images, queue.imagesDrawn);
+      if (ids.primitives >= 0) diag.recordCounter(ids.primitives, queue.primitivesDrawn);
     } else {
       queue.execute(canvas, camera);
     }

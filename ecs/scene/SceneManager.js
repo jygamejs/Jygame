@@ -53,6 +53,8 @@ function findScene(mgr, name) {
  * SceneManager — coordinates registry and stack operations.
  * Preserves all public APIs.
  */
+import { resolveMetricIds } from "../../debug/index.js";
+
 export class SceneManager {
   constructor() {
     this[_registry] = new Map();
@@ -82,19 +84,20 @@ export class SceneManager {
   }
 
   _initDiag(diag) {
-    if (this._diagInitDone) return;
-    this._diagInitDone = true;
-    const t = diag.metrics.find("scene.transitions");
-    if (t) this._diagTransitionsId = t.id;
-    const a = diag.metrics.find("scene.activeScenes");
-    if (a) this._diagActiveScenesId = a.id;
+    if (this._diagIds) return;
+    this._diagIds = resolveMetricIds(diag, {
+      transitions: "scene.transitions",
+      activeScenes: "scene.activeScenes",
+    });
   }
 
   _recordTransition() {
     if (!this._diagnostics) return;
     this._initDiag(this._diagnostics);
-    if (this._diagTransitionsId !== undefined) this._diagnostics.recordCounter(this._diagTransitionsId, 1);
-    if (this._diagActiveScenesId !== undefined) this._diagnostics.recordGauge(this._diagActiveScenesId, this._stack.length);
+    const ids = this._diagIds;
+    if (!ids) return;
+    if (ids.transitions >= 0) this._diagnostics.recordCounter(ids.transitions, 1);
+    if (ids.activeScenes >= 0) this._diagnostics.recordGauge(ids.activeScenes, this._stack.length);
   }
 
   start(name) {

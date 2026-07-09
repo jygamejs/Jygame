@@ -10,3 +10,4 @@ export { FrameStorage } from "./FrameStorage.js";
 export { FrameSnapshot } from "./FrameSnapshot.js";
 export { FrameEvent } from "./FrameEvent.js";
 export { FrameHistory } from "./FrameHistory.js";
+export { resolveMetricIds } from "./resolveMetricIds.js";

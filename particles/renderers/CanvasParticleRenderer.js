@@ -1,5 +1,6 @@
 import { ParticleRenderer } from "./ParticleRenderer.js";
 import { ParticleRenderCommandBuffer } from "../renderdata/ParticleRenderCommandBuffer.js";
+import { resolveMetricIds } from "../../debug/index.js";
 
 const _tmpCmd = {};
 
@@ -11,12 +12,15 @@ export class CanvasParticleRenderer extends ParticleRenderer {
 
   set diagnostics(diag) {
     this._diag = diag;
-    if (diag) {
-      const sprites = diag.metrics.find("render.particles.sprites");
-      if (sprites) this._diagSpritesId = sprites.id;
-      const primitives = diag.metrics.find("render.particles.primitives");
-      if (primitives) this._diagPrimitivesId = primitives.id;
-    }
+    this._diagIds = null;
+  }
+
+  _initDiag(diag) {
+    if (this._diagIds) return;
+    this._diagIds = resolveMetricIds(diag, {
+      sprites: "render.particles.sprites",
+      primitives: "render.particles.primitives",
+    });
   }
 
   render(data, ctx) {
@@ -92,10 +96,12 @@ export class CanvasParticleRenderer extends ParticleRenderer {
     ctx.restore();
 
     if (this._diag) {
-      if (this._diagSpritesId !== undefined)
-        this._diag.recordCounter(this._diagSpritesId, sprites);
-      if (this._diagPrimitivesId !== undefined)
-        this._diag.recordCounter(this._diagPrimitivesId, primitives);
+      this._initDiag(this._diag);
+      const ids = this._diagIds;
+      if (ids) {
+        if (ids.sprites >= 0) this._diag.recordCounter(ids.sprites, sprites);
+        if (ids.primitives >= 0) this._diag.recordCounter(ids.primitives, primitives);
+      }
     }
   }
 }

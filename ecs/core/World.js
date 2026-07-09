@@ -13,7 +13,7 @@ import { HierarchyGraph } from "../hierarchy/HierarchyGraph.js";
 import { AudioSource } from "../audio/AudioSource.js";
 import { AudioSystem } from "../audio/AudioSystem.js";
 import { StreamingManager } from "../streaming/StreamingManager.js";
-import { Diagnostics } from "../../debug/index.js";
+import { Diagnostics, resolveMetricIds } from "../../debug/index.js";
 
 export class World {
   constructor(options = {}) {
@@ -59,7 +59,7 @@ export class World {
     this._transformId = null;
     this._entityDestroyedCallbacks = [];
     this._frameCount = 0;
-    this._diagMetricIds = null;
+    this._diagIds = null;
   }
 
   get registry() {
@@ -192,10 +192,9 @@ export class World {
 
     const diag = this._resources.get(Diagnostics);
     if (diag) {
-      const mids = this._diagMetricIds || this._initDiagMetricIds();
-      if (mids && mids.entitiesCreated) {
-        diag.recordCounter(mids.entitiesCreated.id, 1);
-      }
+      this._initDiag(diag);
+      const ids = this._diagIds;
+      if (ids && ids.entitiesCreated >= 0) diag.recordCounter(ids.entitiesCreated, 1);
     }
 
     return entity;
@@ -230,10 +229,9 @@ export class World {
 
     const diag = this._resources.get(Diagnostics);
     if (diag) {
-      const mids = this._diagMetricIds || this._initDiagMetricIds();
-      if (mids && mids.entitiesDestroyed) {
-        diag.recordCounter(mids.entitiesDestroyed.id, 1);
-      }
+      this._initDiag(diag);
+      const ids = this._diagIds;
+      if (ids && ids.entitiesDestroyed >= 0) diag.recordCounter(ids.entitiesDestroyed, 1);
     }
   }
 
@@ -263,10 +261,9 @@ export class World {
 
     const diag = this._resources.get(Diagnostics);
     if (diag) {
-      const mids = this._diagMetricIds || this._initDiagMetricIds();
-      if (mids && mids.componentsAdded) {
-        diag.recordCounter(mids.componentsAdded.id, 1);
-      }
+      this._initDiag(diag);
+      const ids = this._diagIds;
+      if (ids && ids.componentsAdded >= 0) diag.recordCounter(ids.componentsAdded, 1);
     }
 
     const newSig = currentSig.add(componentId);
@@ -311,10 +308,9 @@ export class World {
 
     const diag = this._resources.get(Diagnostics);
     if (diag) {
-      const mids = this._diagMetricIds || this._initDiagMetricIds();
-      if (mids && mids.componentsRemoved) {
-        diag.recordCounter(mids.componentsRemoved.id, 1);
-      }
+      this._initDiag(diag);
+      const ids = this._diagIds;
+      if (ids && ids.componentsRemoved >= 0) diag.recordCounter(ids.componentsRemoved, 1);
     }
 
     const newSig = currentSig.remove(componentId);
@@ -491,10 +487,9 @@ export class World {
 
     const diag = this._resources.get(Diagnostics);
     if (diag && newIds.length > 0) {
-      const mids = this._diagMetricIds || this._initDiagMetricIds();
-      if (mids && mids.componentsAdded) {
-        diag.recordCounter(mids.componentsAdded.id, newIds.length);
-      }
+      this._initDiag(diag);
+      const ids = this._diagIds;
+      if (ids && ids.componentsAdded >= 0) diag.recordCounter(ids.componentsAdded, newIds.length);
     }
 
     const newSig = new ComponentSignature(result);
@@ -542,10 +537,9 @@ export class World {
     const removed = comps.length - keep.length;
     const diag = this._resources.get(Diagnostics);
     if (diag && removed > 0) {
-      const mids = this._diagMetricIds || this._initDiagMetricIds();
-      if (mids && mids.componentsRemoved) {
-        diag.recordCounter(mids.componentsRemoved.id, removed);
-      }
+      this._initDiag(diag);
+      const ids = this._diagIds;
+      if (ids && ids.componentsRemoved >= 0) diag.recordCounter(ids.componentsRemoved, removed);
     }
 
     const newSig = new ComponentSignature(keep);
@@ -668,31 +662,27 @@ export class World {
     this._scheduler.clear();
   }
 
-  _initDiagMetricIds() {
-    const diag = this._resources.get(Diagnostics);
-    if (!diag) return null;
-    const mids = {
-      frameUpdate: diag.metrics.find("frame.update"),
-      frameDelta: diag.metrics.find("frame.delta"),
-      frameFps: diag.metrics.find("frame.fps"),
-      worldEntities: diag.metrics.find("ecs.world.entities"),
-      worldArchetypes: diag.metrics.find("ecs.world.archetypes"),
-      worldSystems: diag.metrics.find("ecs.world.systems"),
-      entitiesCreated: diag.metrics.find("ecs.entitiesCreated"),
-      entitiesDestroyed: diag.metrics.find("ecs.entitiesDestroyed"),
-      componentsAdded: diag.metrics.find("ecs.componentsAdded"),
-      componentsRemoved: diag.metrics.find("ecs.componentsRemoved"),
-      worldComponents: diag.metrics.find("ecs.world.components"),
-      worldTables: diag.metrics.find("ecs.world.tables"),
-      worldCapacity: diag.metrics.find("ecs.world.capacity"),
-    };
-    this._diagMetricIds = mids;
-    return mids;
+  _initDiag(diag) {
+    if (this._diagIds) return;
+    this._diagIds = resolveMetricIds(diag, {
+      frameUpdate: "frame.update",
+      frameDelta: "frame.delta",
+      frameFps: "frame.fps",
+      worldEntities: "ecs.world.entities",
+      worldArchetypes: "ecs.world.archetypes",
+      worldSystems: "ecs.world.systems",
+      entitiesCreated: "ecs.entitiesCreated",
+      entitiesDestroyed: "ecs.entitiesDestroyed",
+      componentsAdded: "ecs.componentsAdded",
+      componentsRemoved: "ecs.componentsRemoved",
+      worldComponents: "ecs.world.components",
+      worldTables: "ecs.world.tables",
+      worldCapacity: "ecs.world.capacity",
+    });
   }
 
   update(dt) {
     const diag = this._resources.get(Diagnostics);
-    const mids = this._diagMetricIds || this._initDiagMetricIds();
     const dtMs = dt * 1000;
 
     if (diag) {
@@ -700,23 +690,28 @@ export class World {
     }
 
     try {
-      if (diag && mids && mids.frameUpdate) {
-        diag.scope(mids.frameUpdate.id, () => {
+      if (diag) this._initDiag(diag);
+      const mids = this._diagIds;
+      if (diag && mids && mids.frameUpdate >= 0) {
+        diag.scope(mids.frameUpdate, () => {
           this._scheduler.update(dt);
         });
       } else {
         this._scheduler.update(dt);
       }
     } finally {
-      if (diag && mids) {
-        if (mids.frameDelta) diag.recordGauge(mids.frameDelta.id, dtMs);
-        if (mids.frameFps) diag.recordGauge(mids.frameFps.id, dtMs > 0 ? 1000 / dtMs : 0);
-        if (mids.worldEntities) diag.recordGauge(mids.worldEntities.id, this._entityManager.aliveCount);
-        if (mids.worldArchetypes) diag.recordGauge(mids.worldArchetypes.id, this._archetypeSystem.archetypeCount);
-        if (mids.worldSystems) diag.recordGauge(mids.worldSystems.id, this._scheduler.systemCount);
-        if (mids.worldComponents) diag.recordGauge(mids.worldComponents.id, this._registry.componentCount);
-        if (mids.worldTables) diag.recordGauge(mids.worldTables.id, this._archetypeSystem.archetypeCount);
-        if (mids.worldCapacity) diag.recordGauge(mids.worldCapacity.id, this._entityManager.capacity);
+      if (diag) {
+        const mids = this._diagIds;
+        if (mids) {
+          if (mids.frameDelta >= 0) diag.recordGauge(mids.frameDelta, dtMs);
+          if (mids.frameFps >= 0) diag.recordGauge(mids.frameFps, dtMs > 0 ? 1000 / dtMs : 0);
+          if (mids.worldEntities >= 0) diag.recordGauge(mids.worldEntities, this._entityManager.aliveCount);
+          if (mids.worldArchetypes >= 0) diag.recordGauge(mids.worldArchetypes, this._archetypeSystem.archetypeCount);
+          if (mids.worldSystems >= 0) diag.recordGauge(mids.worldSystems, this._scheduler.systemCount);
+          if (mids.worldComponents >= 0) diag.recordGauge(mids.worldComponents, this._registry.componentCount);
+          if (mids.worldTables >= 0) diag.recordGauge(mids.worldTables, this._archetypeSystem.archetypeCount);
+          if (mids.worldCapacity >= 0) diag.recordGauge(mids.worldCapacity, this._entityManager.capacity);
+        }
         diag.endFrame();
       }
       this._events.clear();

@@ -1,35 +1,32 @@
 import { LoadingTask } from "../core/LoadingTask.js";
-import { Diagnostics, MetricCategory, MetricUnit, MetricType }
+import { Diagnostics, MetricCategory, MetricUnit, MetricType, resolveMetricIds }
   from "../debug/index.js";
 
 let _diagnostics = null;
-let _diagnosticsInitDone = false;
+let _diagIds = null;
 let _pendingCount = 0;
-let _diagAudioClipsId, _diagLoadedId, _diagPendingId, _diagLoadErrorsId;
 
 function _initAudioDiag(diag) {
-  if (_diagnosticsInitDone) return;
-  _diagnosticsInitDone = true;
-  _diagAudioClipsId = diag.registerDynamicMetric({
-    name: "assets.audioClips",
-    displayName: "Audio Clips",
-    category: MetricCategory.ASSETS,
-    group: "Assets",
-    unit: MetricUnit.COUNT,
-    type: MetricType.GAUGE,
-    tags: Object.freeze(["assets"]),
+  if (_diagIds) return;
+  _diagIds = resolveMetricIds(diag, {
+    audioClips: {
+      name: "assets.audioClips",
+      displayName: "Audio Clips",
+      category: MetricCategory.ASSETS,
+      group: "Assets",
+      unit: MetricUnit.COUNT,
+      type: MetricType.GAUGE,
+      tags: Object.freeze(["assets"]),
+    },
+    loaded: "assets.loaded",
+    pending: "assets.pending",
+    errors: "assets.loadErrors",
   });
-  const loaded = diag.metrics.find("assets.loaded");
-  if (loaded) _diagLoadedId = loaded.id;
-  const pending = diag.metrics.find("assets.pending");
-  if (pending) _diagPendingId = pending.id;
-  const errors = diag.metrics.find("assets.loadErrors");
-  if (errors) _diagLoadErrorsId = errors.id;
 }
 
 function _recordAudioGauge() {
-  if (!_diagnostics || !_diagnosticsInitDone) return;
-  _diagnostics.recordGauge(_diagAudioClipsId, _cache.size);
+  if (!_diagnostics || !_diagIds) return;
+  if (_diagIds.audioClips >= 0) _diagnostics.recordGauge(_diagIds.audioClips, _cache.size);
 }
 
 const _cache = new Map();
@@ -38,7 +35,7 @@ const _bufferCache = new Map();
 export const AudioLoader = {
   set diagnostics(diag) {
     _diagnostics = diag;
-    _diagnosticsInitDone = false;
+    _diagIds = null;
   },
 
   load(path) {
@@ -47,7 +44,7 @@ export const AudioLoader = {
     if (_diagnostics) {
       _initAudioDiag(_diagnostics);
       _pendingCount++;
-      if (_diagPendingId !== undefined) _diagnostics.recordGauge(_diagPendingId, _pendingCount);
+      if (_diagIds && _diagIds.pending >= 0) _diagnostics.recordGauge(_diagIds.pending, _pendingCount);
     }
 
     return new Promise((resolve, reject) => {
@@ -56,18 +53,20 @@ export const AudioLoader = {
       audio.oncanplaythrough = () => {
         _cache.set(path, audio);
         if (_diagnostics) {
-          if (_diagLoadedId !== undefined) _diagnostics.recordCounter(_diagLoadedId, 1);
+          const ids = _diagIds;
+          if (ids && ids.loaded >= 0) _diagnostics.recordCounter(ids.loaded, 1);
           _pendingCount--;
-          if (_diagPendingId !== undefined) _diagnostics.recordGauge(_diagPendingId, _pendingCount);
+          if (ids && ids.pending >= 0) _diagnostics.recordGauge(ids.pending, _pendingCount);
           _recordAudioGauge();
         }
         resolve(audio);
       };
       audio.onerror = () => {
         if (_diagnostics) {
-          if (_diagLoadErrorsId !== undefined) _diagnostics.recordCounter(_diagLoadErrorsId, 1);
+          const ids = _diagIds;
+          if (ids && ids.errors >= 0) _diagnostics.recordCounter(ids.errors, 1);
           _pendingCount--;
-          if (_diagPendingId !== undefined) _diagnostics.recordGauge(_diagPendingId, _pendingCount);
+          if (ids && ids.pending >= 0) _diagnostics.recordGauge(ids.pending, _pendingCount);
         }
         reject(new Error(`Failed to load audio: ${path}`));
       };

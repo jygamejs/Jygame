@@ -4,7 +4,7 @@ import { Collider } from "../components/Collider.js";
 import { Visible } from "../components/Visible.js";
 import { SpatialHash } from "../../collision/SpatialHash.js";
 import { CollisionQuery } from "../collision/CollisionQuery.js";
-import { Diagnostics, MetricCategory, MetricUnit, MetricType }
+import { Diagnostics, MetricCategory, MetricUnit, MetricType, resolveMetricIds }
   from "../../debug/index.js";
 
 export class CollisionSystem extends System {
@@ -12,14 +12,12 @@ export class CollisionSystem extends System {
   static priority = 2;
 
   _initDiag(diag) {
-    if (this._diagInitDone) return;
-    this._diagInitDone = true;
-    const bp = diag.metrics.find("physics.broadphase");
-    if (bp) this._diagBroadphaseId = bp.id;
-    const bodies = diag.metrics.find("physics.bodies");
-    if (bodies) this._diagBodiesId = bodies.id;
-    const inserts = diag.metrics.find("physics.broadphase.inserts");
-    if (inserts) this._diagInsertsId = inserts.id;
+    if (this._diagIds) return;
+    this._diagIds = resolveMetricIds(diag, {
+      broadphase: "physics.broadphase",
+      bodies: "physics.bodies",
+      inserts: "physics.broadphase.inserts",
+    });
   }
 
   update(ctx, dt) {
@@ -62,22 +60,23 @@ export class CollisionSystem extends System {
       }
     };
 
-    if (diag && this._diagBroadphaseId !== undefined) {
-      diag.scope(this._diagBroadphaseId, doInsert);
+    const ids = this._diagIds;
+    if (diag && ids && ids.broadphase >= 0) {
+      diag.scope(ids.broadphase, doInsert);
     } else {
       doInsert();
     }
 
-    if (diag && this._diagInsertsId !== undefined) {
-      diag.recordCounter(this._diagInsertsId, insertCount);
+    if (diag && ids && ids.inserts >= 0) {
+      diag.recordCounter(ids.inserts, insertCount);
     }
 
-    if (diag && this._diagBodiesId !== undefined) {
+    if (diag && ids && ids.bodies >= 0) {
       let total = 0;
       for (const table of ctx) {
         total += table.count;
       }
-      diag.recordGauge(this._diagBodiesId, total);
+      diag.recordGauge(ids.bodies, total);
     }
   }
 

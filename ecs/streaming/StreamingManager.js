@@ -1,5 +1,5 @@
 import { StreamingCell } from "./StreamingCell.js";
-import { Diagnostics, MetricCategory, MetricUnit, MetricType }
+import { Diagnostics, MetricCategory, MetricUnit, MetricType, resolveMetricIds }
   from "../../debug/index.js";
 
 export class StreamingManager {
@@ -14,26 +14,22 @@ export class StreamingManager {
   }
 
   _initDiag(diag) {
-    if (this._diagInitDone) return;
-    this._diagInitDone = true;
-    const lc = diag.metrics.find("streaming.loadedCells");
-    if (lc) this._diagLoadedCellsId = lc.id;
-    const pd = diag.metrics.find("streaming.pending");
-    if (pd) this._diagPendingId = pd.id;
-    const en = diag.metrics.find("streaming.entities");
-    if (en) this._diagEntitiesId = en.id;
-    const cl = diag.metrics.find("streaming.cellsLoaded");
-    if (cl) this._diagCellsLoadedId = cl.id;
-    const cu = diag.metrics.find("streaming.cellsUnloaded");
-    if (cu) this._diagCellsUnloadedId = cu.id;
-    const tc = diag.metrics.find("streaming.cells");
-    if (tc) this._diagCellsId = tc.id;
-    const lt = diag.metrics.find("streaming.loadTime");
-    if (lt) this._diagLoadTimeId = lt.id;
+    if (this._diagIds) return;
+    this._diagIds = resolveMetricIds(diag, {
+      loadedCells:  "streaming.loadedCells",
+      pending:      "streaming.pending",
+      entities:     "streaming.entities",
+      cellsLoaded:  "streaming.cellsLoaded",
+      cellsUnloaded:"streaming.cellsUnloaded",
+      cells:        "streaming.cells",
+      loadTime:     "streaming.loadTime",
+    });
   }
 
   _recordGauges() {
-    if (!this._diagnostics || !this._diagInitDone) return;
+    if (!this._diagnostics) return;
+    const ids = this._diagIds;
+    if (!ids) return;
     let loaded = 0;
     let entityCount = 0;
     for (const cell of this._cells.values()) {
@@ -42,10 +38,10 @@ export class StreamingManager {
         entityCount += cell._entityIds.size;
       }
     }
-    this._diagnostics.recordGauge(this._diagLoadedCellsId, loaded);
-    this._diagnostics.recordGauge(this._diagPendingId, 0);
-    this._diagnostics.recordGauge(this._diagEntitiesId, entityCount);
-    if (this._diagCellsId !== undefined) this._diagnostics.recordGauge(this._diagCellsId, this._cells.size);
+    if (ids.loadedCells >= 0) this._diagnostics.recordGauge(ids.loadedCells, loaded);
+    if (ids.pending >= 0) this._diagnostics.recordGauge(ids.pending, 0);
+    if (ids.entities >= 0) this._diagnostics.recordGauge(ids.entities, entityCount);
+    if (ids.cells >= 0) this._diagnostics.recordGauge(ids.cells, this._cells.size);
   }
 
   createCell(name) {
@@ -99,16 +95,18 @@ export class StreamingManager {
 
     const doLoad = () => { cell._loaded = true; };
 
-    if (this._diagnostics && this._diagLoadTimeId !== undefined) {
-      this._diagnostics.scope(this._diagLoadTimeId, doLoad);
-    } else {
-      doLoad();
-    }
-
     if (this._diagnostics) {
       this._initDiag(this._diagnostics);
-      if (this._diagCellsLoadedId !== undefined) this._diagnostics.recordCounter(this._diagCellsLoadedId, 1);
+      const ids = this._diagIds;
+      if (ids && ids.loadTime >= 0) {
+        this._diagnostics.scope(ids.loadTime, doLoad);
+      } else {
+        doLoad();
+      }
+      if (ids && ids.cellsLoaded >= 0) this._diagnostics.recordCounter(ids.cellsLoaded, 1);
       this._recordGauges();
+    } else {
+      doLoad();
     }
   }
 
@@ -133,7 +131,8 @@ export class StreamingManager {
 
     if (this._diagnostics) {
       this._initDiag(this._diagnostics);
-      this._diagnostics.recordCounter(this._diagCellsUnloadedId, 1);
+      const ids = this._diagIds;
+      if (ids && ids.cellsUnloaded >= 0) this._diagnostics.recordCounter(ids.cellsUnloaded, 1);
       this._recordGauges();
     }
   }

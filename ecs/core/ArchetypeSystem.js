@@ -1,7 +1,7 @@
 import { ComponentSignature } from "./ComponentSignature.js";
 import { Table } from "./Table.js";
 import {
-  Diagnostics, MetricCategory, MetricUnit, MetricType,
+  Diagnostics, MetricCategory, MetricUnit, MetricType, resolveMetricIds,
 } from "../../debug/index.js";
 
 class Archetype {
@@ -45,8 +45,7 @@ export class ArchetypeSystem {
     this._idToArchetype[0] = null;
     this.onArchetypeCreated = null;
     this._diag = null;
-    this._diagMigrationsId = undefined;
-    this._diagArchetypesCreatedId = undefined;
+    this._diagIds = null;
 
     const emptySignature = new ComponentSignature([]);
     const emptyTable = new Table(registry, emptySignature, initialTableCapacity);
@@ -66,31 +65,31 @@ export class ArchetypeSystem {
 
   set diagnostics(diag) {
     this._diag = diag;
-    if (diag) {
-      this._initDiag(diag);
-    }
+    this._diagIds = null;
+    if (diag) this._initDiag(diag);
   }
 
   _initDiag(diag) {
-    if (this._diagInitDone) return;
-    this._diagInitDone = true;
-    this._diagMigrationsId = diag.registerDynamicMetric({
-      name: "ecs.entitiesMigrated",
-      displayName: "Entities Migrated",
-      category: MetricCategory.ECS,
-      group: "Changes",
-      unit: MetricUnit.COUNT,
-      type: MetricType.COUNTER,
-      tags: Object.freeze(["ecs"]),
-    });
-    this._diagArchetypesCreatedId = diag.registerDynamicMetric({
-      name: "ecs.archetypesCreated",
-      displayName: "Archetypes Created",
-      category: MetricCategory.ECS,
-      group: "Changes",
-      unit: MetricUnit.COUNT,
-      type: MetricType.COUNTER,
-      tags: Object.freeze(["ecs"]),
+    if (this._diagIds) return;
+    this._diagIds = resolveMetricIds(diag, {
+      migrations: {
+        name: "ecs.entitiesMigrated",
+        displayName: "Entities Migrated",
+        category: MetricCategory.ECS,
+        group: "Changes",
+        unit: MetricUnit.COUNT,
+        type: MetricType.COUNTER,
+        tags: Object.freeze(["ecs"]),
+      },
+      archetypesCreated: {
+        name: "ecs.archetypesCreated",
+        displayName: "Archetypes Created",
+        category: MetricCategory.ECS,
+        group: "Changes",
+        unit: MetricUnit.COUNT,
+        type: MetricType.COUNTER,
+        tags: Object.freeze(["ecs"]),
+      },
     });
   }
 
@@ -234,8 +233,9 @@ export class ArchetypeSystem {
       this.onArchetypeCreated(archetype);
     }
 
-    if (this._diag && this._diagArchetypesCreatedId !== undefined) {
-      this._diag.recordCounter(this._diagArchetypesCreatedId, 1);
+    if (this._diag) {
+      const ids = this._diagIds;
+      if (ids && ids.archetypesCreated >= 0) this._diag.recordCounter(ids.archetypesCreated, 1);
     }
 
     return archetype;
@@ -279,8 +279,9 @@ export class ArchetypeSystem {
       return sourceRow;
     }
 
-    if (this._diag && this._diagMigrationsId !== undefined) {
-      this._diag.recordCounter(this._diagMigrationsId, 1);
+    if (this._diag) {
+      const ids = this._diagIds;
+      if (ids && ids.migrations >= 0) this._diag.recordCounter(ids.migrations, 1);
     }
 
     const targetTable = targetArchetype.table;

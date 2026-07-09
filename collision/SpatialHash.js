@@ -1,4 +1,4 @@
-import { Diagnostics, MetricCategory, MetricUnit, MetricType }
+import { Diagnostics, MetricCategory, MetricUnit, MetricType, resolveMetricIds }
   from "../debug/index.js";
 
 export class SpatialHash {
@@ -12,19 +12,21 @@ export class SpatialHash {
   }
 
   _initDiag(diag) {
-    if (this._diagInitDone) return;
-    this._diagInitDone = true;
-    const narrow = diag.metrics.find("physics.narrowphase");
-    if (narrow) this._diagNarrowphaseId = narrow.id;
-    const queries = diag.metrics.find("physics.queries");
-    if (queries) this._diagQueriesId = queries.id;
+    if (this._diagIds) return;
+    this._diagIds = resolveMetricIds(diag, {
+      narrowphase: "physics.narrowphase",
+      queries: "physics.queries",
+    });
   }
 
   _timeQuery(fn) {
     if (!this._diagnostics) return fn();
     this._initDiag(this._diagnostics);
-    if (this._diagQueriesId !== undefined) this._diagnostics.recordCounter(this._diagQueriesId, 1);
-    return this._diagnostics.scope(this._diagNarrowphaseId, fn);
+    const ids = this._diagIds;
+    if (!ids) return fn();
+    if (ids.queries >= 0) this._diagnostics.recordCounter(ids.queries, 1);
+    if (ids.narrowphase >= 0) return this._diagnostics.scope(ids.narrowphase, fn);
+    return fn();
   }
 
   get diagnostics() { return this._diagnostics; }

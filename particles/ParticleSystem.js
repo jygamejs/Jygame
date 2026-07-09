@@ -1,5 +1,5 @@
 import { CpuParticleBackend } from "./backends/CpuParticleBackend.js";
-import { Diagnostics, MetricCategory, MetricUnit, MetricType }
+import { Diagnostics, MetricCategory, MetricUnit, MetricType, resolveMetricIds }
   from "../debug/index.js";
 
 export class ParticleSystem {
@@ -25,52 +25,53 @@ export class ParticleSystem {
   // ---- Lifecycle ----
 
   _initDiag(diag) {
-    if (this._diagInitDone) return;
-    this._diagInitDone = true;
-    this._diagSimId = diag.registerDynamicMetric({
-      name: "particles.simulation",
-      displayName: "Particle Simulation",
-      category: MetricCategory.PARTICLES,
-      group: "Particles",
-      unit: MetricUnit.MILLISECONDS,
-      type: MetricType.TIMER,
-      tags: Object.freeze(["particles"]),
-    });
-    this._diagDrawId = diag.registerDynamicMetric({
-      name: "particles.draw",
-      displayName: "Particle Draw",
-      category: MetricCategory.PARTICLES,
-      group: "Particles",
-      unit: MetricUnit.MILLISECONDS,
-      type: MetricType.TIMER,
-      tags: Object.freeze(["particles"]),
-    });
-    this._diagAliveId = diag.registerDynamicMetric({
-      name: "particles.alive",
-      displayName: "Alive Particles",
-      category: MetricCategory.PARTICLES,
-      group: "Particles",
-      unit: MetricUnit.COUNT,
-      type: MetricType.GAUGE,
-      tags: Object.freeze(["particles"]),
-    });
-    this._diagEmittedId = diag.registerDynamicMetric({
-      name: "particles.emitted",
-      displayName: "Emitted This Frame",
-      category: MetricCategory.PARTICLES,
-      group: "Particles",
-      unit: MetricUnit.COUNT,
-      type: MetricType.COUNTER,
-      tags: Object.freeze(["particles"]),
-    });
-    this._diagEmittersId = diag.registerDynamicMetric({
-      name: "particles.emitters",
-      displayName: "Active Emitters",
-      category: MetricCategory.PARTICLES,
-      group: "Particles",
-      unit: MetricUnit.COUNT,
-      type: MetricType.GAUGE,
-      tags: Object.freeze(["particles"]),
+    if (this._diagIds) return;
+    this._diagIds = resolveMetricIds(diag, {
+      sim: {
+        name: "particles.simulation",
+        displayName: "Particle Simulation",
+        category: MetricCategory.PARTICLES,
+        group: "Particles",
+        unit: MetricUnit.MILLISECONDS,
+        type: MetricType.TIMER,
+        tags: Object.freeze(["particles"]),
+      },
+      draw: {
+        name: "particles.draw",
+        displayName: "Particle Draw",
+        category: MetricCategory.PARTICLES,
+        group: "Particles",
+        unit: MetricUnit.MILLISECONDS,
+        type: MetricType.TIMER,
+        tags: Object.freeze(["particles"]),
+      },
+      alive: {
+        name: "particles.alive",
+        displayName: "Alive Particles",
+        category: MetricCategory.PARTICLES,
+        group: "Particles",
+        unit: MetricUnit.COUNT,
+        type: MetricType.GAUGE,
+        tags: Object.freeze(["particles"]),
+      },
+      emitted: {
+        name: "particles.emitted",
+        displayName: "Emitted This Frame",
+        category: MetricCategory.PARTICLES,
+        group: "Particles",
+        unit: MetricUnit.COUNT,
+        type: MetricType.COUNTER,
+        tags: Object.freeze(["particles"]),
+      },
+      emitters: {
+        name: "particles.emitters",
+        displayName: "Active Emitters",
+        category: MetricCategory.PARTICLES,
+        group: "Particles",
+        unit: MetricUnit.COUNT,
+        type: MetricType.GAUGE,
+        tags: Object.freeze(["particles"]),
+      },
     });
   }
 
@@ -78,7 +79,8 @@ export class ParticleSystem {
     this._backend.emit(count, initializer, emitter);
     if (this._diagnostics) {
       this._initDiag(this._diagnostics);
-      this._diagnostics.recordCounter(this._diagEmittedId, count);
+      const ids = this._diagIds;
+      if (ids && ids.emitted >= 0) this._diagnostics.recordCounter(ids.emitted, count);
     }
   }
 
@@ -86,7 +88,8 @@ export class ParticleSystem {
     const emitted = this._backend.emitOne(initializer);
     if (this._diagnostics) {
       this._initDiag(this._diagnostics);
-      this._diagnostics.recordCounter(this._diagEmittedId, 1);
+      const ids = this._diagIds;
+      if (ids && ids.emitted >= 0) this._diagnostics.recordCounter(ids.emitted, 1);
     }
     return emitted;
   }
@@ -94,10 +97,17 @@ export class ParticleSystem {
   update(dt) {
     if (this._diagnostics) {
       this._initDiag(this._diagnostics);
-      this._diagnostics.scope(this._diagSimId, () => {
+      const ids = this._diagIds;
+      if (ids) {
+        if (ids.sim >= 0) {
+          this._diagnostics.scope(ids.sim, () => { this._backend.update(dt); });
+        } else {
+          this._backend.update(dt);
+        }
+        if (ids.alive >= 0) this._diagnostics.recordGauge(ids.alive, this._backend.activeCount);
+      } else {
         this._backend.update(dt);
-      });
-      this._diagnostics.recordGauge(this._diagAliveId, this._backend.activeCount);
+      }
     } else {
       this._backend.update(dt);
     }
@@ -113,9 +123,12 @@ export class ParticleSystem {
         this._backend._renderer.diagnostics = diag;
       }
 
-      diag.scope(this._diagDrawId, () => {
+      const ids = this._diagIds;
+      if (ids && ids.draw >= 0) {
+        diag.scope(ids.draw, () => { this._backend.render(ctx); });
+      } else {
         this._backend.render(ctx);
-      });
+      }
     } else {
       this._backend.render(ctx);
     }

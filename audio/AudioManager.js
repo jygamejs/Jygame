@@ -8,7 +8,7 @@ import { HtmlAudioBackend } from "./backends/HtmlAudioBackend.js";
 import { EffectChain } from "./effects/EffectChain.js";
 import { AudioScene } from "./AudioScene.js";
 import { ATTENUATION_LINEAR, ATTENUATION_QUADRATIC, ATTENUATION_INVERSE, computeAttenuation } from "./attenuation.js";
-import { Diagnostics, MetricCategory, MetricUnit, MetricType }
+import { Diagnostics, MetricCategory, MetricUnit, MetricType, resolveMetricIds }
   from "../debug/index.js";
 
 export { ATTENUATION_LINEAR, ATTENUATION_QUADRATIC, ATTENUATION_INVERSE, computeAttenuation };
@@ -245,8 +245,9 @@ export class AudioManager {
     const instance = sound.play(spatialOpts);
     if (!instance) return null;
 
-    if (this._diagnostics && this._diagSfxPlayedId !== undefined) {
-      this._diagnostics.recordCounter(this._diagSfxPlayedId, 1);
+    if (this._diagnostics) {
+      const ids = this._diagIds;
+      if (ids && ids.sfxPlayed >= 0) this._diagnostics.recordCounter(ids.sfxPlayed, 1);
     }
 
     if (options.volume !== undefined) {
@@ -288,8 +289,9 @@ export class AudioManager {
 
     const music = new Music(asset, this);
     music._onPlay = () => {
-      if (this._diagnostics && this._diagMusicPlayedId !== undefined) {
-        this._diagnostics.recordCounter(this._diagMusicPlayedId, 1);
+      if (this._diagnostics) {
+        const ids = this._diagIds;
+        if (ids && ids.musicPlayed >= 0) this._diagnostics.recordCounter(ids.musicPlayed, 1);
       }
     };
     this._musicCache.set(key, music);
@@ -332,22 +334,16 @@ export class AudioManager {
   }
 
   _initDiag(diag) {
-    if (this._diagInitDone) return;
-    this._diagInitDone = true;
-    const u = diag.metrics.find("audio.update");
-    if (u) this._diagUpdateId = u.id;
-    const a = diag.metrics.find("audio.active");
-    if (a) this._diagActiveId = a.id;
-    const p = diag.metrics.find("audio.pooled");
-    if (p) this._diagPooledId = p.id;
-    const c = diag.metrics.find("audio.channels");
-    if (c) this._diagChannelsId = c.id;
-    const s = diag.metrics.find("audio.sfxPlayed");
-    if (s) this._diagSfxPlayedId = s.id;
-    const m = diag.metrics.find("audio.musicPlayed");
-    if (m) this._diagMusicPlayedId = m.id;
-    const f = diag.metrics.find("audio.sfxFinished");
-    if (f) this._diagSfxFinishedId = f.id;
+    if (this._diagIds) return;
+    this._diagIds = resolveMetricIds(diag, {
+      update:   "audio.update",
+      active:   "audio.active",
+      pooled:   "audio.pooled",
+      channels: "audio.channels",
+      sfxPlayed: "audio.sfxPlayed",
+      musicPlayed: "audio.musicPlayed",
+      sfxFinished: "audio.sfxFinished",
+    });
   }
 
   update(dt) {
@@ -381,10 +377,17 @@ export class AudioManager {
 
     if (this._diagnostics) {
       this._initDiag(this._diagnostics);
-      this._diagnostics.scope(this._diagUpdateId, doUpdate);
-      this._diagnostics.recordGauge(this._diagActiveId, activeCount);
-      this._diagnostics.recordGauge(this._diagPooledId, pooledCount);
-      this._diagnostics.recordGauge(this._diagChannelsId, activeCount + pooledCount);
+      const ids = this._diagIds;
+      if (ids && ids.update >= 0) {
+        this._diagnostics.scope(ids.update, doUpdate);
+      } else {
+        doUpdate();
+      }
+      if (ids) {
+        if (ids.active >= 0) this._diagnostics.recordGauge(ids.active, activeCount);
+        if (ids.pooled >= 0) this._diagnostics.recordGauge(ids.pooled, pooledCount);
+        if (ids.channels >= 0) this._diagnostics.recordGauge(ids.channels, activeCount + pooledCount);
+      }
     } else {
       doUpdate();
     }
@@ -399,8 +402,9 @@ export class AudioManager {
   }
 
   _incrementSfxFinished() {
-    if (this._diagnostics && this._diagSfxFinishedId !== undefined) {
-      this._diagnostics.recordCounter(this._diagSfxFinishedId, 1);
+    if (this._diagnostics) {
+      const ids = this._diagIds;
+      if (ids && ids.sfxFinished >= 0) this._diagnostics.recordCounter(ids.sfxFinished, 1);
     }
   }
 

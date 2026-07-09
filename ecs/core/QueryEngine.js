@@ -1,4 +1,5 @@
 import { ComponentSignature } from "./ComponentSignature.js";
+import { resolveMetricIds } from "../../debug/index.js";
 
 const MAX_COMPONENT_ID = 65535;
 const QUERY_BRAND = Symbol("Query");
@@ -64,18 +65,20 @@ export class QueryEngine {
     this._nextQueryId = 1;
     this._matchData = new Map();
     this._diag = null;
-    this._diagScanCountId = undefined;
-    this._diagScanTimeId = undefined;
+    this._diagIds = null;
   }
 
   set diagnostics(diag) {
     this._diag = diag;
-    if (diag) {
-      const scans = diag.metrics.find("ecs.query.scans");
-      const scanTime = diag.metrics.find("ecs.query.scanTime");
-      if (scans) this._diagScanCountId = scans.id;
-      if (scanTime) this._diagScanTimeId = scanTime.id;
-    }
+    this._diagIds = null;
+  }
+
+  _initDiag(diag) {
+    if (this._diagIds) return;
+    this._diagIds = resolveMetricIds(diag, {
+      scans: "ecs.query.scans",
+      scanTime: "ecs.query.scanTime",
+    });
   }
 
   createQuery({ all = [], any = [], none = [] } = {}) {
@@ -148,9 +151,11 @@ export class QueryEngine {
       return archetypes;
     };
 
-    if (this._diag && this._diagScanCountId !== undefined) {
-      this._diag.recordCounter(this._diagScanCountId, 1);
-      return this._diag.scope(this._diagScanTimeId, doScan);
+    if (this._diag) {
+      this._initDiag(this._diag);
+      const ids = this._diagIds;
+      if (ids && ids.scans >= 0) this._diag.recordCounter(ids.scans, 1);
+      if (ids && ids.scanTime >= 0) return this._diag.scope(ids.scanTime, doScan);
     }
     return doScan();
   }

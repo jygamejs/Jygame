@@ -1,3 +1,5 @@
+import { resolveMetricIds } from "../debug/index.js";
+
 const DEFAULT_KEY_MAP = Object.freeze({
   ArrowUp: "UP",
   ArrowDown: "DOWN",
@@ -32,7 +34,6 @@ export class InputContext {
     this.buffer = [];
 
     this._diagnostics = null;
-    this._diagInitDone = false;
     this._frameKeyEvents = 0;
     this._framePointerEvents = 0;
     this._frameActions = 0;
@@ -87,25 +88,25 @@ export class InputContext {
   }
 
   _initDiag(diag) {
-    if (this._diagInitDone) return;
-    this._diagInitDone = true;
-    const aq = diag.metrics.find("input.actionQueries");
-    if (aq) this._diagActionsId = aq.id;
-    const pe = diag.metrics.find("input.pointerEvents");
-    if (pe) this._diagPointerEventsId = pe.id;
-    const ke = diag.metrics.find("input.keyEvents");
-    if (ke) this._diagKeyEventsId = ke.id;
-    const ap = diag.metrics.find("input.activePointers");
-    if (ap) this._diagActivePointersId = ap.id;
+    if (this._diagIds) return;
+    this._diagIds = resolveMetricIds(diag, {
+      actions: "input.actionQueries",
+      pointerEvents: "input.pointerEvents",
+      keyEvents: "input.keyEvents",
+      activePointers: "input.activePointers",
+    });
   }
 
   updateFrame() {
     if (this._diagnostics) {
       this._initDiag(this._diagnostics);
-      if (this._diagKeyEventsId !== undefined) this._diagnostics.recordCounter(this._diagKeyEventsId, this._frameKeyEvents);
-      if (this._diagPointerEventsId !== undefined) this._diagnostics.recordCounter(this._diagPointerEventsId, this._framePointerEvents);
-      if (this._diagActionsId !== undefined) this._diagnostics.recordCounter(this._diagActionsId, this._frameActions);
-      if (this._diagActivePointersId !== undefined) this._diagnostics.recordGauge(this._diagActivePointersId, this._pointers.size);
+      const ids = this._diagIds;
+      if (ids) {
+        if (ids.keyEvents >= 0) this._diagnostics.recordCounter(ids.keyEvents, this._frameKeyEvents);
+        if (ids.pointerEvents >= 0) this._diagnostics.recordCounter(ids.pointerEvents, this._framePointerEvents);
+        if (ids.actions >= 0) this._diagnostics.recordCounter(ids.actions, this._frameActions);
+        if (ids.activePointers >= 0) this._diagnostics.recordGauge(ids.activePointers, this._pointers.size);
+      }
     }
     this._frameKeyEvents = 0;
     this._framePointerEvents = 0;
@@ -200,7 +201,7 @@ export class InputContext {
   get diagnostics() { return this._diagnostics; }
   set diagnostics(diag) {
     this._diagnostics = diag;
-    this._diagInitDone = false;
+    this._diagIds = null;
   }
 
   getPointer(id) {

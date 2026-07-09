@@ -1,35 +1,32 @@
 import { LoadingTask } from "../core/LoadingTask.js";
-import { Diagnostics, MetricCategory, MetricUnit, MetricType }
+import { Diagnostics, MetricCategory, MetricUnit, MetricType, resolveMetricIds }
   from "../debug/index.js";
 
 let _diagnostics = null;
-let _diagnosticsInitDone = false;
+let _diagIds = null;
 let _pendingCount = 0;
-let _diagFontsId, _diagLoadedId, _diagPendingId, _diagLoadErrorsId;
 
 function _initFontDiag(diag) {
-  if (_diagnosticsInitDone) return;
-  _diagnosticsInitDone = true;
-  _diagFontsId = diag.registerDynamicMetric({
-    name: "assets.fonts",
-    displayName: "Loaded Fonts",
-    category: MetricCategory.ASSETS,
-    group: "Assets",
-    unit: MetricUnit.COUNT,
-    type: MetricType.GAUGE,
-    tags: Object.freeze(["assets"]),
+  if (_diagIds) return;
+  _diagIds = resolveMetricIds(diag, {
+    fonts: {
+      name: "assets.fonts",
+      displayName: "Loaded Fonts",
+      category: MetricCategory.ASSETS,
+      group: "Assets",
+      unit: MetricUnit.COUNT,
+      type: MetricType.GAUGE,
+      tags: Object.freeze(["assets"]),
+    },
+    loaded: "assets.loaded",
+    pending: "assets.pending",
+    errors: "assets.loadErrors",
   });
-  const loaded = diag.metrics.find("assets.loaded");
-  if (loaded) _diagLoadedId = loaded.id;
-  const pending = diag.metrics.find("assets.pending");
-  if (pending) _diagPendingId = pending.id;
-  const errors = diag.metrics.find("assets.loadErrors");
-  if (errors) _diagLoadErrorsId = errors.id;
 }
 
 function _recordFontGauge() {
-  if (!_diagnostics || !_diagnosticsInitDone) return;
-  _diagnostics.recordGauge(_diagFontsId, _loaded.size);
+  if (!_diagnostics || !_diagIds) return;
+  if (_diagIds.fonts >= 0) _diagnostics.recordGauge(_diagIds.fonts, _loaded.size);
 }
 
 const _loaded = new Set();
@@ -37,7 +34,7 @@ const _loaded = new Set();
 export const FontLoader = {
   set diagnostics(diag) {
     _diagnostics = diag;
-    _diagnosticsInitDone = false;
+    _diagIds = null;
   },
 
   async load(family, path) {
@@ -46,7 +43,7 @@ export const FontLoader = {
     if (_diagnostics) {
       _initFontDiag(_diagnostics);
       _pendingCount++;
-      if (_diagPendingId !== undefined) _diagnostics.recordGauge(_diagPendingId, _pendingCount);
+      if (_diagIds && _diagIds.pending >= 0) _diagnostics.recordGauge(_diagIds.pending, _pendingCount);
     }
 
     try {
@@ -55,16 +52,18 @@ export const FontLoader = {
       document.fonts.add(font);
       _loaded.add(family);
       if (_diagnostics) {
-        if (_diagLoadedId !== undefined) _diagnostics.recordCounter(_diagLoadedId, 1);
+        const ids = _diagIds;
+        if (ids && ids.loaded >= 0) _diagnostics.recordCounter(ids.loaded, 1);
         _pendingCount--;
-        if (_diagPendingId !== undefined) _diagnostics.recordGauge(_diagPendingId, _pendingCount);
+        if (ids && ids.pending >= 0) _diagnostics.recordGauge(ids.pending, _pendingCount);
         _recordFontGauge();
       }
     } catch (err) {
       if (_diagnostics) {
-        if (_diagLoadErrorsId !== undefined) _diagnostics.recordCounter(_diagLoadErrorsId, 1);
+        const ids = _diagIds;
+        if (ids && ids.errors >= 0) _diagnostics.recordCounter(ids.errors, 1);
         _pendingCount--;
-        if (_diagPendingId !== undefined) _diagnostics.recordGauge(_diagPendingId, _pendingCount);
+        if (ids && ids.pending >= 0) _diagnostics.recordGauge(ids.pending, _pendingCount);
       }
       throw err;
     }

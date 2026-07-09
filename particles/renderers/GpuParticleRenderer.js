@@ -1,5 +1,6 @@
 import { ParticleRenderer } from "./ParticleRenderer.js";
 import { ParticleRenderCommandBuffer } from "../renderdata/ParticleRenderCommandBuffer.js";
+import { resolveMetricIds } from "../../debug/index.js";
 
 /*
  * Instance buffer layout (stride = 17 floats = 68 bytes):
@@ -275,10 +276,14 @@ export class GpuParticleRenderer extends ParticleRenderer {
 
   set diagnostics(diag) {
     this._diag = diag;
-    if (diag) {
-      const sprites = diag.metrics.find("render.particles.sprites");
-      if (sprites) this._diagSpritesId = sprites.id;
-    }
+    this._diagIds = null;
+  }
+
+  _initDiag(diag) {
+    if (this._diagIds) return;
+    this._diagIds = resolveMetricIds(diag, {
+      sprites: "render.particles.sprites",
+    });
   }
 
   render(data, ctx) {
@@ -355,8 +360,10 @@ export class GpuParticleRenderer extends ParticleRenderer {
       }
     }
 
-    if (this._diag && this._diagSpritesId !== undefined) {
-      this._diag.recordCounter(this._diagSpritesId, count);
+    if (this._diag) {
+      this._initDiag(this._diag);
+      const ids = this._diagIds;
+      if (ids && ids.sprites >= 0) this._diag.recordCounter(ids.sprites, count);
     }
   }
 
