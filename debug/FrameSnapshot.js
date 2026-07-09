@@ -24,4 +24,42 @@ export class FrameSnapshot {
   timerMax(id)    { return this.timerMaxs[id]; }
   counter(id)     { return this.counters[id]; }
   gauge(id)       { return this.gauges[id]; }
+
+  toJSON() {
+    return {
+      f: this.frame,
+      ts: this.timestamp,
+      d: this.delta,
+      fps: this.fps,
+      rv: this.registryVer,
+      mc: this.metricCount,
+      tt: Array.from(this.timerTotals),
+      tn: Array.from(this.timerMins),
+      tx: Array.from(this.timerMaxs),
+      tc: Array.from(this.timerCounts),
+      c: Array.from(this.counters),
+      g: Array.from(this.gauges),
+      e: this.events,
+      m: this.metadata,
+    };
+  }
+
+  static fromJSON(data) {
+    return new FrameSnapshot({
+      frame: data.f,
+      timestamp: data.ts,
+      delta: data.d,
+      fps: data.fps,
+      registryVer: data.rv,
+      metricCount: data.mc,
+      timerTotals: new Float64Array(data.tt),
+      timerMins: new Float64Array(data.tn),
+      timerMaxs: new Float64Array(data.tx),
+      timerCounts: new Uint32Array(data.tc),
+      counters: new Uint32Array(data.c),
+      gauges: new Float64Array(data.g),
+      events: data.e,
+      metadata: data.m,
+    });
+  }
 }

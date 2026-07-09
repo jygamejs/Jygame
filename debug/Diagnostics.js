@@ -244,6 +244,81 @@ export class Diagnostics {
     }
   }
 
+  // ─── Export / Import ────────────────────────────────
+
+  toJSON({ snapshots = true, registry = true, meta = true } = {}) {
+    const result = { version: 1 };
+
+    if (meta) {
+      result.meta = {
+        timestamp: performance.now(),
+        frames: this._history.count,
+        engine: "jygame",
+      };
+      if (this._history.count > 0) {
+        const first = this._history.at(this._history.count - 1);
+        const last = this._history.at(0);
+        if (first && last) {
+          result.meta.duration = last.timestamp - first.timestamp;
+        }
+      }
+    }
+
+    if (registry) {
+      const metrics = [];
+      this._metrics.forEach(d => {
+        const entry = { id: d.id, name: d.name, category: d.category, type: d.type, displayName: d.displayName, unit: d.unit, group: d.group };
+        if (d.budget !== undefined) entry.budget = d.budget;
+        if (d.format !== undefined) entry.format = d.format;
+        if (d.description) entry.description = d.description;
+        metrics.push(entry);
+      });
+      result.registry = { version: this._metrics.version, metrics };
+    }
+
+    if (snapshots) {
+      result.snapshots = [];
+      for (let i = this._history.count - 1; i >= 0; i--) {
+        const snap = this._history.at(i);
+        if (snap) result.snapshots.push(snap.toJSON());
+      }
+    }
+
+    return result;
+  }
+
+  exportSession() {
+    return JSON.stringify(this.toJSON());
+  }
+
+  exportCapture(captureResult) {
+    const data = {
+      version: 1,
+      meta: {
+        timestamp: captureResult.timestamp,
+        name: captureResult.name,
+        frames: captureResult.snapshots.length,
+        engine: "jygame",
+      },
+      snapshots: captureResult.snapshots.map(s => s.toJSON()),
+    };
+    return JSON.stringify(data);
+  }
+
+  static importSession(json) {
+    const data = typeof json === "string" ? JSON.parse(json) : json;
+    if (data.version !== 1) throw new Error(`Unsupported export version: ${data.version}`);
+
+    const diag = new Diagnostics();
+    if (data.registry) {
+      for (const m of data.registry.metrics) {
+        diag.registerMetric(m);
+      }
+      diag.lockRegistry();
+    }
+    return diag;
+  }
+
   // ─── Read access ────────────────────────────────────
 
   get isInsideFrame() {
