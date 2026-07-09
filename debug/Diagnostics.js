@@ -103,6 +103,7 @@ export class Diagnostics {
   recordTimer(metricId, elapsedMs) {
     if (!this._active) return;
     if (metricId < 0 || metricId >= this._metrics.count) return;
+    if (!this.config.allGroupsEnabled && !this.config.isCategoryEnabled(this._metrics.getCategory(metricId))) return;
     this._storage.timerTotals[metricId] += elapsedMs;
     this._storage.timerCounts[metricId] += 1;
     if (elapsedMs < this._storage.timerMins[metricId]) {
@@ -116,12 +117,14 @@ export class Diagnostics {
   recordCounter(metricId, incrementBy = 1) {
     if (!this._active) return;
     if (metricId < 0 || metricId >= this._metrics.count) return;
+    if (!this.config.allGroupsEnabled && !this.config.isCategoryEnabled(this._metrics.getCategory(metricId))) return;
     this._storage.counters[metricId] += incrementBy;
   }
 
   recordGauge(metricId, value) {
     if (!this._active) return;
     if (metricId < 0 || metricId >= this._metrics.count) return;
+    if (!this.config.allGroupsEnabled && !this.config.isCategoryEnabled(this._metrics.getCategory(metricId))) return;
     this._storage.gauges[metricId] = value;
   }
 

@@ -6,6 +6,7 @@ export class MetricRegistry {
     this._nameMap = new Map();
     this._version = 0;
     this._locked = false;
+    this._categories = new Uint8Array(0);
   }
 
   register(descriptor, force = false) {
@@ -23,12 +24,22 @@ export class MetricRegistry {
     const wrapped = new MetricDescriptor(full);
     this._descriptors.push(wrapped);
     this._nameMap.set(descriptor.name, wrapped);
+
+    const cats = new Uint8Array(id + 1);
+    cats.set(this._categories);
+    cats[id] = descriptor.category;
+    this._categories = cats;
+
     this._version++;
     return id;
   }
 
   get(id) {
     return this._descriptors[id];
+  }
+
+  getCategory(id) {
+    return this._categories[id];
   }
 
   find(name) {
