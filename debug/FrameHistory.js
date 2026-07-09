@@ -4,6 +4,7 @@ export class FrameHistory {
     this._capacity = capacity;
     this._count = 0;
     this._head = 0;
+    this._wraps = 0;
   }
 
   push(snapshot) {
@@ -11,11 +12,25 @@ export class FrameHistory {
     this._head = (this._head + 1) % this._capacity;
     if (this._count < this._capacity) {
       this._count++;
+    } else {
+      this._wraps++;
     }
   }
 
   get length() {
     return this._count;
+  }
+
+  get count() {
+    return this._count;
+  }
+
+  get capacity() {
+    return this._capacity;
+  }
+
+  get wraps() {
+    return this._wraps;
   }
 
   at(index) {
@@ -41,6 +56,10 @@ export class FrameHistory {
     }
   }
 
+  *[Symbol.iterator]() {
+    yield* this.frames();
+  }
+
   forEachReverse(fn) {
     for (let i = 0; i < this._count; i++) {
       fn(this.at(i));
@@ -50,5 +69,6 @@ export class FrameHistory {
   reset() {
     this._count = 0;
     this._head = 0;
+    this._wraps = 0;
   }
 }
