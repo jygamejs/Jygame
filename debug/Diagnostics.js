@@ -5,8 +5,7 @@ import { FrameStorage } from "./FrameStorage.js";
 import { FrameSnapshot } from "./FrameSnapshot.js";
 import { FrameEvent } from "./FrameEvent.js";
 import { FrameHistory } from "./FrameHistory.js";
-import { TriggerCondition } from "./TriggerCondition.js";
-import { CaptureResult } from "./CaptureResult.js";
+import { TriggerEngine } from "./TriggerEngine.js";
 import { Analysis } from "./Analysis.js";
 
 export class Diagnostics {
@@ -18,17 +17,15 @@ export class Diagnostics {
     this._timers = new Map();
     this._metadata = {};
     this._events = [];
+    this._cachedAnalysis = null;
+    this._triggerEngine = new TriggerEngine(this._history, this._metrics);
+    this._exportExtensions = new Map();
 
     this._frame = 0;
     this._delta = 0;
     this._fps = 0;
     this._insideFrame = false;
     this._active = false;
-    this._triggers = [];
-    this._cooldownRemaining = 0;
-    this._captureRemaining = 0;
-    this._captureBuffer = null;
-    this._captureCallbacks = [];
   }
 
   // ─── Metric registry ────────────────────────────────
@@ -101,7 +98,7 @@ export class Diagnostics {
       this._resetAccumulators();
     }
 
-    this._evaluateTriggers(snapshot);
+    this._triggerEngine.process(snapshot);
   }
 
   _resetAccumulators() {
@@ -183,71 +180,26 @@ export class Diagnostics {
   // ─── Triggers ────────────────────────────────────────
 
   addTrigger(config) {
-    const trigger = new TriggerCondition(config);
-    trigger.resolve(this._metrics);
-    this._triggers.push(trigger);
-    return trigger;
+    return this._triggerEngine.addTrigger(config);
   }
 
   removeTrigger(trigger) {
-    const idx = this._triggers.indexOf(trigger);
-    if (idx !== -1) this._triggers.splice(idx, 1);
+    this._triggerEngine.removeTrigger(trigger);
   }
 
   onCapture(callback) {
-    this._captureCallbacks.push(callback);
+    this._triggerEngine.onCapture(callback);
   }
 
-  _evaluateTriggers(snapshot) {
-    if (this._cooldownRemaining > 0) {
-      this._cooldownRemaining--;
-      return;
-    }
+  // ─── Export extensions ──────────────────────────────
 
-    if (this._captureRemaining > 0) {
-      this._captureBuffer.push(snapshot);
-      this._captureRemaining--;
-      if (this._captureRemaining === 0) {
-        this._emitCapture(this._captureBuffer);
-        this._captureBuffer = null;
-      }
-      return;
-    }
-
-    for (let i = 0; i < this._triggers.length; i++) {
-      const trigger = this._triggers[i];
-      if (trigger.evaluate(snapshot)) {
-        const preCount = Math.min(trigger.preFrames, this._history.count - 1);
-        const preSnapshots = [];
-        for (let j = preCount; j > 0; j--) {
-          preSnapshots.push(this._history.at(j));
-        }
-        preSnapshots.reverse();
-        this._captureBuffer = [snapshot];
-        this._captureRemaining = trigger.postFrames;
-        this._cooldownRemaining = trigger.cooldown;
-        break;
-      }
-    }
-  }
-
-  _emitCapture(captureBuffer) {
-    const result = new CaptureResult({
-      name: "triggered",
-      timestamp: performance.now(),
-      preFrames: captureBuffer.length - this._captureRemaining - 1,
-      postFrames: this._captureRemaining,
-      snapshots: captureBuffer,
-      registry: this._metrics,
-    });
-    for (let i = 0; i < this._captureCallbacks.length; i++) {
-      this._captureCallbacks[i](result);
-    }
+  registerExportExtension(name, serializer) {
+    this._exportExtensions.set(name, serializer);
   }
 
   // ─── Export / Import ────────────────────────────────
 
-  toJSON({ snapshots = true, registry = true, meta = true } = {}) {
+  toJSON({ snapshots = true, registry = true, meta = true, extensions = true } = {}) {
     const result = { version: 1 };
 
     if (meta) {
@@ -282,6 +234,13 @@ export class Diagnostics {
       for (let i = this._history.count - 1; i >= 0; i--) {
         const snap = this._history.at(i);
         if (snap) result.snapshots.push(snap.toJSON());
+      }
+    }
+
+    if (extensions && this._exportExtensions.size > 0) {
+      result.extensions = {};
+      for (const [name, serializer] of this._exportExtensions) {
+        result.extensions[name] = serializer();
       }
     }
 
@@ -335,7 +294,10 @@ export class Diagnostics {
   }
 
   get analysis() {
-    return new Analysis(this._history, this._metrics);
+    if (!this._cachedAnalysis) {
+      this._cachedAnalysis = new Analysis(this._history, this._metrics);
+    }
+    return this._cachedAnalysis;
   }
 
   // ─── Session control ────────────────────────────────
@@ -348,9 +310,8 @@ export class Diagnostics {
     this._metadata = {};
     this._active = false;
     this._insideFrame = false;
-    this._triggers = [];
-    this._cooldownRemaining = 0;
-    this._captureRemaining = 0;
-    this._captureBuffer = null;
+    this._cachedAnalysis = null;
+    this._triggerEngine.reset();
+    this._exportExtensions.clear();
   }
 }

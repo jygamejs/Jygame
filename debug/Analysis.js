@@ -5,6 +5,29 @@ export class Analysis {
     this._history = history;
     this._registry = registry;
     this._custom = new Map();
+    this._cache = new Map();
+    this._cacheVersion = -1;
+  }
+
+  _checkCache() {
+    const current = this._history.version;
+    if (this._cacheVersion !== current) {
+      this._cache.clear();
+      this._cacheVersion = current;
+    }
+  }
+
+  _cached(key, fn) {
+    this._checkCache();
+    if (this._cache.has(key)) return this._cache.get(key);
+    const value = fn();
+    this._cache.set(key, value);
+    return value;
+  }
+
+  _invalidateCache() {
+    this._cache.clear();
+    this._cacheVersion = -1;
   }
 
   latest(metricName) {
@@ -27,61 +50,73 @@ export class Analysis {
   }
 
   average(metricName, window = 60) {
-    const id = this._resolveId(metricName);
-    if (id < 0) return 0;
-    let sum = 0, n = 0;
-    const limit = Math.min(window, this._history.count);
-    for (let i = limit - 1; i >= 0; i--) {
-      const snap = this._history.at(i);
-      if (snap) {
-        sum += this._readValue(snap, id);
-        n++;
+    const key = `avg:${metricName}:${window}`;
+    return this._cached(key, () => {
+      const id = this._resolveId(metricName);
+      if (id < 0) return 0;
+      let sum = 0, n = 0;
+      const limit = Math.min(window, this._history.count);
+      for (let i = limit - 1; i >= 0; i--) {
+        const snap = this._history.at(i);
+        if (snap) {
+          sum += this._readValue(snap, id);
+          n++;
+        }
       }
-    }
-    return n > 0 ? sum / n : 0;
+      return n > 0 ? sum / n : 0;
+    });
   }
 
   max(metricName, window = 60) {
-    const id = this._resolveId(metricName);
-    if (id < 0) return 0;
-    let result = -Infinity;
-    const limit = Math.min(window, this._history.count);
-    for (let i = limit - 1; i >= 0; i--) {
-      const snap = this._history.at(i);
-      if (snap) {
-        result = Math.max(result, this._readValue(snap, id));
+    const key = `max:${metricName}:${window}`;
+    return this._cached(key, () => {
+      const id = this._resolveId(metricName);
+      if (id < 0) return 0;
+      let result = -Infinity;
+      const limit = Math.min(window, this._history.count);
+      for (let i = limit - 1; i >= 0; i--) {
+        const snap = this._history.at(i);
+        if (snap) {
+          result = Math.max(result, this._readValue(snap, id));
+        }
       }
-    }
-    return result === -Infinity ? 0 : result;
+      return result === -Infinity ? 0 : result;
+    });
   }
 
   min(metricName, window = 60) {
-    const id = this._resolveId(metricName);
-    if (id < 0) return 0;
-    let result = Infinity;
-    const limit = Math.min(window, this._history.count);
-    for (let i = limit - 1; i >= 0; i--) {
-      const snap = this._history.at(i);
-      if (snap) {
-        result = Math.min(result, this._readValue(snap, id));
+    const key = `min:${metricName}:${window}`;
+    return this._cached(key, () => {
+      const id = this._resolveId(metricName);
+      if (id < 0) return 0;
+      let result = Infinity;
+      const limit = Math.min(window, this._history.count);
+      for (let i = limit - 1; i >= 0; i--) {
+        const snap = this._history.at(i);
+        if (snap) {
+          result = Math.min(result, this._readValue(snap, id));
+        }
       }
-    }
-    return result === Infinity ? 0 : result;
+      return result === Infinity ? 0 : result;
+    });
   }
 
   stddev(metricName, window = 60) {
-    const id = this._resolveId(metricName);
-    if (id < 0) return 0;
-    const values = [];
-    const limit = Math.min(window, this._history.count);
-    for (let i = limit - 1; i >= 0; i--) {
-      const snap = this._history.at(i);
-      if (snap) values.push(this._readValue(snap, id));
-    }
-    if (values.length < 2) return 0;
-    const mean = values.reduce((a, b) => a + b, 0) / values.length;
-    const sqDiff = values.reduce((sum, v) => sum + (v - mean) ** 2, 0);
-    return Math.sqrt(sqDiff / (values.length - 1));
+    const key = `stddev:${metricName}:${window}`;
+    return this._cached(key, () => {
+      const id = this._resolveId(metricName);
+      if (id < 0) return 0;
+      const values = [];
+      const limit = Math.min(window, this._history.count);
+      for (let i = limit - 1; i >= 0; i--) {
+        const snap = this._history.at(i);
+        if (snap) values.push(this._readValue(snap, id));
+      }
+      if (values.length < 2) return 0;
+      const mean = values.reduce((a, b) => a + b, 0) / values.length;
+      const sqDiff = values.reduce((sum, v) => sum + (v - mean) ** 2, 0);
+      return Math.sqrt(sqDiff / (values.length - 1));
+    });
   }
 
   register(name, { compute, format }) {

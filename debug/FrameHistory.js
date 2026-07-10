@@ -5,6 +5,7 @@ export class FrameHistory {
     this._count = 0;
     this._head = 0;
     this._wraps = 0;
+    this._version = 0;
   }
 
   push(snapshot) {
@@ -15,6 +16,11 @@ export class FrameHistory {
     } else {
       this._wraps++;
     }
+    this._version++;
+  }
+
+  get version() {
+    return this._version;
   }
 
   get length() {
@@ -70,5 +76,6 @@ export class FrameHistory {
     this._count = 0;
     this._head = 0;
     this._wraps = 0;
+    this._version = 0;
   }
 }
