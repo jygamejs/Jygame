@@ -2,6 +2,10 @@ import { OverlayContext } from "./OverlayContext.js";
 import { PanelManager } from "./PanelManager.js";
 import { LayoutEngine } from "./LayoutEngine.js";
 import { DarkTheme } from "./theme/DarkTheme.js";
+import { SparklineRenderer } from "./renderers/SparklineRenderer.js";
+import { HistogramRenderer } from "./renderers/HistogramRenderer.js";
+import { FrameBarRenderer } from "./renderers/FrameBarRenderer.js";
+import { TextRenderer } from "./renderers/TextRenderer.js";
 
 export class OverlaySession {
   constructor({ history, registry, analysis, config, theme } = {}) {
@@ -11,6 +15,17 @@ export class OverlaySession {
     this._panels = new PanelManager(this._ctx);
     this._layout = new LayoutEngine(resolvedTheme);
     this._ctx.layout = this._layout;
+
+    this._textRenderer = new TextRenderer(resolvedTheme);
+    this._sparklineRenderer = new SparklineRenderer();
+    this._histogramRenderer = new HistogramRenderer();
+    this._frameBarRenderer = new FrameBarRenderer();
+    this._ctx.renderers = {
+      text: this._textRenderer,
+      sparkline: this._sparklineRenderer,
+      histogram: this._histogramRenderer,
+      frameBar: this._frameBarRenderer,
+    };
   }
 
   get visible() {
@@ -32,6 +47,10 @@ export class OverlaySession {
 
   get layout() {
     return this._layout;
+  }
+
+  get renderers() {
+    return this._ctx.renderers;
   }
 
   render(ctx, width, height) {

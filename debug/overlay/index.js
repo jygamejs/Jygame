@@ -5,3 +5,7 @@ export { Panel } from "./Panel.js";
 export { LayoutEngine } from "./LayoutEngine.js";
 export { DarkTheme } from "./theme/DarkTheme.js";
 export { LightTheme } from "./theme/LightTheme.js";
+export { SparklineRenderer } from "./renderers/SparklineRenderer.js";
+export { HistogramRenderer } from "./renderers/HistogramRenderer.js";
+export { FrameBarRenderer } from "./renderers/FrameBarRenderer.js";
+export { TextRenderer } from "./renderers/TextRenderer.js";
