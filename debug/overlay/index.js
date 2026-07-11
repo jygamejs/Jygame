@@ -35,3 +35,4 @@ export { SelectionManager } from "./SelectionManager.js";
 export { CommandSystem } from "./CommandSystem.js";
 export { TooltipManager } from "./TooltipManager.js";
 export { AnimationSystem } from "./AnimationSystem.js";
+export { PersistenceManager } from "./PersistenceManager.js";

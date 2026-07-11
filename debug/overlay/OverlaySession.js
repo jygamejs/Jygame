@@ -2,6 +2,7 @@ import { OverlayContext } from "./OverlayContext.js";
 import { PanelManager } from "./PanelManager.js";
 import { LayoutEngine } from "./LayoutEngine.js";
 import { DarkTheme } from "./theme/DarkTheme.js";
+import { LightTheme } from "./theme/LightTheme.js";
 import { SparklineRenderer } from "./renderers/SparklineRenderer.js";
 import { HistogramRenderer } from "./renderers/HistogramRenderer.js";
 import { FrameBarRenderer } from "./renderers/FrameBarRenderer.js";
@@ -11,11 +12,34 @@ import { SelectionManager } from "./SelectionManager.js";
 import { CommandSystem } from "./CommandSystem.js";
 import { TooltipManager } from "./TooltipManager.js";
 import { AnimationSystem } from "./AnimationSystem.js";
+import { PersistenceManager } from "./PersistenceManager.js";
+
+const DEFAULT_SETTINGS = {
+  theme: "dark",
+  refreshRate: 1,
+  fpsTarget: 60,
+  frameBudget: 16.67,
+  metricUnits: "auto",
+  sparklineWindow: 60,
+  fontSize: 12,
+  opacity: 0.85,
+  shortcuts: {
+    "overlay:toggle": "`",
+    "panel:performance:toggle": "1",
+    "panel:timeline:toggle": "2",
+    "panel:framegraph:toggle": "3",
+    "panel:metrics:toggle": "4",
+    "panel:settings:toggle": "5",
+  },
+};
 
 export class OverlaySession {
   constructor({ history, registry, analysis, config, theme } = {}) {
-    const resolvedTheme = theme || DarkTheme;
-    this._ctx = new OverlayContext({ history, registry, analysis, config, theme: resolvedTheme });
+    this._persistence = new PersistenceManager();
+    const saved = this._persistence.loadSettings();
+    const mergedConfig = { ...DEFAULT_SETTINGS, ...saved, ...config };
+    const resolvedTheme = theme || (mergedConfig.theme === "light" ? LightTheme : DarkTheme);
+    this._ctx = new OverlayContext({ history, registry, analysis, config: mergedConfig, theme: resolvedTheme });
     this._visible = false;
     this._panels = new PanelManager(this._ctx);
     this._layout = new LayoutEngine(resolvedTheme);
@@ -42,6 +66,11 @@ export class OverlaySession {
       histogram: this._histogramRenderer,
       frameBar: this._frameBarRenderer,
     };
+
+    const savedLayout = this._persistence.loadLayout();
+    if (savedLayout) {
+      this._layout.restore(savedLayout);
+    }
   }
 
   get visible() {
@@ -81,6 +110,14 @@ export class OverlaySession {
   processInput(event) {
     if (!this._visible) return false;
     return this._input.process(event);
+  }
+
+  saveSettings() {
+    this._persistence.saveSettings(this._ctx.config || {});
+  }
+
+  saveLayout() {
+    this._persistence.saveLayout(this._layout.serialize());
   }
 
   get renderers() {

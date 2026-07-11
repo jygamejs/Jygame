@@ -38,6 +38,7 @@ import {
   CommandSystem,
   TooltipManager,
   AnimationSystem,
+  PersistenceManager,
 } from "../../../debug/overlay/index.js";
 import { MetricType } from "../../../debug/MetricType.js";
 import { TimelineModel } from "../../../debug/overlay/timeline/TimelineModel.js";
@@ -3186,5 +3187,111 @@ describe("OverlaySession wiring", () => {
     // Verify shortcut "1" toggles performance panel
     const result = session.processInput({ type: "keydown", key: "1" });
     assert.strictEqual(result, true);
+  });
+});
+
+describe("PersistenceManager", () => {
+  it("construction with Map storage", () => {
+    const store = new Map();
+    const pm = new PersistenceManager(store);
+    assert.ok(pm instanceof PersistenceManager);
+  });
+
+  it("loadSettings returns null when empty", () => {
+    const store = new Map();
+    const pm = new PersistenceManager(store);
+    assert.strictEqual(pm.loadSettings(), null);
+  });
+
+  it("loadLayout returns null when empty", () => {
+    const store = new Map();
+    const pm = new PersistenceManager(store);
+    assert.strictEqual(pm.loadLayout(), null);
+  });
+
+  it("loadFavorites returns null when empty", () => {
+    const store = new Map();
+    const pm = new PersistenceManager(store);
+    assert.strictEqual(pm.loadFavorites(), null);
+  });
+
+  it("settings round-trip", () => {
+    const store = new Map();
+    const pm = new PersistenceManager(store);
+    const data = { theme: "dark", fpsTarget: 60, fontSize: 12 };
+    pm.saveSettings(data);
+    const loaded = pm.loadSettings();
+    assert.deepStrictEqual(loaded, data);
+  });
+
+  it("layout round-trip", () => {
+    const store = new Map();
+    const pm = new PersistenceManager(store);
+    const data = { version: 1, root: { type: "split", direction: "horizontal", children: [] }, floating: [] };
+    pm.saveLayout(data);
+    const loaded = pm.loadLayout();
+    assert.deepStrictEqual(loaded, data);
+  });
+
+  it("favorites round-trip", () => {
+    const store = new Map();
+    const pm = new PersistenceManager(store);
+    const data = { version: 1, favorites: ["frame.total", "frame.fps"] };
+    pm.saveFavorites(data);
+    const loaded = pm.loadFavorites();
+    assert.deepStrictEqual(loaded, data);
+  });
+
+  it("save overwrites previous data", () => {
+    const store = new Map();
+    const pm = new PersistenceManager(store);
+    pm.saveSettings({ theme: "dark" });
+    pm.saveSettings({ theme: "light" });
+    assert.deepStrictEqual(pm.loadSettings(), { theme: "light" });
+  });
+
+  it("multiple keys are independent", () => {
+    const store = new Map();
+    const pm = new PersistenceManager(store);
+    pm.saveSettings({ theme: "dark" });
+    pm.saveLayout({ version: 1, root: { type: "leaf", panel: "test" }, floating: [] });
+    pm.saveFavorites({ version: 1, favorites: ["a"] });
+    assert.deepStrictEqual(pm.loadSettings(), { theme: "dark" });
+    assert.deepStrictEqual(pm.loadFavorites(), { version: 1, favorites: ["a"] });
+    assert.ok(pm.loadLayout().root.panel, "test");
+  });
+
+  it("OverlaySession saveSettings persists settings", () => {
+    const store = new Map();
+    const pm = new PersistenceManager(store);
+    const session = new OverlaySession();
+    session._persistence = pm;
+    session.saveSettings();
+    const loaded = pm.loadSettings();
+    assert.ok(loaded);
+  });
+
+  it("OverlaySession saveLayout persists layout", () => {
+    const store = new Map();
+    const pm = new PersistenceManager(store);
+    const session = new OverlaySession();
+    session._persistence = pm;
+    session.saveLayout();
+    const loaded = pm.loadLayout();
+    assert.ok(loaded);
+  });
+
+  it("OverlaySession save/load layout round-trip", () => {
+    const store = new Map();
+    const pm = new PersistenceManager(store);
+    const session = new OverlaySession();
+    session._persistence = pm;
+    session._layout.createDefaultLayout(["performance", "framegraph", "timeline", "events"]);
+    session.saveLayout();
+    const loaded = pm.loadLayout();
+    assert.ok(loaded);
+    assert.strictEqual(loaded.version, 1);
+    session._layout.restore(loaded);
+    assert.ok(session._layout.root);
   });
 });
