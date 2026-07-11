@@ -25,7 +25,9 @@ import {
   Toolbar,
   renderBadge,
   renderInspector,
+  PerformancePanel,
 } from "../../../debug/overlay/index.js";
+import { MetricType } from "../../../debug/MetricType.js";
 
 function mockCtx() {
   const calls = [];
@@ -855,6 +857,270 @@ describe("Inspector", () => {
     assert.ok(texts.some(c => c[1] === "Name"));
     assert.ok(texts.some(c => c[1] === "Test"));
     assert.ok(texts.some(c => c[1] === "42"));
+  });
+});
+
+function perfMockRegistry() {
+  const descriptors = [
+    { id: 0, name: "frame.fps", displayName: "FPS", type: MetricType.TIMER, color: "#88ccff" },
+    { id: 1, name: "frame.total", displayName: "Frame Total", type: MetricType.TIMER, color: "#ff8888" },
+    { id: 2, name: "frame.render", displayName: "Render", type: MetricType.TIMER, color: "#88ff88" },
+    { id: 3, name: "frame.physics", displayName: "Physics", type: MetricType.TIMER, color: "#88ffff" },
+    { id: 4, name: "ecs.update", displayName: "ECS Update", type: MetricType.TIMER, color: "#ff88ff" },
+  ];
+  const nameMap = new Map(descriptors.map(d => [d.name, d]));
+  return {
+    forEach(fn) { descriptors.forEach(fn); },
+    find(name) { return nameMap.get(name) || null; },
+    get(id) { return descriptors[id] || null; },
+    count: descriptors.length,
+  };
+}
+
+function perfMockAnalysis() {
+  const values = {
+    "frame.fps": 58.3,
+    "frame.total": 16.7,
+    "frame.render": 8.2,
+    "frame.physics": 3.4,
+    "ecs.update": 4.2,
+  };
+  const averages = {
+    "frame.render": 7.8,
+    "frame.physics": 3.2,
+    "ecs.update": 4.0,
+  };
+  const maxes = {
+    "frame.render": 15.0,
+    "frame.physics": 6.0,
+    "ecs.update": 8.0,
+  };
+  return {
+    latest(name) { return values[name] ?? 0; },
+    average(name, window) { return averages[name] ?? values[name] ?? 0; },
+    max(name, window) { return maxes[name] ?? values[name] ?? 0; },
+  };
+}
+
+function perfMockHistory() {
+  const snapshots = [];
+  for (let i = 0; i < 60; i++) {
+    const base = [0, 16.5, 8.0, 3.3, 4.1];
+    snapshots.push({
+      timerTotal(id) { return (base[id] || 0) + (i % 5) * 0.1; },
+    });
+  }
+  return {
+    count: snapshots.length,
+    frames: function*() { yield* snapshots; },
+  };
+}
+
+function perfMockRenderers() {
+  const text = new TextRenderer(DarkTheme);
+  const sparkline = new SparklineRenderer();
+  const frameBar = new FrameBarRenderer();
+  return { text, sparkline, frameBar, histogram: null };
+}
+
+function makePerfContext(overrides = {}) {
+  return new OverlayContext({
+    history: perfMockHistory(),
+    registry: perfMockRegistry(),
+    analysis: perfMockAnalysis(),
+    config: { fpsTarget: 60 },
+    theme: DarkTheme,
+    renderers: perfMockRenderers(),
+    ...overrides,
+  });
+}
+
+describe("PerformancePanel", () => {
+  it("construction defaults", () => {
+    const ctx = new OverlayContext();
+    const panel = new PerformancePanel(ctx);
+    assert.strictEqual(panel.id, "performance");
+    assert.strictEqual(panel.title, "Performance");
+    assert.strictEqual(panel.ctx, ctx);
+    assert.strictEqual(panel.defaultWidth, 500);
+    assert.strictEqual(panel.defaultHeight, 350);
+    assert.strictEqual(panel.minWidth, 320);
+    assert.strictEqual(panel.minHeight, 200);
+  });
+
+  it("update with null sources sets _data null", () => {
+    const ctx = new OverlayContext();
+    const panel = new PerformancePanel(ctx);
+    panel.update({ dt: 16 });
+    assert.strictEqual(panel._data, null);
+  });
+
+  it("update with partial sources sets _data null", () => {
+    const ctx = new OverlayContext({ analysis: { latest() { return 0; } } });
+    const panel = new PerformancePanel(ctx);
+    panel.update({ dt: 16 });
+    assert.strictEqual(panel._data, null);
+  });
+
+  it("update computes header values", () => {
+    const ctx = makePerfContext();
+    const panel = new PerformancePanel(ctx);
+    panel.update({ dt: 16 });
+    const d = panel._data;
+    assert.ok(d !== null);
+    assert.strictEqual(d.fps, 58.3);
+    assert.strictEqual(d.frameTime, 16.7);
+    assert.ok(d.budgetPct > 0);
+    assert.strictEqual(d.fpsTarget, 60);
+    assert.strictEqual(d.budget, 16.67);
+  });
+
+  it("update computes subsystem breakdown", () => {
+    const ctx = makePerfContext();
+    const panel = new PerformancePanel(ctx);
+    panel.update({ dt: 16 });
+    const subs = panel._data.subsystems;
+    assert.ok(subs.length >= 2);
+    assert.ok(subs.some(s => s.displayName === "Render"));
+    assert.ok(subs.some(s => s.displayName === "Physics"));
+    assert.strictEqual(subs[0].displayName, "Render");
+    assert.strictEqual(subs[0].value, 8.2);
+    assert.strictEqual(subs[0].pct, Math.round((8.2 / 16.7) * 100));
+  });
+
+  it("update adds overhead when sum < frame total", () => {
+    const ctx = makePerfContext();
+    const panel = new PerformancePanel(ctx);
+    panel.update({ dt: 16 });
+    const subs = panel._data.subsystems;
+    const overhead = subs.find(s => s.displayName === "Overhead");
+    assert.ok(overhead !== undefined);
+    assert.ok(overhead.value > 0);
+    assert.ok(overhead.pct > 0);
+  });
+
+  it("update computes top offenders sorted by avg", () => {
+    const ctx = makePerfContext();
+    const panel = new PerformancePanel(ctx);
+    panel.update({ dt: 16 });
+    const offs = panel._data.offenders;
+    assert.ok(offs.length >= 2);
+    assert.strictEqual(offs[0].displayName, "Render");
+    assert.strictEqual(offs[0].avg, 7.8);
+    assert.strictEqual(offs[0].max, 15.0);
+    if (offs.length >= 2) {
+      assert.strictEqual(offs[1].displayName, "ECS Update");
+      assert.strictEqual(offs[1].avg, 4.0);
+    }
+  });
+
+  it("update fills offender sparkline values", () => {
+    const ctx = makePerfContext();
+    const panel = new PerformancePanel(ctx);
+    panel.update({ dt: 16 });
+    for (const off of panel._data.offenders) {
+      assert.ok(Array.isArray(off.values));
+      assert.ok(off.values.length > 0);
+    }
+  });
+
+  it("render with null data draws no-data indicator", () => {
+    const ctx = new OverlayContext({ theme: DarkTheme, renderers: perfMockRenderers() });
+    const panel = new PerformancePanel(ctx);
+    const canvas = mockCtx();
+    panel.render(canvas, { x: 0, y: 0, width: 500, height: 350 });
+    const texts = canvas._calls.filter(c => c[0] === "fillText");
+    assert.ok(texts.some(c => c[1] === "No data"));
+  });
+
+  it("render with data draws header cards", () => {
+    const ctx = makePerfContext();
+    const panel = new PerformancePanel(ctx);
+    panel.update({ dt: 16 });
+    const canvas = mockCtx();
+    panel.render(canvas, { x: 0, y: 0, width: 500, height: 350 });
+    const texts = canvas._calls.filter(c => c[0] === "fillText").map(c => c[1]);
+    assert.ok(texts.includes("FPS"));
+    assert.ok(texts.includes("58.3"));
+    assert.ok(texts.includes("Frame"));
+    assert.ok(texts.includes("16.7ms"));
+    assert.ok(texts.includes("Budget"));
+    assert.ok(texts.includes("100%"));
+  });
+
+  it("render draws section labels", () => {
+    const ctx = makePerfContext();
+    const panel = new PerformancePanel(ctx);
+    panel.update({ dt: 16 });
+    const canvas = mockCtx();
+    panel.render(canvas, { x: 0, y: 0, width: 500, height: 350 });
+    const texts = canvas._calls.filter(c => c[0] === "fillText").map(c => c[1]);
+    assert.ok(texts.includes("Subsystem Breakdown"));
+    assert.ok(texts.includes("Top Offenders"));
+  });
+
+  it("render draws subsystem rows", () => {
+    const ctx = makePerfContext();
+    const panel = new PerformancePanel(ctx);
+    panel.update({ dt: 16 });
+    const canvas = mockCtx();
+    panel.render(canvas, { x: 0, y: 0, width: 500, height: 350 });
+    const texts = canvas._calls.filter(c => c[0] === "fillText").map(c => c[1]);
+    assert.ok(texts.includes("Render"));
+    assert.ok(texts.includes("8.2ms"));
+    assert.ok(texts.includes("Physics"));
+    assert.ok(texts.includes("3.4ms"));
+  });
+
+  it("render clips subsystem and offender rows beyond panel height", () => {
+    const ctx = makePerfContext();
+    const panel = new PerformancePanel(ctx);
+    panel.update({ dt: 16 });
+    const canvas = mockCtx();
+    panel.render(canvas, { x: 0, y: 0, width: 500, height: 50 });
+    const texts = canvas._calls.filter(c => c[0] === "fillText").map(c => c[1]);
+    assert.ok(!texts.includes("8.2ms"), "subsystem rows should be clipped");
+    assert.ok(!texts.includes("7.8ms"), "offender rows should be clipped");
+  });
+
+  it("render handles missing renderers gracefully", () => {
+    const ctx = new OverlayContext({
+      history: perfMockHistory(),
+      registry: perfMockRegistry(),
+      analysis: perfMockAnalysis(),
+      theme: DarkTheme,
+    });
+    const panel = new PerformancePanel(ctx);
+    panel.update({ dt: 16 });
+    const canvas = mockCtx();
+    assert.doesNotThrow(() => panel.render(canvas, { x: 0, y: 0, width: 500, height: 350 }));
+  });
+
+  it("status color for fps uses reversed logic", () => {
+    const ctx = makePerfContext();
+    const panel = new PerformancePanel(ctx);
+    assert.strictEqual(panel._statusColor(58, 30, 20, DarkTheme, true), DarkTheme.fpsGood);
+    assert.strictEqual(panel._statusColor(25, 30, 20, DarkTheme, true), DarkTheme.fpsWarn);
+    assert.strictEqual(panel._statusColor(15, 30, 20, DarkTheme, true), DarkTheme.fpsBad);
+  });
+
+  it("status color for frame time uses normal logic", () => {
+    const ctx = makePerfContext();
+    const panel = new PerformancePanel(ctx);
+    assert.strictEqual(panel._statusColor(5, 16, 20, DarkTheme), DarkTheme.fpsGood);
+    assert.strictEqual(panel._statusColor(18, 16, 20, DarkTheme), DarkTheme.fpsWarn);
+    assert.strictEqual(panel._statusColor(25, 16, 20, DarkTheme), DarkTheme.fpsBad);
+  });
+
+  it("budget card shows fill bar", () => {
+    const ctx = makePerfContext();
+    const panel = new PerformancePanel(ctx);
+    panel.update({ dt: 16 });
+    const canvas = mockCtx();
+    panel.render(canvas, { x: 0, y: 0, width: 500, height: 350 });
+    const fillRects = canvas._calls.filter(c => c[0] === "fillRect");
+    const budgetFill = fillRects.find(c => c[1] > 300 && c[4] === 3);
+    assert.ok(budgetFill !== undefined);
   });
 });
 

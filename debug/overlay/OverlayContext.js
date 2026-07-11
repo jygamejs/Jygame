@@ -1,5 +1,5 @@
 export class OverlayContext {
-  constructor({ history, registry, analysis, config, theme, captures } = {}) {
+  constructor({ history, registry, analysis, config, theme, captures, renderers } = {}) {
     this.history = history || null;
     this.registry = registry || null;
     this.analysis = analysis || null;
@@ -12,7 +12,7 @@ export class OverlayContext {
     this.selection = null;
     this.commands = null;
     this.tooltips = null;
-    this.renderers = null;
+    this.renderers = renderers || null;
     this.animation = null;
   }
 }
