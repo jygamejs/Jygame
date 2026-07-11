@@ -84,7 +84,9 @@ export class PanelManager {
     for (const id of this._order) {
       if (!this._visible.has(id)) continue;
       const panel = this._panels.get(id);
-      if (panel) panel.render(ctx);
+      if (!panel) continue;
+      const rect = this._ctx.layout ? this._ctx.layout.getPanelRect(id) : null;
+      panel.render(ctx, rect);
     }
   }
 

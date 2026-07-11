@@ -5,6 +5,9 @@ import {
   Panel,
   PanelManager,
   OverlaySession,
+  LayoutEngine,
+  DarkTheme,
+  LightTheme,
 } from "../../../debug/overlay/index.js";
 
 describe("OverlayContext", () => {
@@ -107,17 +110,11 @@ describe("Panel", () => {
   it("lifecycle hooks are no-ops by default", () => {
     const p = new Panel("id", "Title", new OverlayContext());
     assert.doesNotThrow(() => p.update({}));
-    assert.doesNotThrow(() => p.render(null));
+    assert.doesNotThrow(() => p.render(null, null));
     assert.doesNotThrow(() => p.onShow());
     assert.doesNotThrow(() => p.onHide());
     assert.doesNotThrow(() => p.onDestroy());
     assert.doesNotThrow(() => p.onRegister());
-  });
-
-  it("onShow and onHide update _visible", () => {
-    const p = new Panel("id", "Title", new OverlayContext());
-    p.onShow();
-    p.onHide();
   });
 });
 
@@ -257,17 +254,36 @@ describe("PanelManager", () => {
     assert.deepStrictEqual(updated, ["a"]);
   });
 
-  it("render calls render on visible panels in order", () => {
-    const pm = new PanelManager(new OverlayContext());
-    const rendered = [];
+  it("render calls render with rect from layout engine", () => {
+    const ctx = new OverlayContext();
+    const layout = new LayoutEngine(DarkTheme);
+    layout.setRoot({ type: "leaf", panelId: "p" });
+    layout.compute(800, 600);
+    ctx.layout = layout;
+
+    const pm = new PanelManager(ctx);
+    const rects = [];
     class TestPanel extends Panel {
-      render(ctx) { rendered.push(this.id); }
+      render(c, r) { rects.push(r); }
     }
-    pm.register(new TestPanel("a", "A", new OverlayContext()));
-    pm.register(new TestPanel("b", "B", new OverlayContext()));
-    pm.showAll();
+    pm.register(new TestPanel("p", "P", ctx));
+    pm.show("p");
     pm.render(null);
-    assert.deepStrictEqual(rendered, ["a", "b"]);
+    assert.strictEqual(rects.length, 1);
+    assert.deepStrictEqual(rects[0], { x: 0, y: 0, width: 800, height: 600 });
+  });
+
+  it("render passes null rect when no layout engine", () => {
+    const pm = new PanelManager(new OverlayContext());
+    const rects = [];
+    class TestPanel extends Panel {
+      render(c, r) { rects.push(r); }
+    }
+    pm.register(new TestPanel("p", "P", new OverlayContext()));
+    pm.show("p");
+    pm.render(null);
+    assert.strictEqual(rects.length, 1);
+    assert.strictEqual(rects[0], null);
   });
 
   it("unregister calls onDestroy", () => {
@@ -282,6 +298,308 @@ describe("PanelManager", () => {
   });
 });
 
+describe("DarkTheme", () => {
+  it("is frozen", () => {
+    assert.ok(Object.isFrozen(DarkTheme));
+  });
+
+  it("has expected properties", () => {
+    assert.strictEqual(typeof DarkTheme.background, "string");
+    assert.strictEqual(typeof DarkTheme.text, "string");
+    assert.strictEqual(typeof DarkTheme.fontSize, "number");
+    assert.strictEqual(typeof DarkTheme.headerHeight, "number");
+    assert.strictEqual(DarkTheme.headerHeight, 28);
+    assert.strictEqual(DarkTheme.tabHeight, 24);
+  });
+
+  it("has dark values", () => {
+    assert.ok(DarkTheme.background.includes("20, 20, 30"));
+    assert.strictEqual(DarkTheme.text, "#e0e0f0");
+  });
+});
+
+describe("LightTheme", () => {
+  it("is frozen", () => {
+    assert.ok(Object.isFrozen(LightTheme));
+  });
+
+  it("has expected properties", () => {
+    assert.strictEqual(typeof LightTheme.background, "string");
+    assert.strictEqual(typeof LightTheme.text, "string");
+    assert.strictEqual(LightTheme.fontSize, 12);
+  });
+
+  it("has light values", () => {
+    assert.ok(LightTheme.background.includes("240, 240, 245"));
+    assert.strictEqual(LightTheme.text, "#222233");
+  });
+
+  it("differs from dark theme", () => {
+    assert.notStrictEqual(DarkTheme.background, LightTheme.background);
+    assert.notStrictEqual(DarkTheme.text, LightTheme.text);
+  });
+});
+
+describe("LayoutEngine", () => {
+  it("starts with null root", () => {
+    const eng = new LayoutEngine(DarkTheme);
+    assert.strictEqual(eng.root, null);
+  });
+
+  it("setRoot accepts a leaf node", () => {
+    const eng = new LayoutEngine(DarkTheme);
+    eng.setRoot({ type: "leaf", panelId: "p1" });
+    assert.ok(eng.root);
+    assert.strictEqual(eng.root.type, "leaf");
+    assert.strictEqual(eng.root.panelId, "p1");
+  });
+
+  it("compute assigns full area to leaf", () => {
+    const eng = new LayoutEngine(DarkTheme);
+    eng.setRoot({ type: "leaf", panelId: "p1" });
+    eng.compute(800, 600);
+    const rect = eng.getPanelRect("p1");
+    assert.deepStrictEqual(rect, { x: 0, y: 0, width: 800, height: 600 });
+  });
+
+  it("compute returns null for unknown panel", () => {
+    const eng = new LayoutEngine(DarkTheme);
+    eng.setRoot({ type: "leaf", panelId: "p1" });
+    eng.compute(800, 600);
+    assert.strictEqual(eng.getPanelRect("nope"), null);
+  });
+
+  it("split horizontal divides width by ratio", () => {
+    const eng = new LayoutEngine(DarkTheme);
+    eng.setRoot({
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.4,
+      children: [
+        { type: "leaf", panelId: "left" },
+        { type: "leaf", panelId: "right" },
+      ],
+    });
+    eng.compute(1000, 500);
+    const left = eng.getPanelRect("left");
+    const right = eng.getPanelRect("right");
+    assert.ok(left.width > 0);
+    assert.ok(right.width > 0);
+    assert.strictEqual(Math.round(left.width + right.width + 2), 1000);
+    assert.ok(Math.abs(left.width - 399) <= 1);
+  });
+
+  it("split vertical divides height by ratio", () => {
+    const eng = new LayoutEngine(DarkTheme);
+    eng.setRoot({
+      type: "split",
+      direction: "vertical",
+      ratio: 0.7,
+      children: [
+        { type: "leaf", panelId: "top" },
+        { type: "leaf", panelId: "bottom" },
+      ],
+    });
+    eng.compute(800, 600);
+    const top = eng.getPanelRect("top");
+    const bottom = eng.getPanelRect("bottom");
+    assert.ok(top.height > 0);
+    assert.ok(bottom.height > 0);
+    assert.strictEqual(top.y, 0);
+    assert.strictEqual(bottom.y, top.height + 2);
+  });
+
+  it("tab group allocates space for tab bar and active panel", () => {
+    const eng = new LayoutEngine(DarkTheme);
+    eng.setRoot({
+      type: "tab",
+      panels: ["a", "b"],
+      activeTab: 0,
+    });
+    eng.compute(800, 600);
+    const rect = eng.getPanelRect("a");
+    assert.ok(rect);
+    assert.strictEqual(rect.y, DarkTheme.tabHeight);
+    assert.strictEqual(rect.height, 600 - DarkTheme.tabHeight);
+    assert.strictEqual(rect.width, 800);
+    // Inactive tab has no rect
+    assert.strictEqual(eng.getPanelRect("b"), null);
+  });
+
+  it("tab group with single panel", () => {
+    const eng = new LayoutEngine(DarkTheme);
+    eng.setRoot({
+      type: "tab",
+      panels: ["only"],
+      activeTab: 0,
+    });
+    eng.compute(400, 300);
+    const rect = eng.getPanelRect("only");
+    assert.ok(rect);
+    assert.strictEqual(rect.width, 400);
+  });
+
+  it("resize updates split ratio", () => {
+    const eng = new LayoutEngine(DarkTheme);
+    eng.setRoot({
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.5,
+      children: [
+        { type: "leaf", panelId: "a" },
+        { type: "leaf", panelId: "b" },
+      ],
+    });
+    const splitId = eng.root._layoutId;
+    assert.ok(splitId > 0);
+    const result = eng.resize(splitId, 0.3);
+    assert.strictEqual(result, true);
+    assert.strictEqual(eng.root.ratio, 0.3);
+  });
+
+  it("resize clamps ratio to [0.1, 0.9]", () => {
+    const eng = new LayoutEngine(DarkTheme);
+    eng.setRoot({
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.5,
+      children: [
+        { type: "leaf", panelId: "a" },
+        { type: "leaf", panelId: "b" },
+      ],
+    });
+    eng.resize(eng.root._layoutId, 0);
+    assert.strictEqual(eng.root.ratio, 0.1);
+    eng.resize(eng.root._layoutId, 1.5);
+    assert.strictEqual(eng.root.ratio, 0.9);
+  });
+
+  it("resize with unknown id returns false", () => {
+    const eng = new LayoutEngine(DarkTheme);
+    assert.strictEqual(eng.resize(999, 0.5), false);
+  });
+
+  it("hitTest returns panel at coordinates", () => {
+    const eng = new LayoutEngine(DarkTheme);
+    eng.setRoot({ type: "leaf", panelId: "p1" });
+    eng.compute(800, 600);
+    const hit = eng.hitTest(100, 100);
+    assert.deepStrictEqual(hit, { type: "panel", panelId: "p1" });
+  });
+
+  it("hitTest returns null for out-of-bounds", () => {
+    const eng = new LayoutEngine(DarkTheme);
+    eng.setRoot({ type: "leaf", panelId: "p1" });
+    eng.compute(800, 600);
+    assert.strictEqual(eng.hitTest(900, 900), null);
+  });
+
+  it("serialize round-trips", () => {
+    const eng = new LayoutEngine(DarkTheme);
+    eng.setRoot({
+      type: "split",
+      direction: "vertical",
+      ratio: 0.5,
+      children: [
+        { type: "tab", panels: ["a", "b"], activeTab: 1 },
+        { type: "leaf", panelId: "c" },
+      ],
+    });
+    const json = eng.serialize();
+    assert.strictEqual(json.version, 1);
+    assert.strictEqual(json.root.type, "split");
+    assert.strictEqual(json.root.children.length, 2);
+    assert.strictEqual(json.root.children[0].type, "tab");
+    assert.strictEqual(json.root.children[0].panels[1], "b");
+    assert.strictEqual(json.root.children[1].type, "leaf");
+  });
+
+  it("restore rebuilds tree from JSON", () => {
+    const eng = new LayoutEngine(DarkTheme);
+    const json = {
+      version: 1,
+      root: {
+        type: "split",
+        direction: "horizontal",
+        ratio: 0.3,
+        children: [
+          { type: "leaf", panelId: "x" },
+          { type: "tab", panels: ["y", "z"], activeTab: 0 },
+        ],
+      },
+      floating: [],
+    };
+    const ok = eng.restore(json);
+    assert.strictEqual(ok, true);
+    assert.strictEqual(eng.root.type, "split");
+    assert.strictEqual(eng.root.ratio, 0.3);
+    eng.compute(1000, 500);
+    assert.ok(eng.getPanelRect("x"));
+    assert.ok(eng.getPanelRect("y"));
+  });
+
+  it("restore with invalid JSON returns false", () => {
+    const eng = new LayoutEngine(DarkTheme);
+    assert.strictEqual(eng.restore(null), false);
+    assert.strictEqual(eng.restore({}), false);
+  });
+
+  it("restore clamps ratio to valid range", () => {
+    const eng = new LayoutEngine(DarkTheme);
+    eng.restore({
+      version: 1,
+      root: { type: "split", direction: "horizontal", ratio: -1, children: [
+        { type: "leaf", panelId: "a" },
+        { type: "leaf", panelId: "b" },
+      ]},
+      floating: [],
+    });
+    assert.strictEqual(eng.root.ratio, 0);
+  });
+
+  it("createDefaultLayout builds standard tree", () => {
+    const eng = new LayoutEngine(DarkTheme);
+    eng.createDefaultLayout(["performance", "framegraph", "timeline", "events"]);
+    assert.ok(eng.root);
+    assert.strictEqual(eng.root.type, "split");
+    assert.strictEqual(eng.root.direction, "vertical");
+    assert.strictEqual(eng.root.children.length, 2);
+    assert.strictEqual(eng.root.children[0].children.length, 2);
+    assert.strictEqual(eng.root.children[1].children.length, 2);
+  });
+
+  it("compute with zero dimensions is no-op", () => {
+    const eng = new LayoutEngine(DarkTheme);
+    eng.setRoot({ type: "leaf", panelId: "p" });
+    eng.compute(0, 0);
+    assert.strictEqual(eng.getPanelRect("p"), null);
+  });
+
+  it("compute with no root is no-op", () => {
+    const eng = new LayoutEngine(DarkTheme);
+    eng.compute(800, 600);
+    assert.strictEqual(eng.getPanelRect("any"), null);
+  });
+
+  it("getAllPanelRects returns all rects", () => {
+    const eng = new LayoutEngine(DarkTheme);
+    eng.setRoot({
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.5,
+      children: [
+        { type: "leaf", panelId: "a" },
+        { type: "leaf", panelId: "b" },
+      ],
+    });
+    eng.compute(800, 600);
+    const all = eng.getAllPanelRects();
+    assert.strictEqual(all.size, 2);
+    assert.ok(all.has("a"));
+    assert.ok(all.has("b"));
+  });
+});
+
 describe("OverlaySession", () => {
   it("starts hidden", () => {
     const s = new OverlaySession();
@@ -292,6 +610,22 @@ describe("OverlaySession", () => {
     const s = new OverlaySession();
     assert.ok(s.context instanceof OverlayContext);
     assert.ok(s.panels instanceof PanelManager);
+  });
+
+  it("creates layout engine and wires to context", () => {
+    const s = new OverlaySession();
+    assert.ok(s.layout instanceof LayoutEngine);
+    assert.strictEqual(s.context.layout, s.layout);
+  });
+
+  it("uses DarkTheme by default", () => {
+    const s = new OverlaySession();
+    assert.strictEqual(s.context.theme, DarkTheme);
+  });
+
+  it("uses provided theme", () => {
+    const s = new OverlaySession({ theme: LightTheme });
+    assert.strictEqual(s.context.theme, LightTheme);
   });
 
   it("show makes it visible", () => {
@@ -354,18 +688,35 @@ describe("OverlaySession", () => {
     assert.deepStrictEqual(updated, [16]);
   });
 
-  it("render calls panel render when visible", () => {
+  it("render computes layout and calls panel render", () => {
     const s = new OverlaySession();
-    const rendered = [];
+    const calls = [];
     class TestPanel extends Panel {
-      render(ctx) { rendered.push("called"); }
+      render(ctx, rect) { calls.push({ rect }); }
+    }
+    s.panels.register(new TestPanel("p", "P", s.context));
+    s.panels.show("p");
+    s.layout.setRoot({ type: "leaf", panelId: "p" });
+    s.show();
+    const mockCtx = { save: () => {}, restore: () => {} };
+    s.render(mockCtx, 800, 600);
+    assert.strictEqual(calls.length, 1);
+    assert.deepStrictEqual(calls[0].rect, { x: 0, y: 0, width: 800, height: 600 });
+  });
+
+  it("render with no layout root yields null rect", () => {
+    const s = new OverlaySession();
+    const calls = [];
+    class TestPanel extends Panel {
+      render(ctx, rect) { calls.push({ rect }); }
     }
     s.panels.register(new TestPanel("p", "P", s.context));
     s.panels.show("p");
     s.show();
     const mockCtx = { save: () => {}, restore: () => {} };
     s.render(mockCtx, 800, 600);
-    assert.deepStrictEqual(rendered, ["called"]);
+    assert.strictEqual(calls.length, 1);
+    assert.strictEqual(calls[0].rect, null);
   });
 
   it("destroy hides all panels and clears visibility", () => {
@@ -383,7 +734,7 @@ describe("OverlaySession", () => {
     const registry = { count: 10 };
     const analysis = { average: () => 5 };
     const config = { historySize: 300 };
-    const theme = { text: "#fff" };
+    const theme = DarkTheme;
     const s = new OverlaySession({ history, registry, analysis, config, theme });
     assert.strictEqual(s.context.history, history);
     assert.strictEqual(s.context.registry, registry);
