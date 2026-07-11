@@ -32,6 +32,7 @@ import {
   MetricSearchIndex,
   EventViewerPanel,
   CaptureBrowserPanel,
+  SettingsPanel,
 } from "../../../debug/overlay/index.js";
 import { MetricType } from "../../../debug/MetricType.js";
 import { TimelineModel } from "../../../debug/overlay/timeline/TimelineModel.js";
@@ -2410,5 +2411,164 @@ describe("CaptureBrowserPanel", () => {
     assert.ok(steps.length >= 2);
     assert.ok(steps[0] >= 10);
     assert.ok(steps[steps.length - 1] <= 20);
+  });
+});
+
+function makeSettingsCtx(configOverrides = {}) {
+  const config = { theme: "dark", fpsTarget: 60, refreshRate: 1, fontSize: 12, opacity: 0.85, ...configOverrides };
+  return new OverlayContext({ config, theme: DarkTheme, renderers: { text: { render(ctx, t, x, y, o) { ctx.fillText(t, x, y); }, measure(ctx, t, o) { return { width: t.length * 7 }; } } } });
+}
+
+describe("SettingsPanel", () => {
+  it("construction defaults", () => {
+    const panel = new SettingsPanel(new OverlayContext());
+    assert.strictEqual(panel.id, "settings");
+    assert.strictEqual(panel.title, "Settings");
+    assert.strictEqual(panel.defaultWidth, 400);
+    assert.strictEqual(panel.defaultHeight, 300);
+  });
+
+  it("render without rect is no-op", () => {
+    const panel = new SettingsPanel(new OverlayContext());
+    const canvas = mockCtx();
+    assert.doesNotThrow(() => panel.render(canvas, null));
+  });
+
+  it("render with config draws setting labels", () => {
+    const ctx = makeSettingsCtx();
+    const panel = new SettingsPanel(ctx);
+    const canvas = mockCtx();
+    panel.render(canvas, { x: 0, y: 0, width: 400, height: 300 });
+    const texts = canvas._calls.filter(c => c[0] === "fillText").map(c => c[1]);
+    assert.ok(texts.includes("Theme"));
+    assert.ok(texts.includes("FPS Target"));
+    assert.ok(texts.includes("Refresh Rate"));
+    assert.ok(texts.includes("Font Size"));
+    assert.ok(texts.includes("Opacity"));
+  });
+
+  it("render with config draws current values", () => {
+    const ctx = makeSettingsCtx();
+    const panel = new SettingsPanel(ctx);
+    const canvas = mockCtx();
+    panel.render(canvas, { x: 0, y: 0, width: 400, height: 300 });
+    const texts = canvas._calls.filter(c => c[0] === "fillText").map(c => c[1]);
+    assert.ok(texts.includes("Dark"), "should show Dark theme selected");
+    assert.ok(texts.includes("60"), "should show FPS target");
+    assert.ok(texts.includes("1"), "should show refresh rate");
+    assert.ok(texts.includes("12"), "should show font size");
+    assert.ok(texts.includes("0.85"), "should show opacity");
+  });
+
+  it("render draws reset buttons", () => {
+    const ctx = makeSettingsCtx();
+    const panel = new SettingsPanel(ctx);
+    const canvas = mockCtx();
+    panel.render(canvas, { x: 0, y: 0, width: 400, height: 300 });
+    const texts = canvas._calls.filter(c => c[0] === "fillText").map(c => c[1]);
+    assert.ok(texts.includes("Reset Layout"));
+    assert.ok(texts.includes("Reset All"));
+  });
+
+  it("_setTheme switches to light", () => {
+    const ctx = makeSettingsCtx();
+    const panel = new SettingsPanel(ctx);
+    panel._setTheme("light");
+    assert.strictEqual(ctx.config.theme, "light");
+    assert.strictEqual(ctx.theme, LightTheme);
+  });
+
+  it("_setTheme switches to dark", () => {
+    const ctx = makeSettingsCtx({ theme: "light" });
+    const panel = new SettingsPanel(ctx);
+    panel._setTheme("dark");
+    assert.strictEqual(ctx.config.theme, "dark");
+    assert.strictEqual(ctx.theme, DarkTheme);
+  });
+
+  it("_adjustSetting increments value", () => {
+    const config = { fpsTarget: 60 };
+    const ctx = new OverlayContext({ config, theme: DarkTheme });
+    const panel = new SettingsPanel(ctx);
+    panel._adjustSetting("fpsTarget", 10);
+    assert.strictEqual(config.fpsTarget, 70);
+  });
+
+  it("_adjustSetting decrements value", () => {
+    const config = { fpsTarget: 60 };
+    const ctx = new OverlayContext({ config, theme: DarkTheme });
+    const panel = new SettingsPanel(ctx);
+    panel._adjustSetting("fpsTarget", -10);
+    assert.strictEqual(config.fpsTarget, 50);
+  });
+
+  it("_adjustSetting clamps to min", () => {
+    const config = { fpsTarget: 30 };
+    const ctx = new OverlayContext({ config, theme: DarkTheme });
+    const panel = new SettingsPanel(ctx);
+    panel._adjustSetting("fpsTarget", -10);
+    assert.strictEqual(config.fpsTarget, 30);
+  });
+
+  it("_adjustSetting clamps to max", () => {
+    const config = { fpsTarget: 240 };
+    const ctx = new OverlayContext({ config, theme: DarkTheme });
+    const panel = new SettingsPanel(ctx);
+    panel._adjustSetting("fpsTarget", 10);
+    assert.strictEqual(config.fpsTarget, 240);
+  });
+
+  it("_adjustSetting handles opacity rounding", () => {
+    const config = { opacity: 0.85 };
+    const ctx = new OverlayContext({ config, theme: DarkTheme });
+    const panel = new SettingsPanel(ctx);
+    panel._adjustSetting("opacity", 0.05);
+    assert.strictEqual(config.opacity, 0.90);
+  });
+
+  it("_resetAll restores defaults", () => {
+    const config = { fpsTarget: 120, refreshRate: 5, fontSize: 14, opacity: 0.5, theme: "light" };
+    const ctx = new OverlayContext({ config, theme: LightTheme });
+    const panel = new SettingsPanel(ctx);
+    panel._resetAll();
+    assert.strictEqual(config.fpsTarget, 60);
+    assert.strictEqual(config.refreshRate, 1);
+    assert.strictEqual(config.fontSize, 12);
+    assert.strictEqual(config.opacity, 0.85);
+    assert.strictEqual(config.theme, "dark");
+    assert.strictEqual(ctx.theme, DarkTheme);
+  });
+
+  it("_resetLayout calls layout.reset", () => {
+    let called = false;
+    const ctx = new OverlayContext({ config: {}, theme: DarkTheme });
+    ctx.layout = { reset() { called = true; } };
+    const panel = new SettingsPanel(ctx);
+    panel._resetLayout();
+    assert.strictEqual(called, true);
+  });
+
+  it("handleInput on theme button switches theme", () => {
+    const config = { theme: "dark" };
+    const ctx = new OverlayContext({ config, theme: DarkTheme });
+    const panel = new SettingsPanel(ctx);
+    panel._clickRegions = [{ x: 290, y: 20, w: 55, h: 20, handler: () => panel._setTheme("light") }];
+    panel.handleInput({ type: "click", x: 300, y: 30 });
+    assert.strictEqual(config.theme, "light");
+  });
+
+  it("handleInput on increment button adjusts value", () => {
+    const config = { fpsTarget: 60 };
+    const ctx = new OverlayContext({ config, theme: DarkTheme });
+    const panel = new SettingsPanel(ctx);
+    panel._clickRegions = [{ x: 350, y: 48, w: 20, h: 20, handler: () => panel._adjustSetting("fpsTarget", 10) }];
+    panel.handleInput({ type: "click", x: 360, y: 58 });
+    assert.strictEqual(config.fpsTarget, 70);
+  });
+
+  it("handleInput ignores non-click events", () => {
+    const panel = new SettingsPanel(new OverlayContext());
+    const handled = panel.handleInput({ type: "keydown", key: "Enter" });
+    assert.strictEqual(handled, false);
   });
 });
