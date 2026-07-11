@@ -36,3 +36,4 @@ export { CommandSystem } from "./CommandSystem.js";
 export { TooltipManager } from "./TooltipManager.js";
 export { AnimationSystem } from "./AnimationSystem.js";
 export { PersistenceManager } from "./PersistenceManager.js";
+export { DebugOverlay } from "./DebugOverlay.js";

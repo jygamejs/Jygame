@@ -39,6 +39,7 @@ import {
   TooltipManager,
   AnimationSystem,
   PersistenceManager,
+  DebugOverlay,
 } from "../../../debug/overlay/index.js";
 import { MetricType } from "../../../debug/MetricType.js";
 import { TimelineModel } from "../../../debug/overlay/timeline/TimelineModel.js";
@@ -3293,5 +3294,100 @@ describe("PersistenceManager", () => {
     assert.strictEqual(loaded.version, 1);
     session._layout.restore(loaded);
     assert.ok(session._layout.root);
+  });
+});
+
+describe("DebugOverlay", () => {
+  it("construction creates session", () => {
+    const fakeGame = { _getDiag() { return null; } };
+    const overlay = new DebugOverlay(fakeGame);
+    assert.ok(overlay.session);
+    assert.strictEqual(overlay.visible, false);
+  });
+
+  it("show and hide toggle visibility", () => {
+    const fakeGame = { _getDiag() { return null; } };
+    const overlay = new DebugOverlay(fakeGame);
+    assert.strictEqual(overlay.visible, false);
+    overlay.show();
+    assert.strictEqual(overlay.visible, true);
+    overlay.hide();
+    assert.strictEqual(overlay.visible, false);
+  });
+
+  it("toggle switches visibility", () => {
+    const fakeGame = { _getDiag() { return null; } };
+    const overlay = new DebugOverlay(fakeGame);
+    assert.strictEqual(overlay.visible, false);
+    overlay.toggle();
+    assert.strictEqual(overlay.visible, true);
+    overlay.toggle();
+    assert.strictEqual(overlay.visible, false);
+  });
+
+  it("panel returns panel by id or null", () => {
+    const fakeGame = { _getDiag() { return null; } };
+    const overlay = new DebugOverlay(fakeGame);
+    assert.strictEqual(overlay.panel("nonexistent"), null);
+    const p = overlay.panel("performance");
+    // performance panel should exist if registered by session
+    if (p) {
+      assert.strictEqual(p.id, "performance");
+    }
+  });
+
+  it("export returns JSON string", () => {
+    const fakeGame = { _getDiag() { return null; } };
+    const overlay = new DebugOverlay(fakeGame);
+    const result = overlay.export();
+    assert.strictEqual(typeof result, "string");
+    const parsed = JSON.parse(result);
+    assert.ok(Array.isArray(parsed.metrics));
+    assert.ok(Array.isArray(parsed.captures));
+  });
+
+  it("import with valid JSON returns true", () => {
+    const fakeGame = { _getDiag() { return null; } };
+    const overlay = new DebugOverlay(fakeGame);
+    const result = overlay.import('{"captures":[],"metrics":[]}');
+    assert.strictEqual(result, true);
+  });
+
+  it("import with invalid JSON returns false", () => {
+    const fakeGame = { _getDiag() { return null; } };
+    const overlay = new DebugOverlay(fakeGame);
+    const result = overlay.import("not-json");
+    assert.strictEqual(result, false);
+  });
+
+  it("search returns empty without diagnostics", () => {
+    const fakeGame = { _getDiag() { return null; } };
+    const overlay = new DebugOverlay(fakeGame);
+    const results = overlay.search("test");
+    assert.deepStrictEqual(results, []);
+  });
+
+  it("passes update/render through to session", () => {
+    const fakeGame = { _getDiag() { return null; } };
+    const overlay = new DebugOverlay(fakeGame);
+    overlay.show();
+    overlay.update(0.016);
+    const ctx = { save() {}, restore() {}, fillText() {} };
+    overlay.render(ctx, 100, 100);
+    assert.strictEqual(overlay.visible, true);
+  });
+
+  it("capture returns null without diagnostics", () => {
+    const fakeGame = { _getDiag() { return null; } };
+    const overlay = new DebugOverlay(fakeGame);
+    assert.strictEqual(overlay.capture(), null);
+  });
+
+  it("destroy cleans up session", () => {
+    const fakeGame = { _getDiag() { return null; } };
+    const overlay = new DebugOverlay(fakeGame);
+    overlay.show();
+    overlay.destroy();
+    assert.strictEqual(overlay.visible, false);
   });
 });

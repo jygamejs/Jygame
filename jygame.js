@@ -80,6 +80,7 @@ export { Music } from "./audio/Music.js";
 export { Sound } from "./audio/Sound.js";
 export { Diagnostics } from "./debug/index.js";
 export { DiagnosticsConfig } from "./debug/index.js";
+export { DebugOverlay } from "./debug/overlay/index.js";
 export { MetricRegistry } from "./debug/index.js";
 export { MetricDescriptor } from "./debug/index.js";
 export { MetricType } from "./debug/index.js";

@@ -3,6 +3,7 @@ import { Input, InputContext } from "../input/Input.js";
 import { Scene } from "./Scene.js";
 import { Diagnostics, MetricCategory, MetricUnit, MetricType, resolveMetricIds }
   from "../debug/index.js";
+import { DebugOverlay } from "../debug/overlay/DebugOverlay.js";
 
 export class Game {
   constructor({ parent, width, height, fps = 60, maxTicks = 5, autoPause = true, scaleToFit = null }) {
@@ -113,6 +114,13 @@ export class Game {
     target.style.transform = `scale(${scale})`;
     target.style.marginTop = marginV + "px";
     target.style.marginBottom = marginV + "px";
+  }
+
+  get debug() {
+    if (!this._debugOverlay) {
+      this._debugOverlay = new DebugOverlay(this);
+    }
+    return this._debugOverlay;
   }
 
   get isPaused() {
@@ -399,6 +407,10 @@ export class Game {
       diag.endFrame();
     }
 
+    if (this._debugOverlay) {
+      this._debugOverlay.update(realDt);
+    }
+
     this._rafId = requestAnimationFrame((t) => this._loop(t));
   }
 
@@ -471,6 +483,10 @@ export class Game {
       diag.scope(mids.frameRender, doRender);
     } else { doRender(); }
 
+    if (this._debugOverlay) {
+      this._debugOverlay.render(this.ctx, this.width, this.height);
+    }
+
     this.fps += ((1 / Math.max(realDt, 0.001)) - this.fps) * 0.05;
   }
 
@@ -485,5 +501,6 @@ export class Game {
     if (this._resizeObserver) this._resizeObserver.disconnect();
     this._resetSceneStack();
     this.input.destroy();
+    if (this._debugOverlay) this._debugOverlay.destroy();
   }
 }
