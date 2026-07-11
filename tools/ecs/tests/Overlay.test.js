@@ -27,8 +27,12 @@ import {
   renderInspector,
   PerformancePanel,
   FrameGraphPanel,
+  TimelinePanel,
 } from "../../../debug/overlay/index.js";
 import { MetricType } from "../../../debug/MetricType.js";
+import { TimelineModel } from "../../../debug/overlay/timeline/TimelineModel.js";
+import { TimelineRenderer } from "../../../debug/overlay/timeline/TimelineRenderer.js";
+import { TimelineInteraction } from "../../../debug/overlay/timeline/TimelineInteraction.js";
 
 function mockCtx() {
   const calls = [];
@@ -1286,6 +1290,316 @@ describe("FrameGraphPanel", () => {
     panel.update({});
     const canvas = mockCtx();
     assert.doesNotThrow(() => panel.render(canvas, { x: 0, y: 0, width: 600, height: 200 }));
+  });
+});
+
+function timelineMockHistory(count = 60) {
+  const snapshots = Array.from({ length: count }, (_, i) => ({
+    timerTotal(id) {
+      const base = [0, 16.5, 8.0, 3.3, 4.2];
+      return (base[id] || 0) + (i % 5) * 0.1;
+    },
+  }));
+  return {
+    count: snapshots.length,
+    frames: function*() { yield* snapshots; },
+    at(idx) { return snapshots[idx] || null; },
+  };
+}
+
+function deepMockRegistry() {
+  const descriptors = [
+    { id: 0, name: "frame.total", displayName: "Frame Total", type: MetricType.TIMER, color: "#ff8888" },
+    { id: 1, name: "frame.total.buffer", displayName: "Buffer", type: MetricType.TIMER, color: "#88ff88" },
+    { id: 2, name: "frame.total.render", displayName: "Render Sub", type: MetricType.TIMER, color: "#8888ff" },
+    { id: 3, name: "ecs", displayName: "ECS", type: MetricType.TIMER, color: "#ffff88" },
+    { id: 4, name: "ecs.update", displayName: "ECS Update", type: MetricType.TIMER, color: "#ff88ff" },
+  ];
+  const nameMap = new Map(descriptors.map(d => [d.name, d]));
+  return {
+    forEach(fn) { descriptors.forEach(fn); },
+    find(name) { return nameMap.get(name) || null; },
+    get(id) { return descriptors[id] || null; },
+    count: descriptors.length,
+  };
+}
+
+function timelineMockSnapshot() {
+  const values = [16.7, 8.2, 3.4, 0, 4.2];
+  return {
+    timerTotal(id) { return values[id] || 0; },
+  };
+}
+
+function makeTimelineCtx(overrides = {}) {
+  return new OverlayContext({
+    history: timelineMockHistory(),
+    registry: perfMockRegistry(),
+    theme: DarkTheme,
+    renderers: perfMockRenderers(),
+    ...overrides,
+  });
+}
+
+describe("TimelineModel", () => {
+  it("build creates flat tree when no nesting", () => {
+    const ctx = makeTimelineCtx();
+    const model = new TimelineModel(ctx);
+    model.build(timelineMockSnapshot());
+    assert.ok(model.tree.length >= 2);
+    assert.strictEqual(model.tree[0].name, "frame.total");
+  });
+
+  it("build sorts by value descending", () => {
+    const ctx = makeTimelineCtx({ registry: deepMockRegistry() });
+    const model = new TimelineModel(ctx);
+    model.build(timelineMockSnapshot());
+    for (let i = 1; i < model.tree.length; i++) {
+      assert.ok(model.tree[i - 1].value >= model.tree[i].value);
+    }
+  });
+
+  it("findParent returns correct parent for nested names", () => {
+    const ctx = makeTimelineCtx({ registry: deepMockRegistry() });
+    const model = new TimelineModel(ctx);
+    assert.strictEqual(model._findParent("frame.total.buffer"), 0);
+    assert.strictEqual(model._findParent("frame.total.render"), 0);
+    assert.strictEqual(model._findParent("ecs.update"), 3);
+  });
+
+  it("findParent returns null for names without parent", () => {
+    const ctx = makeTimelineCtx({ registry: deepMockRegistry() });
+    const model = new TimelineModel(ctx);
+    assert.strictEqual(model._findParent("frame.total"), null);
+    assert.strictEqual(model._findParent("ecs"), null);
+  });
+
+  it("build creates hierarchy with nested metrics", () => {
+    const ctx = makeTimelineCtx({ registry: deepMockRegistry() });
+    const model = new TimelineModel(ctx);
+    model.build(timelineMockSnapshot());
+    const total = model.tree.find(n => n.name === "frame.total");
+    assert.ok(total);
+    assert.strictEqual(total.children.length, 2);
+    assert.ok(total.children.some(c => c.name === "frame.total.buffer"));
+    assert.ok(total.children.some(c => c.name === "frame.total.render"));
+  });
+
+  it("isExpanded returns true for roots by default", () => {
+    const ctx = makeTimelineCtx();
+    const model = new TimelineModel(ctx);
+    model.build(timelineMockSnapshot());
+    assert.ok(model.isExpanded(model.tree[0].id));
+  });
+
+  it("toggleExpanded adds/removes from set", () => {
+    const ctx = makeTimelineCtx();
+    const model = new TimelineModel(ctx);
+    model.build(timelineMockSnapshot());
+    const id = model.tree[0].id;
+    assert.ok(model.isExpanded(id));
+    model.toggleExpanded(id);
+    assert.ok(!model.isExpanded(id));
+    model.toggleExpanded(id);
+    assert.ok(model.isExpanded(id));
+  });
+
+  it("collapseAll clears", () => {
+    const ctx = makeTimelineCtx();
+    const model = new TimelineModel(ctx);
+    model.build(timelineMockSnapshot());
+    model.collapseAll();
+    assert.strictEqual(model.isExpanded(model.tree[0].id), false);
+  });
+
+  it("frameIndex setter builds from snapshot", () => {
+    const ctx = makeTimelineCtx({ history: timelineMockHistory() });
+    const model = new TimelineModel(ctx);
+    model.frameIndex = 10;
+    assert.strictEqual(model.frameIndex, 10);
+    assert.ok(model.tree.length > 0);
+  });
+});
+
+describe("TimelineRenderer", () => {
+  it("render draws frame header", () => {
+    const ctx = makeTimelineCtx();
+    const model = new TimelineModel(ctx);
+    model.build(timelineMockSnapshot());
+    const interaction = new TimelineInteraction(ctx, model);
+    const renderer = new TimelineRenderer(ctx, interaction);
+    const canvas = mockCtx();
+    renderer.render(canvas, { x: 0, y: 0, width: 700, height: 300 }, model);
+    const texts = canvas._calls.filter(c => c[0] === "fillText").map(c => c[1]);
+    assert.ok(texts.some(t => t.startsWith("Frame")));
+  });
+
+  it("render draws rows for each root node", () => {
+    const ctx = makeTimelineCtx();
+    const model = new TimelineModel(ctx);
+    model.build(timelineMockSnapshot());
+    const interaction = new TimelineInteraction(ctx, model);
+    const renderer = new TimelineRenderer(ctx, interaction);
+    const canvas = mockCtx();
+    renderer.render(canvas, { x: 0, y: 0, width: 700, height: 300 }, model);
+    const texts = canvas._calls.filter(c => c[0] === "fillText").map(c => c[1]);
+    for (const node of model.tree) {
+      assert.ok(texts.includes(node.displayName), `row for ${node.displayName}`);
+    }
+  });
+
+  it("render respects visible bounds", () => {
+    const ctx = makeTimelineCtx();
+    const model = new TimelineModel(ctx);
+    model.build(timelineMockSnapshot());
+    const interaction = new TimelineInteraction(ctx, model);
+    const renderer = new TimelineRenderer(ctx, interaction);
+    const canvas = mockCtx();
+    renderer.render(canvas, { x: 0, y: 0, width: 700, height: 10 }, model);
+    const strokeCalls = canvas._calls.filter(c => c[0] === "stroke");
+    assert.strictEqual(strokeCalls.length, 0);
+  });
+
+  it("walkVisible yields flat nodes when none expanded", () => {
+    const ctx = makeTimelineCtx({ registry: deepMockRegistry() });
+    const model = new TimelineModel(ctx);
+    model.build(timelineMockSnapshot());
+    model.collapseAll();
+    const interaction = new TimelineInteraction(ctx, model);
+    const renderer = new TimelineRenderer(ctx, interaction);
+    const results = [...renderer._walkVisible(model.tree, model)];
+    const rootNames = results.filter(r => r.depth === 0);
+    assert.ok(rootNames.length > 0);
+    assert.strictEqual(rootNames.every(r => r.depth === 0), true);
+  });
+
+  it("walkVisible yields children when parent expanded", () => {
+    const ctx = makeTimelineCtx({ registry: deepMockRegistry() });
+    const model = new TimelineModel(ctx);
+    model.build(timelineMockSnapshot());
+    const interaction = new TimelineInteraction(ctx, model);
+    const renderer = new TimelineRenderer(ctx, interaction);
+    const results = [...renderer._walkVisible(model.tree, model)];
+    const children = results.filter(r => r.depth === 1);
+    assert.ok(children.length > 0);
+  });
+});
+
+describe("TimelineInteraction", () => {
+  it("trackRow records positions", () => {
+    const ctx = makeTimelineCtx();
+    const model = new TimelineModel(ctx);
+    const interaction = new TimelineInteraction(ctx, model);
+    interaction.trackRow(0, 20, 18);
+    interaction.trackRow(1, 40, 18);
+    assert.strictEqual(interaction._rowRects.length, 2);
+  });
+
+  it("reset clears row rects", () => {
+    const ctx = makeTimelineCtx();
+    const model = new TimelineModel(ctx);
+    const interaction = new TimelineInteraction(ctx, model);
+    interaction.trackRow(0, 20, 18);
+    interaction.reset();
+    assert.strictEqual(interaction._rowRects.length, 0);
+  });
+
+  it("onInput click on row with children toggles expand", () => {
+    const ctx = makeTimelineCtx({ registry: deepMockRegistry() });
+    const model = new TimelineModel(ctx);
+    model.build(timelineMockSnapshot());
+    const interaction = new TimelineInteraction(ctx, model);
+    const total = model.tree.find(n => n.name === "frame.total");
+    assert.ok(model.isExpanded(total.id));
+    interaction.trackRow(total.id, 20, 18);
+    const handled = interaction.onInput({ type: "click", x: 0, y: 30 });
+    assert.ok(handled);
+    assert.ok(!model.isExpanded(total.id));
+  });
+
+  it("onInput click on row without children returns false", () => {
+    const ctx = makeTimelineCtx({ registry: deepMockRegistry() });
+    const model = new TimelineModel(ctx);
+    model.build(timelineMockSnapshot());
+    const interaction = new TimelineInteraction(ctx, model);
+    interaction.trackRow(999, 20, 18);
+    const handled = interaction.onInput({ type: "click", x: 0, y: 30 });
+    assert.strictEqual(handled, false);
+  });
+
+  it("onInput keydown arrow navigates frames", () => {
+    const ctx = makeTimelineCtx({ history: timelineMockHistory() });
+    const model = new TimelineModel(ctx);
+    model.frameIndex = 30;
+    const interaction = new TimelineInteraction(ctx, model);
+    let handled = interaction.onInput({ type: "keydown", key: "ArrowLeft" });
+    assert.ok(handled);
+    assert.strictEqual(model.frameIndex, 29);
+    handled = interaction.onInput({ type: "keydown", key: "ArrowRight" });
+    assert.ok(handled);
+    assert.strictEqual(model.frameIndex, 30);
+  });
+
+  it("onInput arrow left at frame 0 does nothing", () => {
+    const ctx = makeTimelineCtx({ history: timelineMockHistory() });
+    const model = new TimelineModel(ctx);
+    model.frameIndex = 0;
+    const interaction = new TimelineInteraction(ctx, model);
+    const handled = interaction.onInput({ type: "keydown", key: "ArrowLeft" });
+    assert.strictEqual(handled, true);
+    assert.strictEqual(model.frameIndex, 0);
+  });
+});
+
+describe("TimelinePanel", () => {
+  it("construction defaults", () => {
+    const panel = new TimelinePanel(new OverlayContext());
+    assert.strictEqual(panel.id, "timeline");
+    assert.strictEqual(panel.title, "Timeline");
+    assert.strictEqual(panel.defaultWidth, 700);
+    assert.strictEqual(panel.defaultHeight, 300);
+  });
+
+  it("update builds model from latest frame", () => {
+    const ctx = makeTimelineCtx({ history: timelineMockHistory() });
+    const panel = new TimelinePanel(ctx);
+    panel.update({});
+    assert.ok(panel._model.frameIndex >= 0);
+    assert.ok(panel._model.tree.length > 0);
+  });
+
+  it("update with no history does nothing", () => {
+    const ctx = new OverlayContext();
+    const panel = new TimelinePanel(ctx);
+    assert.doesNotThrow(() => panel.update({}));
+  });
+
+  it("render draws panel background and timeline", () => {
+    const ctx = makeTimelineCtx({ history: timelineMockHistory() });
+    const panel = new TimelinePanel(ctx);
+    panel.update({});
+    const canvas = mockCtx();
+    panel.render(canvas, { x: 0, y: 0, width: 700, height: 300 });
+    const fillRects = canvas._calls.filter(c => c[0] === "fillRect");
+    assert.ok(fillRects.length > 0);
+    const texts = canvas._calls.filter(c => c[0] === "fillText").map(c => c[1]);
+    assert.ok(texts.some(t => t.startsWith("Frame")));
+  });
+
+  it("render without rect is no-op", () => {
+    const ctx = makeTimelineCtx();
+    const panel = new TimelinePanel(ctx);
+    const canvas = mockCtx();
+    assert.doesNotThrow(() => panel.render(canvas, null));
+  });
+
+  it("handleInput delegates to interaction", () => {
+    const ctx = makeTimelineCtx();
+    const panel = new TimelinePanel(ctx);
+    const result = panel.handleInput({ type: "keydown", key: "ArrowLeft" });
+    assert.strictEqual(result, true);
+    const unhandled = panel.handleInput({ type: "click", x: 0, y: 0 });
+    assert.strictEqual(unhandled, false);
   });
 });
 
