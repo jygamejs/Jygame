@@ -14,6 +14,7 @@ export class Scene {
   get world() {
     if (!this._world) {
       this._world = this._createWorld();
+      this.onCreate();
     }
     return this._world;
   }

@@ -26,6 +26,7 @@ import {
   renderBadge,
   renderInspector,
   PerformancePanel,
+  FrameGraphPanel,
 } from "../../../debug/overlay/index.js";
 import { MetricType } from "../../../debug/MetricType.js";
 
@@ -54,6 +55,7 @@ function mockCtx() {
     fillText(t, x, y) { calls.push(["fillText", t, x, y]); },
     measureText(t) { return { width: t.length * 7 }; },
     strokeRect(x, y, w, h) { calls.push(["strokeRect", x, y, w, h]); },
+    setLineDash(dash) { calls.push(["setLineDash", dash]); },
 
     get fillStyle() { return this._fillStyle; },
     set fillStyle(v) { this._fillStyle = v; calls.push(["set:fillStyle", v]); },
@@ -1121,6 +1123,169 @@ describe("PerformancePanel", () => {
     const fillRects = canvas._calls.filter(c => c[0] === "fillRect");
     const budgetFill = fillRects.find(c => c[1] > 300 && c[4] === 3);
     assert.ok(budgetFill !== undefined);
+  });
+});
+
+describe("FrameGraphPanel", () => {
+  it("construction defaults", () => {
+    const panel = new FrameGraphPanel(new OverlayContext());
+    assert.strictEqual(panel.id, "framegraph");
+    assert.strictEqual(panel.title, "Frame Graph");
+    assert.strictEqual(panel.defaultWidth, 600);
+    assert.strictEqual(panel.defaultHeight, 200);
+    assert.strictEqual(panel.minWidth, 200);
+    assert.strictEqual(panel.minHeight, 100);
+  });
+
+  it("update with null sources sets _data null", () => {
+    const panel = new FrameGraphPanel(new OverlayContext());
+    panel.update({});
+    assert.strictEqual(panel._data, null);
+  });
+
+  it("update with valid data populates metrics", () => {
+    const ctx = makePerfContext();
+    const panel = new FrameGraphPanel(ctx);
+    panel.update({});
+    const d = panel._data;
+    assert.ok(d !== null);
+    assert.ok(d.metrics.length >= 2);
+    assert.ok(d.metrics.some(m => m.name === "frame.total"));
+    assert.ok(d.metrics.some(m => m.name === "frame.render"));
+    assert.ok(d.frameCount > 0);
+    assert.ok(d.yMin >= 0);
+    assert.ok(d.yMax > d.yMin);
+  });
+
+  it("update excludes frame.fps", () => {
+    const ctx = makePerfContext();
+    const panel = new FrameGraphPanel(ctx);
+    panel.update({});
+    const names = panel._data.metrics.map(m => m.name);
+    assert.ok(!names.includes("frame.fps"));
+  });
+
+  it("update handles empty history", () => {
+    const ctx = new OverlayContext({
+      history: { count: 0, frames: function*() { yield* []; } },
+      registry: perfMockRegistry(),
+      analysis: perfMockAnalysis(),
+    });
+    const panel = new FrameGraphPanel(ctx);
+    panel.update({});
+    assert.strictEqual(panel._data, null);
+  });
+
+  it("toggleMetric shows/hides a metric", () => {
+    const ctx = makePerfContext();
+    const panel = new FrameGraphPanel(ctx);
+    panel.update({});
+    const name = panel._data.metrics[0].name;
+    assert.ok(panel.isMetricVisible(name));
+    panel.toggleMetric(name);
+    assert.ok(!panel.isMetricVisible(name));
+    panel.toggleMetric(name);
+    assert.ok(panel.isMetricVisible(name));
+  });
+
+  it("render with null data draws no-data", () => {
+    const ctx = new OverlayContext({ theme: DarkTheme, renderers: perfMockRenderers() });
+    const panel = new FrameGraphPanel(ctx);
+    const canvas = mockCtx();
+    panel.render(canvas, { x: 0, y: 0, width: 600, height: 200 });
+    const texts = canvas._calls.filter(c => c[0] === "fillText").map(c => c[1]);
+    assert.ok(texts.includes("No data"));
+  });
+
+  it("render with data draws metric lines", () => {
+    const ctx = makePerfContext();
+    const panel = new FrameGraphPanel(ctx);
+    panel.update({});
+    const canvas = mockCtx();
+    panel.render(canvas, { x: 0, y: 0, width: 600, height: 200 });
+    const moveTos = canvas._calls.filter(c => c[0] === "moveTo");
+    assert.ok(moveTos.length >= 2);
+    const lineTos = canvas._calls.filter(c => c[0] === "lineTo");
+    assert.ok(lineTos.length > 0);
+  });
+
+  it("render draws grid lines", () => {
+    const ctx = makePerfContext();
+    const panel = new FrameGraphPanel(ctx);
+    panel.update({});
+    const canvas = mockCtx();
+    panel.render(canvas, { x: 0, y: 0, width: 600, height: 200 });
+    const strokeCalls = canvas._calls.filter(c => c[0] === "stroke");
+    assert.ok(strokeCalls.length > 1);
+  });
+
+  it("render draws current frame marker", () => {
+    const ctx = makePerfContext();
+    const panel = new FrameGraphPanel(ctx);
+    panel.update({});
+    const canvas = mockCtx();
+    panel.render(canvas, { x: 0, y: 0, width: 600, height: 200 });
+    const dashCalls = canvas._calls.filter(c => c[0] === "setLineDash");
+    assert.ok(dashCalls.length >= 2);
+  });
+
+  it("render draws legend with metric names", () => {
+    const ctx = makePerfContext();
+    const panel = new FrameGraphPanel(ctx);
+    panel.update({});
+    const canvas = mockCtx();
+    panel.render(canvas, { x: 0, y: 0, width: 600, height: 200 });
+    const texts = canvas._calls.filter(c => c[0] === "fillText").map(c => c[1]);
+    assert.ok(texts.includes("Frame Total"));
+    assert.ok(texts.includes("Render"));
+  });
+
+  it("render with all metrics hidden draws only grid and marker", () => {
+    const ctx = makePerfContext();
+    const panel = new FrameGraphPanel(ctx);
+    panel.update({});
+    // Hide all metrics (toggle each one that's currently visible)
+    for (const m of panel._data.metrics) {
+      panel.toggleMetric(m.name);
+    }
+    panel.update({});
+    const canvas = mockCtx();
+    assert.doesNotThrow(() => panel.render(canvas, { x: 0, y: 0, width: 600, height: 200 }));
+    const strokeCalls = canvas._calls.filter(c => c[0] === "stroke");
+    assert.ok(strokeCalls.length > 0, "grid + marker produce strokes");
+    const setLineWidthCalls = canvas._calls.filter(c => c[0] === "set:lineWidth").map(c => c[1]);
+    assert.ok(!setLineWidthCalls.includes(2), "frame.total line (width 2) should not be drawn: " + JSON.stringify(setLineWidthCalls));
+  });
+
+  it("niceYSteps produces logical intervals", () => {
+    const panel = new FrameGraphPanel(new OverlayContext());
+    const steps = panel._niceYSteps(0, 16.7, 5);
+    assert.ok(steps.length >= 3);
+    assert.strictEqual(steps[0], 0);
+    for (let i = 1; i < steps.length; i++) {
+      const diff = steps[i] - steps[i - 1];
+      assert.ok(diff > 0);
+      assert.ok(diff <= 10);
+    }
+  });
+
+  it("niceYSteps handles zero range", () => {
+    const panel = new FrameGraphPanel(new OverlayContext());
+    const steps = panel._niceYSteps(10, 10, 5);
+    assert.ok(steps.length >= 1);
+  });
+
+  it("render handles missing renderers gracefully", () => {
+    const ctx = new OverlayContext({
+      history: perfMockHistory(),
+      registry: perfMockRegistry(),
+      analysis: perfMockAnalysis(),
+      theme: DarkTheme,
+    });
+    const panel = new FrameGraphPanel(ctx);
+    panel.update({});
+    const canvas = mockCtx();
+    assert.doesNotThrow(() => panel.render(canvas, { x: 0, y: 0, width: 600, height: 200 }));
   });
 });
 

@@ -50,6 +50,11 @@ export class Scene extends EcsScene {
 
     this.world;
 
+    if (!this._created) {
+      this.onCreate();
+      this._created = true;
+    }
+
     if (this._game) {
       this._world.setResource(CanvasContext, this._game.ctx);
 
@@ -59,6 +64,8 @@ export class Scene extends EcsScene {
 
     this._prevDefaultWorld = Sprite._defaultWorld;
     Sprite._defaultWorld = this._world;
+
+    this.onEnter();
   }
 
   exit() {
@@ -66,6 +73,8 @@ export class Scene extends EcsScene {
       throw new Error("Scene.exit() called more than once");
     }
     this._exited = true;
+
+    this.onExit();
 
     for (const fn of this._cleanups) {
       try { fn(); } catch (err) { console.error(err); }

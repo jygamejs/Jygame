@@ -23,3 +23,4 @@ export { renderInspector } from "./widgets/Inspector.js";
 export { Dropdown } from "./widgets/Dropdown.js";
 export { Toolbar } from "./widgets/Toolbar.js";
 export { PerformancePanel } from "./panels/PerformancePanel.js";
+export { FrameGraphPanel } from "./panels/FrameGraphPanel.js";
