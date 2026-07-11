@@ -30,6 +30,7 @@ import {
   TimelinePanel,
   MetricBrowserPanel,
   MetricSearchIndex,
+  EventViewerPanel,
 } from "../../../debug/overlay/index.js";
 import { MetricType } from "../../../debug/MetricType.js";
 import { TimelineModel } from "../../../debug/overlay/timeline/TimelineModel.js";
@@ -1954,5 +1955,220 @@ describe("MetricBrowserPanel", () => {
     const panel = new MetricBrowserPanel(ctx);
     const str = panel._valueString({ value: 59.8, type: MetricType.GAUGE, unit: null });
     assert.strictEqual(str, "59.80");
+  });
+});
+
+function eventMockHistory() {
+  const snapEvents = [
+    { frame: 234, timestamp: 34, category: "scene", name: "Transition", metadata: { scene: "menu" } },
+    { frame: 234, timestamp: 42, category: "asset", name: "Texture Loaded", metadata: { key: "player.png", size: "2.1MB" } },
+    { frame: 254, timestamp: 1200, category: "warning", name: "frame.update over budget", metadata: null },
+    { frame: 254, timestamp: 1201, category: "warning", name: "audio glitch", metadata: null },
+    { frame: 260, timestamp: 1500, category: "capture", name: "Frame spike", metadata: { total: 42.3 } },
+    { frame: 261, timestamp: 1600, category: "info", name: "Capture complete", metadata: null },
+  ];
+  return {
+    count: 1,
+    frames() {
+      return (function*() { yield { events: snapEvents }; })();
+    },
+  };
+}
+
+function eventMockRenderers() {
+  return {
+    text: {
+      render(ctx, text, x, y, opts) { ctx.fillText(text, x, y); },
+      measure(ctx, text, opts) { return { width: text.length * 7 }; },
+    },
+  };
+}
+
+function makeEventCtx(overrides = {}) {
+  return new OverlayContext({
+    history: eventMockHistory(),
+    theme: DarkTheme,
+    renderers: eventMockRenderers(),
+    ...overrides,
+  });
+}
+
+describe("EventViewerPanel", () => {
+  it("construction defaults", () => {
+    const panel = new EventViewerPanel(new OverlayContext());
+    assert.strictEqual(panel.id, "events");
+    assert.strictEqual(panel.title, "Event Viewer");
+    assert.strictEqual(panel.defaultWidth, 500);
+    assert.strictEqual(panel.defaultHeight, 300);
+  });
+
+  it("update without history does nothing", () => {
+    const panel = new EventViewerPanel(new OverlayContext());
+    panel.update({});
+    assert.strictEqual(panel._events.length, 0);
+  });
+
+  it("update collects events from history", () => {
+    const ctx = makeEventCtx();
+    const panel = new EventViewerPanel(ctx);
+    panel.update({});
+    assert.strictEqual(panel._events.length, 6);
+    assert.strictEqual(panel._events[0].name, "Capture complete");
+  });
+
+  it("update auto-detects categories", () => {
+    const ctx = makeEventCtx();
+    const panel = new EventViewerPanel(ctx);
+    panel.update({});
+    assert.ok(panel._categories.includes("scene"));
+    assert.ok(panel._categories.includes("asset"));
+    assert.ok(panel._categories.includes("warning"));
+    assert.ok(panel._categories.includes("capture"));
+    assert.ok(panel._categories.includes("info"));
+  });
+
+  it("_deriveSeverity detects warn from category", () => {
+    const panel = new EventViewerPanel(new OverlayContext());
+    const ev = { category: "warning", name: "something" };
+    assert.strictEqual(panel._deriveSeverity(ev), "warn");
+  });
+
+  it("_deriveSeverity detects error from name", () => {
+    const panel = new EventViewerPanel(new OverlayContext());
+    const ev = { category: "asset", name: "critical file not found" };
+    assert.strictEqual(panel._deriveSeverity(ev), "error");
+  });
+
+  it("_deriveSeverity returns info for neutral terms", () => {
+    const panel = new EventViewerPanel(new OverlayContext());
+    const ev = { category: "scene", name: "Transition" };
+    assert.strictEqual(panel._deriveSeverity(ev), "info");
+  });
+
+  it("toggleCategory adds and removes", () => {
+    const ctx = makeEventCtx();
+    const panel = new EventViewerPanel(ctx);
+    panel.update({});
+    assert.ok(panel._activeCategories.has("scene"));
+    panel.toggleCategory("scene");
+    assert.ok(!panel._activeCategories.has("scene"));
+    panel.toggleCategory("scene");
+    assert.ok(panel._activeCategories.has("scene"));
+  });
+
+  it("clear empties events and categories", () => {
+    const ctx = makeEventCtx();
+    const panel = new EventViewerPanel(ctx);
+    panel.update({});
+    assert.ok(panel._events.length > 0);
+    panel.clear();
+    assert.strictEqual(panel._events.length, 0);
+    assert.strictEqual(panel._categories.length, 0);
+  });
+
+  it("setSeverityFilter updates filter", () => {
+    const panel = new EventViewerPanel(new OverlayContext());
+    assert.strictEqual(panel._severityFilter, "all");
+    panel.setSeverityFilter("error");
+    assert.strictEqual(panel._severityFilter, "error");
+  });
+
+  it("setSearchQuery filters rendered events", () => {
+    const ctx = makeEventCtx();
+    const panel = new EventViewerPanel(ctx);
+    panel.update({});
+    panel.setSearchQuery("audio");
+    const filtered = panel._events.filter(ev => {
+      const q = "audio";
+      return ev.name.toLowerCase().includes(q) || ev.category.toLowerCase().includes(q);
+    });
+    assert.strictEqual(filtered.length, 1);
+    assert.strictEqual(filtered[0].name, "audio glitch");
+  });
+
+  it("render without rect is no-op", () => {
+    const panel = new EventViewerPanel(new OverlayContext());
+    const canvas = mockCtx();
+    assert.doesNotThrow(() => panel.render(canvas, null));
+  });
+
+  it("render with no history draws no-events message", () => {
+    const panel = new EventViewerPanel(new OverlayContext({
+      theme: DarkTheme,
+      renderers: eventMockRenderers(),
+    }));
+    const canvas = mockCtx();
+    panel.render(canvas, { x: 0, y: 0, width: 500, height: 300 });
+    const texts = canvas._calls.filter(c => c[0] === "fillText").map(c => c[1]);
+    assert.ok(texts.includes("No events"));
+  });
+
+  it("render with data draws event names", () => {
+    const ctx = makeEventCtx();
+    const panel = new EventViewerPanel(ctx);
+    panel.update({});
+    const canvas = mockCtx();
+    panel.render(canvas, { x: 0, y: 0, width: 500, height: 300 });
+    const texts = canvas._calls.filter(c => c[0] === "fillText").map(c => c[1]);
+    assert.ok(texts.includes("Transition"), "should draw Transition");
+    assert.ok(texts.includes("Texture Loaded"), "should draw Texture Loaded");
+    assert.ok(texts.includes("Frame spike"), "should draw Frame spike");
+  });
+
+  it("render with category filter hides deselected category", () => {
+    const ctx = makeEventCtx();
+    const panel = new EventViewerPanel(ctx);
+    panel.update({});
+    panel.toggleCategory("scene");
+    const canvas = mockCtx();
+    panel.render(canvas, { x: 0, y: 0, width: 500, height: 300 });
+    const texts = canvas._calls.filter(c => c[0] === "fillText").map(c => c[1]);
+    assert.ok(!texts.includes("Transition"), "Transition should be hidden");
+    assert.ok(texts.includes("Texture Loaded"), "other events should still show");
+  });
+
+  it("render with severity filter hides info events", () => {
+    const ctx = makeEventCtx();
+    const panel = new EventViewerPanel(ctx);
+    panel.update({});
+    panel.setSeverityFilter("error");
+    const canvas = mockCtx();
+    panel.render(canvas, { x: 0, y: 0, width: 500, height: 300 });
+    const texts = canvas._calls.filter(c => c[0] === "fillText").map(c => c[1]);
+    assert.ok(!texts.includes("Transition"), "info events filtered out");
+  });
+
+  it("handleInput on category region toggles filter", () => {
+    const panel = new EventViewerPanel(new OverlayContext());
+    panel._events = [{ category: "test", severity: "info" }];
+    panel._categories = ["test"];
+    panel._activeCategories = new Set(["test"]);
+    panel._clickRegions = [{ x: 10, y: 40, w: 60, h: 20, handler: () => panel.toggleCategory("test") }];
+    const handled = panel.handleInput({ type: "click", x: 30, y: 50 });
+    assert.strictEqual(handled, true);
+    assert.ok(!panel._activeCategories.has("test"));
+  });
+
+  it("handleInput on clear button clears events", () => {
+    const panel = new EventViewerPanel(new OverlayContext());
+    panel._events = [{ category: "test", name: "evt", severity: "info" }];
+    panel._categories = ["test"];
+    panel._activeCategories = new Set(["test"]);
+    panel._clickRegions = [{ x: 100, y: 5, w: 40, h: 26, handler: () => panel.clear() }];
+    panel.handleInput({ type: "click", x: 110, y: 15 });
+    assert.strictEqual(panel._events.length, 0);
+  });
+
+  it("handleInput outside regions returns false", () => {
+    const panel = new EventViewerPanel(new OverlayContext());
+    panel._clickRegions = [{ x: 10, y: 10, w: 50, h: 20, handler: () => {} }];
+    const handled = panel.handleInput({ type: "click", x: 200, y: 200 });
+    assert.strictEqual(handled, false);
+  });
+
+  it("handleInput ignores non-click events", () => {
+    const panel = new EventViewerPanel(new OverlayContext());
+    const handled = panel.handleInput({ type: "keydown", key: "Enter" });
+    assert.strictEqual(handled, false);
   });
 });
