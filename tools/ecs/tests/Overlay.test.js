@@ -35,6 +35,9 @@ import {
   SettingsPanel,
   InputRouter,
   SelectionManager,
+  CommandSystem,
+  TooltipManager,
+  AnimationSystem,
 } from "../../../debug/overlay/index.js";
 import { MetricType } from "../../../debug/MetricType.js";
 import { TimelineModel } from "../../../debug/overlay/timeline/TimelineModel.js";
@@ -2948,5 +2951,240 @@ describe("OverlaySession input", () => {
     const session = new OverlaySession();
     const result = session.processInput({ type: "click", x: 0, y: 0 });
     assert.strictEqual(result, false);
+  });
+});
+
+describe("CommandSystem", () => {
+  it("construction with session registers defaults", () => {
+    const session = { toggle() {}, panels: { toggle() {} }, layout: { setRoot() {} } };
+    const cs = new CommandSystem(session);
+    assert.ok(cs.hasCommand("overlay:toggle"));
+    assert.ok(cs.hasCommand("panel:performance:toggle"));
+    assert.ok(cs.hasCommand("layout:reset"));
+  });
+
+  it("register adds command and optional shortcut", () => {
+    const cs = new CommandSystem({ toggle() {}, panels: { toggle() {} }, layout: { setRoot() {} } });
+    let called = false;
+    cs.register("test:cmd", () => { called = true; }, "t");
+    assert.ok(cs.hasCommand("test:cmd"));
+    assert.strictEqual(cs.resolveShortcut("t"), "test:cmd");
+    cs.execute("test:cmd");
+    assert.strictEqual(called, true);
+  });
+
+  it("execute returns false for unknown command", () => {
+    const cs = new CommandSystem({ toggle() {}, panels: { toggle() {} }, layout: { setRoot() {} } });
+    assert.strictEqual(cs.execute("nonexistent"), false);
+  });
+
+  it("bindShortcut maps key to command", () => {
+    const cs = new CommandSystem({ toggle() {}, panels: { toggle() {} }, layout: { setRoot() {} } });
+    cs.register("my:cmd", () => {});
+    cs.bindShortcut("x", "my:cmd");
+    assert.strictEqual(cs.resolveShortcut("x"), "my:cmd");
+  });
+
+  it("resolveShortcut returns null for unbound key", () => {
+    const cs = new CommandSystem({ toggle() {}, panels: { toggle() {} }, layout: { setRoot() {} } });
+    assert.strictEqual(cs.resolveShortcut("z"), null);
+  });
+
+  it("execute calls command fn with args", () => {
+    const session = { toggle() {}, panels: { toggle() {} }, layout: { setRoot() {} } };
+    const cs = new CommandSystem(session);
+    let captured = null;
+    cs.register("test:capture", (x) => { captured = x; });
+    cs.execute("test:capture", 42);
+    assert.strictEqual(captured, 42);
+  });
+
+  it("execute notifies listeners", () => {
+    const session = { toggle() {}, panels: { toggle() {} }, layout: { setRoot() {} } };
+    const cs = new CommandSystem(session);
+    let notified = false;
+    cs.on("test:cmd", () => { notified = true; });
+    cs.register("test:cmd", () => {});
+    cs.execute("test:cmd");
+    assert.strictEqual(notified, true);
+  });
+
+  it("on returns unsubscribe function", () => {
+    const session = { toggle() {}, panels: { toggle() {} }, layout: { setRoot() {} } };
+    const cs = new CommandSystem(session);
+    let count = 0;
+    const unsub = cs.on("test:cmd", () => { count++; });
+    cs.register("test:cmd", () => {});
+    cs.execute("test:cmd");
+    assert.strictEqual(count, 1);
+    unsub();
+    cs.execute("test:cmd");
+    assert.strictEqual(count, 1);
+  });
+});
+
+describe("TooltipManager", () => {
+  it("construction defaults", () => {
+    const tm = new TooltipManager(new OverlayContext());
+    assert.strictEqual(tm.active, null);
+  });
+
+  it("show sets active tooltip", () => {
+    const tm = new TooltipManager(new OverlayContext());
+    tm.show("Hello", 100, 200);
+    assert.deepStrictEqual(tm.active, { text: "Hello", x: 100, y: 200 });
+  });
+
+  it("dismiss clears active tooltip", () => {
+    const tm = new TooltipManager(new OverlayContext());
+    tm.show("Hello", 100, 200);
+    tm.dismiss();
+    assert.strictEqual(tm.active, null);
+  });
+
+  it("schedule sets a pending timer", () => {
+    const tm = new TooltipManager(new OverlayContext());
+    tm.schedule("Delayed", 50, 60);
+    assert.strictEqual(tm.active, null);
+    assert.ok(tm._pendingTimer !== null);
+    clearTimeout(tm._pendingTimer);
+    tm._pendingTimer = null;
+  });
+
+  it("dismiss clears pending timer", () => {
+    const tm = new TooltipManager(new OverlayContext());
+    tm.schedule("Delayed", 50, 60);
+    tm.dismiss();
+    assert.strictEqual(tm._pendingTimer, null);
+  });
+
+  it("onInput pointerdown dismisses tooltip", () => {
+    const tm = new TooltipManager(new OverlayContext());
+    tm.show("Hello", 100, 200);
+    tm.onInput({ type: "pointerdown", x: 150, y: 250 });
+    assert.strictEqual(tm.active, null);
+  });
+
+  it("onInput pointermove with small distance keeps tooltip", () => {
+    const tm = new TooltipManager(new OverlayContext());
+    tm.show("Hello", 100, 200);
+    tm.onInput({ type: "pointermove", x: 102, y: 202 });
+    assert.ok(tm.active !== null);
+  });
+
+  it("onInput pointermove with large distance dismisses", () => {
+    const tm = new TooltipManager(new OverlayContext());
+    tm.show("Hello", 100, 200);
+    tm.onInput({ type: "pointermove", x: 200, y: 300 });
+    assert.strictEqual(tm.active, null);
+  });
+
+  it("onInput always returns false (non-blocking)", () => {
+    const tm = new TooltipManager(new OverlayContext());
+    assert.strictEqual(tm.onInput({ type: "pointermove" }), false);
+    assert.strictEqual(tm.onInput({ type: "keydown" }), false);
+    assert.strictEqual(tm.onInput({ type: "pointerdown" }), false);
+  });
+});
+
+describe("AnimationSystem", () => {
+  it("construction defaults", () => {
+    const anim = new AnimationSystem();
+    assert.ok(anim._animations instanceof Set);
+  });
+
+  it("animate adds an animation", () => {
+    const anim = new AnimationSystem();
+    const target = { x: 0 };
+    anim.animate(target, "x", 0, 100);
+    assert.strictEqual(anim._animations.size, 1);
+  });
+
+  it("tick progresses animation toward target", () => {
+    const anim = new AnimationSystem();
+    const target = { x: 0 };
+    anim.animate(target, "x", 0, 100, 1000, "linear");
+    anim.tick(16);
+    assert.ok(target.x > 0);
+    assert.ok(target.x < 100);
+  });
+
+  it("tick completes animation when duration elapsed", () => {
+    const anim = new AnimationSystem();
+    const target = { x: 0 };
+    anim.animate(target, "x", 0, 100, 1, "linear");
+    anim.tick(100);
+    assert.strictEqual(target.x, 100);
+    assert.strictEqual(anim._animations.size, 0);
+  });
+
+  it("tick with multiple animations", () => {
+    const anim = new AnimationSystem();
+    const a = { x: 0 };
+    const b = { y: 0 };
+    anim.animate(a, "x", 0, 50, 1, "linear");
+    anim.animate(b, "y", 0, 100, 1, "linear");
+    anim.tick(100);
+    assert.strictEqual(a.x, 50);
+    assert.strictEqual(b.y, 100);
+  });
+
+  it("_ease easeOut returns correct values", () => {
+    const anim = new AnimationSystem();
+    assert.strictEqual(anim._ease(0, "easeOut"), 0);
+    assert.strictEqual(anim._ease(0.5, "easeOut"), 1 - Math.pow(0.5, 3));
+    assert.strictEqual(anim._ease(1, "easeOut"), 1);
+  });
+
+  it("_ease easeIn returns correct values", () => {
+    const anim = new AnimationSystem();
+    assert.strictEqual(anim._ease(0, "easeIn"), 0);
+    assert.strictEqual(anim._ease(0.5, "easeIn"), 0.125);
+    assert.strictEqual(anim._ease(1, "easeIn"), 1);
+  });
+
+  it("_ease linear returns t", () => {
+    const anim = new AnimationSystem();
+    assert.strictEqual(anim._ease(0.33, "linear"), 0.33);
+  });
+
+  it("_ease unknown defaults to easeOut", () => {
+    const anim = new AnimationSystem();
+    assert.strictEqual(anim._ease(0.5, "unknown"), 1 - Math.pow(0.5, 3));
+  });
+
+  it("onInput returns false (non-blocking)", () => {
+    const anim = new AnimationSystem();
+    assert.strictEqual(anim.onInput({ type: "pointerdown" }), false);
+    assert.strictEqual(anim.onInput({ type: "keydown" }), false);
+  });
+});
+
+describe("OverlaySession wiring", () => {
+  it("creates CommandSystem, TooltipManager, AnimationSystem", () => {
+    const session = new OverlaySession();
+    assert.ok(session.commands instanceof CommandSystem);
+    assert.ok(session.tooltips instanceof TooltipManager);
+    assert.ok(session.animation instanceof AnimationSystem);
+    assert.ok(session.context.commands instanceof CommandSystem);
+    assert.ok(session.context.tooltips instanceof TooltipManager);
+    assert.ok(session.context.animation instanceof AnimationSystem);
+  });
+
+  it("update ticks animation system", () => {
+    const session = new OverlaySession();
+    session.show();
+    const target = { x: 0 };
+    session.animation.animate(target, "x", 0, 100, 1, "linear");
+    session.update(100);
+    assert.strictEqual(target.x, 100);
+  });
+
+  it("InputRouter capture phase calls shortcuts via commands", () => {
+    const session = new OverlaySession();
+    session.show();
+    // Verify shortcut "1" toggles performance panel
+    const result = session.processInput({ type: "keydown", key: "1" });
+    assert.strictEqual(result, true);
   });
 });

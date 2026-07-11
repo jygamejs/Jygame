@@ -8,6 +8,9 @@ import { FrameBarRenderer } from "./renderers/FrameBarRenderer.js";
 import { TextRenderer } from "./renderers/TextRenderer.js";
 import { InputRouter } from "./InputRouter.js";
 import { SelectionManager } from "./SelectionManager.js";
+import { CommandSystem } from "./CommandSystem.js";
+import { TooltipManager } from "./TooltipManager.js";
+import { AnimationSystem } from "./AnimationSystem.js";
 
 export class OverlaySession {
   constructor({ history, registry, analysis, config, theme } = {}) {
@@ -22,6 +25,12 @@ export class OverlaySession {
     this._ctx.selection = this._selection;
     this._input = new InputRouter(this._ctx, this._panels, this._layout);
     this._ctx.input = this._input;
+    this._tooltips = new TooltipManager(this._ctx);
+    this._ctx.tooltips = this._tooltips;
+    this._animation = new AnimationSystem();
+    this._ctx.animation = this._animation;
+    this._commands = new CommandSystem(this);
+    this._ctx.commands = this._commands;
 
     this._textRenderer = new TextRenderer(resolvedTheme);
     this._sparklineRenderer = new SparklineRenderer();
@@ -47,8 +56,13 @@ export class OverlaySession {
     return this._panels;
   }
 
+  get commands() { return this._commands; }
+  get tooltips() { return this._tooltips; }
+  get animation() { return this._animation; }
+
   update(dt) {
     if (!this._visible) return;
+    this._animation.tick(dt);
     this._panels.update({ dt });
   }
 

@@ -32,3 +32,6 @@ export { CaptureBrowserPanel } from "./panels/CaptureBrowserPanel.js";
 export { SettingsPanel } from "./panels/SettingsPanel.js";
 export { InputRouter } from "./InputRouter.js";
 export { SelectionManager } from "./SelectionManager.js";
+export { CommandSystem } from "./CommandSystem.js";
+export { TooltipManager } from "./TooltipManager.js";
+export { AnimationSystem } from "./AnimationSystem.js";

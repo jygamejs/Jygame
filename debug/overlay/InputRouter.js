@@ -22,10 +22,24 @@ export class InputRouter {
   }
 
   _capturePhase(event) {
+    const tooltips = this._ctx.tooltips;
+    const animation = this._ctx.animation;
+    const commands = this._ctx.commands;
+
+    if (tooltips) tooltips.onInput(event);
+    if (animation) animation.onInput(event);
+
     if (event.type === "keydown") {
       if (event.key === "Escape") {
         this._focusedPanelId = null;
         return true;
+      }
+      if (commands) {
+        const cmdName = commands.resolveShortcut(event.key);
+        if (cmdName) {
+          commands.execute(cmdName);
+          return true;
+        }
       }
     }
     return false;
