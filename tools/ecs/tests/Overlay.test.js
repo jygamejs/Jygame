@@ -31,6 +31,7 @@ import {
   MetricBrowserPanel,
   MetricSearchIndex,
   EventViewerPanel,
+  CaptureBrowserPanel,
 } from "../../../debug/overlay/index.js";
 import { MetricType } from "../../../debug/MetricType.js";
 import { TimelineModel } from "../../../debug/overlay/timeline/TimelineModel.js";
@@ -2170,5 +2171,244 @@ describe("EventViewerPanel", () => {
     const panel = new EventViewerPanel(new OverlayContext());
     const handled = panel.handleInput({ type: "keydown", key: "Enter" });
     assert.strictEqual(handled, false);
+  });
+});
+
+function mockCaptureSnapshots(values) {
+  return values.map(v => ({ timerTotal() { return v; } }));
+}
+
+function captureMockRenderers() {
+  return {
+    text: {
+      render(ctx, text, x, y, opts) { ctx.fillText(text, x, y); },
+      measure(ctx, text, opts) { return { width: text.length * 7 }; },
+    },
+  };
+}
+
+function makeCaptureCtx(captures) {
+  return new OverlayContext({
+    theme: DarkTheme,
+    renderers: captureMockRenderers(),
+    captures,
+  });
+}
+
+describe("CaptureBrowserPanel", () => {
+  it("construction defaults", () => {
+    const panel = new CaptureBrowserPanel(new OverlayContext());
+    assert.strictEqual(panel.id, "captures");
+    assert.strictEqual(panel.title, "Capture Browser");
+    assert.strictEqual(panel.defaultWidth, 600);
+    assert.strictEqual(panel.defaultHeight, 400);
+  });
+
+  it("update with empty captures does nothing", () => {
+    const panel = new CaptureBrowserPanel(new OverlayContext({ captures: [] }));
+    panel.update({});
+    assert.strictEqual(panel._selectedIndex, -1);
+  });
+
+  it("update clamps selected index when captures shrink", () => {
+    const captures = [
+      { name: "c1", snapshots: [], timestamp: 1000, preFrames: 0, postFrames: 0 },
+    ];
+    const ctx = makeCaptureCtx(captures);
+    const panel = new CaptureBrowserPanel(ctx);
+    panel._selectedIndex = 0;
+    captures.splice(0, 1);
+    panel.update({});
+    assert.strictEqual(panel._selectedIndex, -1);
+  });
+
+  it("render with no captures draws no-captures message", () => {
+    const ctx = makeCaptureCtx([]);
+    const panel = new CaptureBrowserPanel(ctx);
+    const canvas = mockCtx();
+    panel.render(canvas, { x: 0, y: 0, width: 600, height: 400 });
+    const texts = canvas._calls.filter(c => c[0] === "fillText").map(c => c[1]);
+    assert.ok(texts.includes("No captures"));
+  });
+
+  it("render without rect is no-op", () => {
+    const panel = new CaptureBrowserPanel(new OverlayContext());
+    const canvas = mockCtx();
+    assert.doesNotThrow(() => panel.render(canvas, null));
+  });
+
+  it("render with captures draws capture names", () => {
+    const captures = [
+      { name: "Frame spike", snapshots: mockCaptureSnapshots([16, 20, 15]), timestamp: 1000, preFrames: 1, postFrames: 1, metrics: { find() { return { id: 0 }; } } },
+      { name: "Update spike", snapshots: mockCaptureSnapshots([16, 20, 15]), timestamp: 2000, preFrames: 1, postFrames: 1, metrics: { find() { return { id: 0 }; } } },
+    ];
+    const ctx = makeCaptureCtx(captures);
+    const panel = new CaptureBrowserPanel(ctx);
+    const canvas = mockCtx();
+    panel.render(canvas, { x: 0, y: 0, width: 600, height: 400 });
+    const texts = canvas._calls.filter(c => c[0] === "fillText").map(c => c[1]);
+    assert.ok(texts.some(t => t.includes("Frame spike")));
+    assert.ok(texts.some(t => t.includes("Update spike")));
+  });
+
+  it("render with captures draws header labels", () => {
+    const captures = [
+      { name: "c1", snapshots: mockCaptureSnapshots([16]), timestamp: 1000, preFrames: 0, postFrames: 0, metrics: { find() { return { id: 0 }; } } },
+    ];
+    const ctx = makeCaptureCtx(captures);
+    const panel = new CaptureBrowserPanel(ctx);
+    const canvas = mockCtx();
+    panel.render(canvas, { x: 0, y: 0, width: 600, height: 400 });
+    const texts = canvas._calls.filter(c => c[0] === "fillText").map(c => c[1]);
+    assert.ok(texts.includes("Capture"));
+    assert.ok(texts.includes("Frames"));
+    assert.ok(texts.includes("Trigger"));
+  });
+
+  it("render with selection draws action buttons", () => {
+    const captures = [
+      { name: "c1", snapshots: mockCaptureSnapshots([16, 20]), timestamp: 1000, preFrames: 1, postFrames: 1, metrics: { find() { return { id: 0 }; } } },
+    ];
+    const ctx = makeCaptureCtx(captures);
+    const panel = new CaptureBrowserPanel(ctx);
+    panel._selectedIndex = 0;
+    const canvas = mockCtx();
+    panel.render(canvas, { x: 0, y: 0, width: 600, height: 400 });
+    const texts = canvas._calls.filter(c => c[0] === "fillText").map(c => c[1]);
+    assert.ok(texts.includes("Preview"));
+    assert.ok(texts.includes("Export"));
+    assert.ok(texts.includes("Delete"));
+  });
+
+  it("click on capture row selects it", () => {
+    const captures = [
+      { name: "c1", snapshots: [], timestamp: 1000, preFrames: 0, postFrames: 0 },
+      { name: "c2", snapshots: [], timestamp: 2000, preFrames: 0, postFrames: 0 },
+    ];
+    const ctx = makeCaptureCtx(captures);
+    const panel = new CaptureBrowserPanel(ctx);
+    panel.render(mockCtx(), { x: 0, y: 0, width: 600, height: 400 });
+    // Click on first capture row
+    const firstRow = panel._clickRegions.find(r => r.x > 0 && r.y > 0);
+    assert.ok(firstRow);
+    firstRow.handler();
+    assert.strictEqual(panel._selectedIndex, 0);
+  });
+
+  it("delete removes capture from array", () => {
+    const captures = [
+      { name: "c1", snapshots: [], timestamp: 1000, preFrames: 0, postFrames: 0 },
+    ];
+    const ctx = makeCaptureCtx(captures);
+    const panel = new CaptureBrowserPanel(ctx);
+    panel._selectedIndex = 0;
+    panel._deleteCapture();
+    assert.strictEqual(captures.length, 0);
+    assert.strictEqual(panel._selectedIndex, -1);
+  });
+
+  it("delete clamps selected index", () => {
+    const captures = [
+      { name: "c1", snapshots: [], timestamp: 1000, preFrames: 0, postFrames: 0 },
+      { name: "c2", snapshots: [], timestamp: 2000, preFrames: 0, postFrames: 0 },
+    ];
+    const ctx = makeCaptureCtx(captures);
+    const panel = new CaptureBrowserPanel(ctx);
+    panel._selectedIndex = 1;
+    captures.splice(1, 1);
+    panel.update({});
+    assert.strictEqual(panel._selectedIndex, 0);
+  });
+
+  it("export calls commands.execute when available", () => {
+    const captures = [
+      { name: "c1", snapshots: [], timestamp: 1000, preFrames: 0, postFrames: 0 },
+    ];
+    let executed = null;
+    const ctx = new OverlayContext({ captures, theme: DarkTheme });
+    ctx.commands = { execute(cmd, arg) { executed = { cmd, arg }; } };
+    const panel = new CaptureBrowserPanel(ctx);
+    panel._selectedIndex = 0;
+    panel._exportCapture();
+    assert.ok(executed);
+    assert.strictEqual(executed.cmd, "export:capture");
+    assert.strictEqual(executed.arg, captures[0]);
+  });
+
+  it("render with selected capture draws sparkline preview", () => {
+    const captures = [
+      {
+        name: "Frame spike",
+        timestamp: 1000,
+        preFrames: 1,
+        postFrames: 1,
+        snapshots: mockCaptureSnapshots([10, 15, 20, 18, 12]),
+        metrics: { find() { return { id: 0 }; } },
+      },
+    ];
+    const ctx = makeCaptureCtx(captures);
+    const panel = new CaptureBrowserPanel(ctx);
+    panel._selectedIndex = 0;
+    const canvas = mockCtx();
+    panel.render(canvas, { x: 0, y: 0, width: 600, height: 400 });
+    const moveTos = canvas._calls.filter(c => c[0] === "moveTo");
+    const lineTos = canvas._calls.filter(c => c[0] === "lineTo");
+    assert.ok(moveTos.length >= 1, "should have moveTo for sparkline");
+    assert.ok(lineTos.length >= 2, "should have lineTo for sparkline");
+  });
+
+  it("render with selection draws preview labels", () => {
+    const captures = [
+      {
+        name: "Frame spike",
+        timestamp: 1000,
+        preFrames: 2,
+        postFrames: 2,
+        snapshots: mockCaptureSnapshots([10, 15, 20, 18, 12]),
+        metrics: { find() { return { id: 0 }; } },
+      },
+    ];
+    const ctx = makeCaptureCtx(captures);
+    const panel = new CaptureBrowserPanel(ctx);
+    panel._selectedIndex = 0;
+    const canvas = mockCtx();
+    panel.render(canvas, { x: 0, y: 0, width: 600, height: 400 });
+    const texts = canvas._calls.filter(c => c[0] === "fillText").map(c => c[1]);
+    assert.ok(texts.some(t => t.startsWith("pre:")), "should show pre label");
+    assert.ok(texts.some(t => t.startsWith("post:")), "should show post label");
+    assert.ok(texts.some(t => t === "trigger"), "should show trigger label");
+  });
+
+  it("handleInput on capture row selects", () => {
+    const captures = [
+      { name: "c1", snapshots: [], timestamp: 1000, preFrames: 0, postFrames: 0 },
+    ];
+    const ctx = makeCaptureCtx(captures);
+    const panel = new CaptureBrowserPanel(ctx);
+    panel._clickRegions = [{ x: 10, y: 40, w: 580, h: 22, handler: () => { panel._selectedIndex = 0; } }];
+    const handled = panel.handleInput({ type: "click", x: 50, y: 50 });
+    assert.strictEqual(handled, true);
+    assert.strictEqual(panel._selectedIndex, 0);
+  });
+
+  it("handleInput outside regions returns false", () => {
+    const panel = new CaptureBrowserPanel(new OverlayContext());
+    panel._clickRegions = [{ x: 10, y: 10, w: 50, h: 20, handler: () => {} }];
+    const handled = panel.handleInput({ type: "click", x: 200, y: 200 });
+    assert.strictEqual(handled, false);
+  });
+
+  it("handleInput ignores non-click events", () => {
+    const panel = new CaptureBrowserPanel(new OverlayContext());
+    const handled = panel.handleInput({ type: "keydown", key: "Enter" });
+    assert.strictEqual(handled, false);
+  });
+
+  it("_niceSteps returns at least two steps", () => {
+    const panel = new CaptureBrowserPanel(new OverlayContext());
+    const steps = panel._niceSteps(10, 20, 3);
+    assert.ok(steps.length >= 2);
+    assert.ok(steps[0] >= 10);
+    assert.ok(steps[steps.length - 1] <= 20);
   });
 });
