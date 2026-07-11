@@ -40,6 +40,7 @@ import {
   AnimationSystem,
   PersistenceManager,
   DebugOverlay,
+  OffscreenCache,
 } from "../../../debug/overlay/index.js";
 import { MetricType } from "../../../debug/MetricType.js";
 import { TimelineModel } from "../../../debug/overlay/timeline/TimelineModel.js";
@@ -3389,5 +3390,96 @@ describe("DebugOverlay", () => {
     overlay.show();
     overlay.destroy();
     assert.strictEqual(overlay.visible, false);
+  });
+});
+
+describe("OffscreenCache", () => {
+  it("construction with null createCanvas returns null from get", () => {
+    const cache = new OffscreenCache(null);
+    const result = cache.get("test", () => {}, 100, 50);
+    assert.strictEqual(result, null);
+  });
+
+  it("has returns false for unknown key", () => {
+    const cache = new OffscreenCache(null);
+    assert.strictEqual(cache.has("unknown"), false);
+  });
+
+  it("invalidateAll clears cache", () => {
+    const cache = new OffscreenCache(null);
+    cache.invalidateAll();
+    assert.strictEqual(cache.has("anything"), false);
+  });
+
+  it("invalidate removes specific key", () => {
+    const cache = new OffscreenCache(null);
+    cache.invalidate("key");
+    assert.strictEqual(cache.has("key"), false);
+  });
+
+  it("get with custom createCanvas caches and returns canvas", () => {
+    const canvases = [];
+    const createCanvas = (w, h) => {
+      const c = { width: w, height: h, getContext() { return { fillRect() {}, fillStyle: "" }; } };
+      canvases.push(c);
+      return c;
+    };
+    const cache = new OffscreenCache(createCanvas);
+    const result = cache.get("bg", (ctx) => { ctx.fillRect(0, 0, 100, 50); }, 100, 50);
+    assert.ok(result);
+    assert.strictEqual(cache.has("bg"), true);
+    assert.strictEqual(canvases.length, 1);
+
+    const result2 = cache.get("bg", (ctx) => {}, 100, 50);
+    assert.strictEqual(result2, result);
+    assert.strictEqual(canvases.length, 1);
+  });
+
+  it("get with different size creates new entry", () => {
+    const canvases = [];
+    const createCanvas = (w, h) => {
+      const c = { width: w, height: h, getContext() { return { fillRect() {}, fillStyle: "" }; } };
+      canvases.push(c);
+      return c;
+    };
+    const cache = new OffscreenCache(createCanvas);
+    cache.get("bg", () => {}, 100, 50);
+    cache.get("bg", () => {}, 200, 100);
+    assert.strictEqual(canvases.length, 2);
+  });
+
+  it("invalidate removes entry so next get creates new", () => {
+    const canvases = [];
+    const createCanvas = (w, h) => {
+      const c = { width: w, height: h, getContext() { return { fillRect() {}, fillStyle: "" }; } };
+      canvases.push(c);
+      return c;
+    };
+    const cache = new OffscreenCache(createCanvas);
+    cache.get("bg", () => {}, 100, 50);
+    cache.invalidate("bg");
+    assert.strictEqual(cache.has("bg"), false);
+    cache.get("bg", () => {}, 100, 50);
+    assert.strictEqual(canvases.length, 2);
+  });
+
+  it("invalidateAll clears all entries", () => {
+    const canvases = [];
+    const createCanvas = (w, h) => {
+      const c = { width: w, height: h, getContext() { return { fillRect() {}, fillStyle: "" }; } };
+      canvases.push(c);
+      return c;
+    };
+    const cache = new OffscreenCache(createCanvas);
+    cache.get("a", () => {}, 10, 10);
+    cache.get("b", () => {}, 20, 20);
+    cache.invalidateAll();
+    assert.strictEqual(cache.has("a"), false);
+    assert.strictEqual(cache.has("b"), false);
+  });
+
+  it("OverlayContext has OffscreenCache instance", () => {
+    const session = new OverlaySession();
+    assert.ok(session.context.cache instanceof OffscreenCache);
   });
 });

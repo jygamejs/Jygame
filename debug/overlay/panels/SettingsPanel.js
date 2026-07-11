@@ -49,6 +49,7 @@ export class SettingsPanel extends Panel {
     if (!this.ctx.config) this.ctx.config = {};
     this.ctx.config.theme = mode;
     this.ctx.theme = mode === "light" ? LightTheme : DarkTheme;
+    if (this.ctx.cache) this.ctx.cache.invalidateAll();
   }
 
   _resetLayout() {

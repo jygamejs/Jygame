@@ -1,3 +1,5 @@
+import { OffscreenCache } from "./OffscreenCache.js";
+
 export class OverlayContext {
   constructor({ history, registry, analysis, config, theme, captures, renderers } = {}) {
     this.history = history || null;
@@ -14,5 +16,6 @@ export class OverlayContext {
     this.tooltips = null;
     this.renderers = renderers || null;
     this.animation = null;
+    this.cache = new OffscreenCache();
   }
 }

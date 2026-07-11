@@ -170,11 +170,24 @@ export class PerformancePanel extends Panel {
 
   _drawCard(ctx, x, y, w, h, theme, label, value, fillRatio, statusColor) {
     const tr = this.ctx.renderers?.text;
-    ctx.fillStyle = theme.background;
-    ctx.fillRect(x, y, w, h);
-
-    ctx.fillStyle = statusColor;
-    ctx.fillRect(x + 2, y + 4, 3, h - 8);
+    const cache = this.ctx.cache;
+    const cardKey = `card:${w}:${h}`;
+    const cached = cache ? cache.get(cardKey, (c, cw, ch) => {
+      c.fillStyle = theme.background;
+      c.fillRect(0, 0, cw, ch);
+      if (statusColor) {
+        c.fillStyle = statusColor;
+        c.fillRect(2, 4, 3, ch - 8);
+      }
+    }, w, h) : null;
+    if (cached) {
+      ctx.drawImage(cached, x, y);
+    } else {
+      ctx.fillStyle = theme.background;
+      ctx.fillRect(x, y, w, h);
+      ctx.fillStyle = statusColor;
+      ctx.fillRect(x + 2, y + 4, 3, h - 8);
+    }
 
     if (tr) {
       tr.render(ctx, label, x + 10, y + 6, {

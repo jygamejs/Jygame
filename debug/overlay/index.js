@@ -37,3 +37,4 @@ export { TooltipManager } from "./TooltipManager.js";
 export { AnimationSystem } from "./AnimationSystem.js";
 export { PersistenceManager } from "./PersistenceManager.js";
 export { DebugOverlay } from "./DebugOverlay.js";
+export { OffscreenCache } from "./OffscreenCache.js";
