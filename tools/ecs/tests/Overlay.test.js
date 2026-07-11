@@ -28,6 +28,8 @@ import {
   PerformancePanel,
   FrameGraphPanel,
   TimelinePanel,
+  MetricBrowserPanel,
+  MetricSearchIndex,
 } from "../../../debug/overlay/index.js";
 import { MetricType } from "../../../debug/MetricType.js";
 import { TimelineModel } from "../../../debug/overlay/timeline/TimelineModel.js";
@@ -1641,5 +1643,316 @@ describe("OverlaySession", () => {
     s.destroy();
     assert.strictEqual(s.visible, false);
     assert.strictEqual(s.panels.visibleCount, 0);
+  });
+});
+
+function browserMockRegistry() {
+  const descriptors = [
+    { id: 0, name: "frame.total", displayName: "Frame Total", type: MetricType.TIMER, category: 0, unit: 0, color: "#ff8888" },
+    { id: 1, name: "frame.render", displayName: "Render", type: MetricType.TIMER, category: 0, unit: 0, color: "#88ff88" },
+    { id: 2, name: "ecs.world.entities", displayName: "Entities", type: MetricType.COUNTER, category: 1, unit: 1 },
+    { id: 3, name: "ecs.update", displayName: "ECS Update", type: MetricType.TIMER, category: 1, unit: 0, color: "#ffff88" },
+    { id: 4, name: "render.draw.calls", displayName: "Draw Calls", type: MetricType.COUNTER, category: 2, unit: 1 },
+    { id: 5, name: "fps", displayName: "FPS", type: MetricType.GAUGE, category: 0, unit: 5 },
+  ];
+  const nameMap = new Map(descriptors.map(d => [d.name, d]));
+  return {
+    forEach(fn) { descriptors.forEach(fn); },
+    find(name) { return nameMap.get(name) || null; },
+    count: descriptors.length,
+  };
+}
+
+function browserMockAnalysis() {
+  return {
+    latest(name) {
+      const map = {
+        "frame.total": 16.7,
+        "frame.render": 8.2,
+        "ecs.world.entities": 1024,
+        "ecs.update": 4.2,
+        "render.draw.calls": 512,
+        "fps": 59.8,
+      };
+      return map[name] || 0;
+    },
+  };
+}
+
+function browserMockRenderers() {
+  return {
+    text: {
+      render(ctx, text, x, y, opts) { ctx.fillText(text, x, y); },
+      measure(ctx, text, opts) { return { width: text.length * 7 }; },
+    },
+  };
+}
+
+function makeBrowserCtx(overrides = {}) {
+  return new OverlayContext({
+    registry: browserMockRegistry(),
+    analysis: browserMockAnalysis(),
+    theme: DarkTheme,
+    renderers: browserMockRenderers(),
+    ...overrides,
+  });
+}
+
+describe("MetricSearchIndex", () => {
+  it("rebuild indexes registry entries", () => {
+    const reg = { forEach(fn) { fn({ id: 0, name: "a.b", displayName: "A B", type: MetricType.TIMER, category: 0 }); }, count: 1 };
+    const idx = new MetricSearchIndex(reg);
+    assert.strictEqual(idx._entries.length, 1);
+    assert.strictEqual(idx._entries[0].name, "a.b");
+    assert.strictEqual(idx._entries[0].normalizedName, "a.b");
+    assert.strictEqual(idx._entries[0].type, MetricType.TIMER);
+  });
+
+  it("search with empty query returns all", () => {
+    const idx = new MetricSearchIndex(browserMockRegistry());
+    assert.strictEqual(idx.search("").length, 6);
+  });
+
+  it("search with null query returns all", () => {
+    const idx = new MetricSearchIndex(browserMockRegistry());
+    assert.strictEqual(idx.search(null).length, 6);
+  });
+
+  it("search filters by exact name", () => {
+    const idx = new MetricSearchIndex(browserMockRegistry());
+    assert.strictEqual(idx.search("frame.total").length, 1);
+  });
+
+  it("search by prefix matches multiple", () => {
+    const idx = new MetricSearchIndex(browserMockRegistry());
+    const results = idx.search("frame");
+    assert.ok(results.length >= 2);
+    assert.ok(results.every(e => e.name.startsWith("frame")));
+  });
+
+  it("search by contains substring", () => {
+    const idx = new MetricSearchIndex(browserMockRegistry());
+    const results = idx.search("total");
+    assert.strictEqual(results.length, 1);
+  });
+
+  it("search by regex", () => {
+    const idx = new MetricSearchIndex(browserMockRegistry());
+    const results = idx.search("/ecs");
+    assert.ok(results.length >= 2);
+  });
+
+  it("search by invalid regex returns empty", () => {
+    const idx = new MetricSearchIndex(browserMockRegistry());
+    const results = idx.search("/[invalid");
+    assert.strictEqual(results.length, 0);
+  });
+
+  it("search with type filter returns only matching type", () => {
+    const idx = new MetricSearchIndex(browserMockRegistry());
+    const timers = idx.search("", { type: MetricType.TIMER });
+    assert.ok(timers.every(e => e.type === MetricType.TIMER));
+  });
+
+  it("search with category filter returns only matching category", () => {
+    const idx = new MetricSearchIndex(browserMockRegistry());
+    const ecsOnly = idx.search("", { categories: [1] });
+    assert.ok(ecsOnly.every(e => e.category === 1));
+  });
+
+  it("search combines query and type filter", () => {
+    const idx = new MetricSearchIndex(browserMockRegistry());
+    const results = idx.search("frame", { type: MetricType.TIMER });
+    assert.ok(results.every(e => e.name.startsWith("frame") && e.type === MetricType.TIMER));
+  });
+
+  it("search with group filter returns empty for non-matching group", () => {
+    const idx = new MetricSearchIndex(browserMockRegistry());
+    const results = idx.search("", { group: "nonexistent" });
+    assert.strictEqual(results.length, 0);
+  });
+
+  it("rebuild reindexes with new registry", () => {
+    const idx = new MetricSearchIndex(browserMockRegistry());
+    assert.strictEqual(idx._entries.length, 6);
+    const smallReg = { forEach(fn) { fn({ id: 0, name: "test", displayName: "Test", type: MetricType.TIMER, category: 0 }); }, count: 1 };
+    idx.rebuild(smallReg);
+    assert.strictEqual(idx._entries.length, 1);
+    assert.strictEqual(idx._entries[0].name, "test");
+  });
+});
+
+describe("MetricBrowserPanel", () => {
+  it("construction defaults", () => {
+    const panel = new MetricBrowserPanel(new OverlayContext());
+    assert.strictEqual(panel.id, "metrics");
+    assert.strictEqual(panel.title, "Metric Browser");
+    assert.strictEqual(panel.defaultWidth, 450);
+    assert.strictEqual(panel.defaultHeight, 400);
+  });
+
+  it("update without registry clears groups", () => {
+    const panel = new MetricBrowserPanel(new OverlayContext());
+    panel.update({});
+    assert.strictEqual(panel._groups.length, 0);
+    assert.strictEqual(panel._availableCategories.length, 0);
+  });
+
+  it("update builds groups from registry", () => {
+    const ctx = makeBrowserCtx();
+    const panel = new MetricBrowserPanel(ctx);
+    panel.update({});
+    assert.ok(panel._groups.length >= 2);
+    const frame = panel._groups.find(g => g.name === "frame");
+    assert.ok(frame);
+    assert.ok(frame.metrics.length >= 2);
+    assert.ok(frame.metrics.some(m => m.name === "frame.total"));
+  });
+
+  it("update sorts groups alphabetically with ungrouped last", () => {
+    const ctx = makeBrowserCtx();
+    const panel = new MetricBrowserPanel(ctx);
+    panel.update({});
+    for (let i = 1; i < panel._groups.length; i++) {
+      const prev = panel._groups[i - 1].name;
+      const curr = panel._groups[i].name;
+      if (prev === "__ungrouped__") assert.fail("ungrouped before " + curr);
+      if (curr === "__ungrouped__") continue;
+      assert.ok(prev.localeCompare(curr) <= 0, `${prev} should be before ${curr}`);
+    }
+  });
+
+  it("setQuery filters displayed metrics", () => {
+    const ctx = makeBrowserCtx();
+    const panel = new MetricBrowserPanel(ctx);
+    panel.setQuery("ecs");
+    panel.update({});
+    assert.ok(panel._groups.length >= 1);
+    const names = panel._groups.flatMap(g => g.metrics.map(m => m.name));
+    assert.ok(names.every(n => n.includes("ecs")), "all names should contain ecs");
+  });
+
+  it("setTypeFilter filters by metric type", () => {
+    const ctx = makeBrowserCtx();
+    const panel = new MetricBrowserPanel(ctx);
+    panel.setTypeFilter(MetricType.COUNTER);
+    panel.update({});
+    const names = panel._groups.flatMap(g => g.metrics.map(m => m.name));
+    for (const n of names) {
+      const desc = browserMockRegistry().find(n);
+      assert.strictEqual(desc.type, MetricType.COUNTER, `${n} should be COUNTER`);
+    }
+  });
+
+  it("toggleCategory adds then removes category filter", () => {
+    const ctx = new OverlayContext({ registry: browserMockRegistry() });
+    const panel = new MetricBrowserPanel(ctx);
+    assert.strictEqual(panel._categoryFilters.length, 0);
+    panel.toggleCategory(0);
+    assert.strictEqual(panel._categoryFilters.length, 1);
+    assert.strictEqual(panel._categoryFilters[0], 0);
+    panel.toggleCategory(0);
+    assert.strictEqual(panel._categoryFilters.length, 0);
+  });
+
+  it("toggleGroup collapses then expands", () => {
+    const ctx = new OverlayContext({ registry: browserMockRegistry() });
+    const panel = new MetricBrowserPanel(ctx);
+    assert.ok(!panel._collapsedGroups.has("frame"));
+    panel.toggleGroup("frame");
+    assert.ok(panel._collapsedGroups.has("frame"));
+    panel.toggleGroup("frame");
+    assert.ok(!panel._collapsedGroups.has("frame"));
+  });
+
+  it("render without registry draws no-metrics message", () => {
+    const panel = new MetricBrowserPanel(new OverlayContext({
+      theme: DarkTheme,
+      renderers: { text: { render(ctx, t, x, y) { ctx.fillText(t, x, y); }, measure() { return { width: 10 }; } } },
+    }));
+    const canvas = mockCtx();
+    panel.render(canvas, { x: 0, y: 0, width: 450, height: 400 });
+    const texts = canvas._calls.filter(c => c[0] === "fillText").map(c => c[1]);
+    assert.ok(texts.includes("No metrics registered"));
+  });
+
+  it("render without rect is no-op", () => {
+    const panel = new MetricBrowserPanel(new OverlayContext());
+    const canvas = mockCtx();
+    assert.doesNotThrow(() => panel.render(canvas, null));
+  });
+
+  it("render with data draws metric names and values", () => {
+    const ctx = makeBrowserCtx();
+    const panel = new MetricBrowserPanel(ctx);
+    panel.update({});
+    const canvas = mockCtx();
+    panel.render(canvas, { x: 0, y: 0, width: 450, height: 400 });
+    const texts = canvas._calls.filter(c => c[0] === "fillText").map(c => c[1]);
+    assert.ok(texts.some(t => t.includes("Frame Total")), "should draw Frame Total");
+    assert.ok(texts.some(t => t.includes("ECS Update")), "should draw ECS Update");
+  });
+
+  it("render populates click regions", () => {
+    const ctx = makeBrowserCtx();
+    const panel = new MetricBrowserPanel(ctx);
+    panel.update({});
+    const canvas = mockCtx();
+    panel.render(canvas, { x: 0, y: 0, width: 450, height: 400 });
+    assert.ok(panel._clickRegions.length >= 6, `expected >=6 regions, got ${panel._clickRegions.length}`);
+  });
+
+  it("render with setQuery shows filtered results", () => {
+    const ctx = makeBrowserCtx();
+    const panel = new MetricBrowserPanel(ctx);
+    panel.setQuery("ecs");
+    panel.update({});
+    const canvas = mockCtx();
+    panel.render(canvas, { x: 0, y: 0, width: 450, height: 400 });
+    const texts = canvas._calls.filter(c => c[0] === "fillText").map(c => c[1]);
+    assert.ok(texts.some(t => t.includes("ECS Update")), "should show ECS Update");
+    assert.ok(!texts.some(t => t.includes("Frame Total")), "should not show Frame Total");
+  });
+
+  it("handleInput on type filter region updates filter", () => {
+    const panel = new MetricBrowserPanel(new OverlayContext());
+    panel._clickRegions = [{ x: 10, y: 40, w: 100, h: 22, handler: () => { panel._typeFilter = MetricType.TIMER; } }];
+    const handled = panel.handleInput({ type: "click", x: 50, y: 50 });
+    assert.strictEqual(handled, true);
+    assert.strictEqual(panel._typeFilter, MetricType.TIMER);
+  });
+
+  it("handleInput outside regions returns false", () => {
+    const panel = new MetricBrowserPanel(new OverlayContext());
+    panel._clickRegions = [{ x: 10, y: 40, w: 100, h: 22, handler: () => {} }];
+    const handled = panel.handleInput({ type: "click", x: 200, y: 200 });
+    assert.strictEqual(handled, false);
+  });
+
+  it("handleInput ignores non-click events", () => {
+    const panel = new MetricBrowserPanel(new OverlayContext());
+    const handled = panel.handleInput({ type: "keydown", key: "Enter" });
+    assert.strictEqual(handled, false);
+  });
+
+  it("_valueString formats timer with ms", () => {
+    const ctx = makeBrowserCtx();
+    const panel = new MetricBrowserPanel(ctx);
+    const str = panel._valueString({ value: 16.7, type: MetricType.TIMER, unit: 0 });
+    assert.strictEqual(str, "16.7 ms");
+  });
+
+  it("_valueString formats counter without unit", () => {
+    const ctx = makeBrowserCtx();
+    const panel = new MetricBrowserPanel(ctx);
+    const str = panel._valueString({ value: 1024, type: MetricType.COUNTER, unit: null });
+    assert.strictEqual(str, "1024");
+  });
+
+  it("_valueString formats gauge without unit", () => {
+    const ctx = makeBrowserCtx();
+    const panel = new MetricBrowserPanel(ctx);
+    const str = panel._valueString({ value: 59.8, type: MetricType.GAUGE, unit: null });
+    assert.strictEqual(str, "59.80");
   });
 });

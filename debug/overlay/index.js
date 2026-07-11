@@ -25,3 +25,5 @@ export { Toolbar } from "./widgets/Toolbar.js";
 export { PerformancePanel } from "./panels/PerformancePanel.js";
 export { FrameGraphPanel } from "./panels/FrameGraphPanel.js";
 export { TimelinePanel } from "./panels/TimelinePanel.js";
+export { MetricBrowserPanel } from "./panels/MetricBrowserPanel.js";
+export { MetricSearchIndex } from "./metrics/MetricSearchIndex.js";
