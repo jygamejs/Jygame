@@ -5,6 +5,9 @@ export class LayoutEngine {
     this._panelRects = new Map();
     this._tabRects = new Map();
     this._splitNodes = new Map();
+    this._splitDividers = [];
+    this._splitRects = new Map();
+    this._dragState = null;
     this._nextId = 1;
   }
 
@@ -34,6 +37,8 @@ export class LayoutEngine {
   compute(width, height) {
     this._panelRects.clear();
     this._tabRects.clear();
+    this._splitDividers = [];
+    this._splitRects.clear();
     if (!this._root || width <= 0 || height <= 0) return;
     this._computeNode(this._root, 0, 0, width, height);
   }
@@ -49,14 +54,23 @@ export class LayoutEngine {
 
   _computeSplit(node, x, y, width, height) {
     const gap = 2;
+    this._splitRects.set(node._layoutId, { x, y, w: width, h: height });
     if (node.direction === "horizontal") {
       const leftW = Math.floor(Math.max(0, (width - gap) * node.ratio));
       const rightW = Math.max(0, width - leftW - gap);
+      this._splitDividers.push({
+        x: x + leftW, y, w: gap, h: height,
+        splitId: node._layoutId, dir: "h",
+      });
       this._computeNode(node.children[0], x, y, leftW, height);
       this._computeNode(node.children[1], x + leftW + gap, y, rightW, height);
     } else {
       const topH = Math.floor(Math.max(0, (height - gap) * node.ratio));
       const bottomH = Math.max(0, height - topH - gap);
+      this._splitDividers.push({
+        x, y: y + topH, w: width, h: gap,
+        splitId: node._layoutId, dir: "v",
+      });
       this._computeNode(node.children[0], x, y, width, topH);
       this._computeNode(node.children[1], x, y + topH + gap, width, bottomH);
     }
@@ -96,6 +110,50 @@ export class LayoutEngine {
       }
     }
     return null;
+  }
+
+  getSplitDividers() {
+    return this._splitDividers;
+  }
+
+  onInput(event) {
+    if (event.type === "pointerdown" || event.type === "mousedown") {
+      for (const div of this._splitDividers) {
+        if (event.x >= div.x && event.x <= div.x + div.w &&
+            event.y >= div.y && event.y <= div.y + div.h) {
+          const node = this._splitNodes.get(div.splitId);
+          if (!node) return false;
+          this._dragState = {
+            splitId: div.splitId,
+            startX: event.x,
+            startY: event.y,
+            startRatio: node.ratio,
+          };
+          return true;
+        }
+      }
+    }
+
+    if ((event.type === "pointermove" || event.type === "mousemove") && this._dragState) {
+      const node = this._splitNodes.get(this._dragState.splitId);
+      if (!node) return false;
+      const rect = this._splitRects.get(this._dragState.splitId);
+      if (!rect || rect.w <= 0 || rect.h <= 0) return false;
+      const total = node.direction === "horizontal" ? rect.w : rect.h;
+      const delta = node.direction === "horizontal"
+        ? event.x - this._dragState.startX
+        : event.y - this._dragState.startY;
+      const newRatio = Math.max(0.1, Math.min(0.9, this._dragState.startRatio + delta / total));
+      node.ratio = newRatio;
+      return true;
+    }
+
+    if ((event.type === "pointerup" || event.type === "mouseup") && this._dragState) {
+      this._dragState = null;
+      return true;
+    }
+
+    return false;
   }
 
   resize(splitId, ratio) {

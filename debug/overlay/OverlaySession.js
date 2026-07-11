@@ -6,6 +6,8 @@ import { SparklineRenderer } from "./renderers/SparklineRenderer.js";
 import { HistogramRenderer } from "./renderers/HistogramRenderer.js";
 import { FrameBarRenderer } from "./renderers/FrameBarRenderer.js";
 import { TextRenderer } from "./renderers/TextRenderer.js";
+import { InputRouter } from "./InputRouter.js";
+import { SelectionManager } from "./SelectionManager.js";
 
 export class OverlaySession {
   constructor({ history, registry, analysis, config, theme } = {}) {
@@ -15,6 +17,11 @@ export class OverlaySession {
     this._panels = new PanelManager(this._ctx);
     this._layout = new LayoutEngine(resolvedTheme);
     this._ctx.layout = this._layout;
+
+    this._selection = new SelectionManager();
+    this._ctx.selection = this._selection;
+    this._input = new InputRouter(this._ctx, this._panels, this._layout);
+    this._ctx.input = this._input;
 
     this._textRenderer = new TextRenderer(resolvedTheme);
     this._sparklineRenderer = new SparklineRenderer();
@@ -47,6 +54,19 @@ export class OverlaySession {
 
   get layout() {
     return this._layout;
+  }
+
+  get input() {
+    return this._input;
+  }
+
+  get selection() {
+    return this._selection;
+  }
+
+  processInput(event) {
+    if (!this._visible) return false;
+    return this._input.process(event);
   }
 
   get renderers() {

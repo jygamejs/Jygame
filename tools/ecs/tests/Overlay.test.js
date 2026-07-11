@@ -33,6 +33,8 @@ import {
   EventViewerPanel,
   CaptureBrowserPanel,
   SettingsPanel,
+  InputRouter,
+  SelectionManager,
 } from "../../../debug/overlay/index.js";
 import { MetricType } from "../../../debug/MetricType.js";
 import { TimelineModel } from "../../../debug/overlay/timeline/TimelineModel.js";
@@ -2570,5 +2572,381 @@ describe("SettingsPanel", () => {
     const panel = new SettingsPanel(new OverlayContext());
     const handled = panel.handleInput({ type: "keydown", key: "Enter" });
     assert.strictEqual(handled, false);
+  });
+});
+
+function makeMockPanels() {
+  const calls = [];
+  const map = new Map();
+  const api = {
+    get(id) { return map.get(id) || null; },
+    register(panel) { map.set(panel.id, panel); },
+    calls,
+  };
+  return api;
+}
+
+function makeMockLayout(overrides = {}) {
+  return {
+    hitTest(x, y) { return null; },
+    onInput() { return false; },
+    getSplitDividers() { return []; },
+    ...overrides,
+  };
+}
+
+describe("SelectionManager", () => {
+  it("construction defaults", () => {
+    const sm = new SelectionManager();
+    assert.strictEqual(sm.selectedMetricId, null);
+    assert.strictEqual(sm.selectedFrameIndex, -1);
+    assert.strictEqual(sm.selectedCaptureId, null);
+    assert.strictEqual(sm.selectedPanelId, null);
+    assert.strictEqual(sm.hoveredMetricId, null);
+  });
+
+  it("selectMetric updates state and emits event", () => {
+    const sm = new SelectionManager();
+    let emitted = null;
+    sm.on("change:metric", (data) => { emitted = data; });
+    sm.selectMetric("frame.total");
+    assert.strictEqual(sm.selectedMetricId, "frame.total");
+    assert.strictEqual(emitted, "frame.total");
+  });
+
+  it("selectFrame updates state", () => {
+    const sm = new SelectionManager();
+    sm.selectFrame(42);
+    assert.strictEqual(sm.selectedFrameIndex, 42);
+  });
+
+  it("selectCapture updates state", () => {
+    const sm = new SelectionManager();
+    sm.selectCapture("cap1");
+    assert.strictEqual(sm.selectedCaptureId, "cap1");
+  });
+
+  it("selectPanel updates state", () => {
+    const sm = new SelectionManager();
+    sm.selectPanel("performance");
+    assert.strictEqual(sm.selectedPanelId, "performance");
+  });
+
+  it("hoverMetric updates state without event", () => {
+    const sm = new SelectionManager();
+    let emitted = false;
+    sm.on("change:metric", () => { emitted = true; });
+    sm.hoverMetric("frame.fps");
+    assert.strictEqual(sm.hoveredMetricId, "frame.fps");
+    assert.strictEqual(emitted, false);
+  });
+
+  it("reset clears all state and emits reset", () => {
+    const sm = new SelectionManager();
+    sm.selectMetric("m");
+    sm.selectFrame(5);
+    let emitted = false;
+    sm.on("change:reset", () => { emitted = true; });
+    sm.reset();
+    assert.strictEqual(sm.selectedMetricId, null);
+    assert.strictEqual(sm.selectedFrameIndex, -1);
+    assert.strictEqual(sm.selectedCaptureId, null);
+    assert.strictEqual(sm.selectedPanelId, null);
+    assert.strictEqual(sm.hoveredMetricId, null);
+    assert.strictEqual(emitted, true);
+  });
+
+  it("on returns unsubscribe function", () => {
+    const sm = new SelectionManager();
+    let count = 0;
+    const unsub = sm.on("change:metric", () => { count++; });
+    sm.selectMetric("a");
+    assert.strictEqual(count, 1);
+    unsub();
+    sm.selectMetric("b");
+    assert.strictEqual(count, 1);
+  });
+
+  it("off stops listener", () => {
+    const sm = new SelectionManager();
+    let count = 0;
+    const cb = () => { count++; };
+    sm.on("change:metric", cb);
+    sm.selectMetric("a");
+    assert.strictEqual(count, 1);
+    sm.off("change:metric", cb);
+    sm.selectMetric("b");
+    assert.strictEqual(count, 1);
+  });
+
+  it("multiple listeners for same event", () => {
+    const sm = new SelectionManager();
+    let a = 0, b = 0;
+    sm.on("change:frame", () => { a++; });
+    sm.on("change:frame", () => { b++; });
+    sm.selectFrame(10);
+    assert.strictEqual(a, 1);
+    assert.strictEqual(b, 1);
+  });
+});
+
+describe("LayoutEngine dividers", () => {
+  it("getSplitDividers returns divider rects after compute", () => {
+    const engine = new LayoutEngine(DarkTheme);
+    engine.setRoot({
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.4,
+      children: [
+        { type: "tab", panels: ["p1"], activeTab: 0 },
+        { type: "tab", panels: ["p2"], activeTab: 0 },
+      ],
+    });
+    engine.compute(800, 600);
+    const dividers = engine.getSplitDividers();
+    assert.strictEqual(dividers.length, 1);
+    assert.strictEqual(dividers[0].dir, "h");
+    assert.ok(dividers[0].w >= 1);
+  });
+
+  it("compute with vertical split returns vertical divider", () => {
+    const engine = new LayoutEngine(DarkTheme);
+    engine.setRoot({
+      type: "split",
+      direction: "vertical",
+      ratio: 0.5,
+      children: [
+        { type: "tab", panels: ["p1"], activeTab: 0 },
+        { type: "tab", panels: ["p2"], activeTab: 0 },
+      ],
+    });
+    engine.compute(800, 600);
+    const dividers = engine.getSplitDividers();
+    assert.strictEqual(dividers.length, 1);
+    assert.strictEqual(dividers[0].dir, "v");
+  });
+
+  it("compute with nested splits returns multiple dividers", () => {
+    const engine = new LayoutEngine(DarkTheme);
+    engine.setRoot({
+      type: "split",
+      direction: "vertical",
+      ratio: 0.5,
+      children: [
+        { type: "tab", panels: ["p1"], activeTab: 0 },
+        {
+          type: "split",
+          direction: "horizontal",
+          ratio: 0.5,
+          children: [
+            { type: "tab", panels: ["p2"], activeTab: 0 },
+            { type: "tab", panels: ["p3"], activeTab: 0 },
+          ],
+        },
+      ],
+    });
+    engine.compute(800, 600);
+    assert.strictEqual(engine.getSplitDividers().length, 2);
+  });
+
+  it("onInput mousedown on divider starts drag", () => {
+    const engine = new LayoutEngine(DarkTheme);
+    engine.setRoot({
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.4,
+      children: [
+        { type: "tab", panels: ["p1"], activeTab: 0 },
+        { type: "tab", panels: ["p2"], activeTab: 0 },
+      ],
+    });
+    engine.compute(800, 600);
+    const dividers = engine.getSplitDividers();
+    assert.ok(dividers.length > 0);
+    const div = dividers[0];
+    const handled = engine.onInput({ type: "pointerdown", x: div.x + 1, y: div.y + 1 });
+    assert.strictEqual(handled, true);
+    assert.ok(engine._dragState !== null);
+    assert.strictEqual(engine._dragState.splitId, div.splitId);
+  });
+
+  it("onInput mousemove updates ratio during drag", () => {
+    const engine = new LayoutEngine(DarkTheme);
+    engine.setRoot({
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.5,
+      children: [
+        { type: "tab", panels: ["p1"], activeTab: 0 },
+        { type: "tab", panels: ["p2"], activeTab: 0 },
+      ],
+    });
+    engine.compute(800, 600);
+    const div = engine.getSplitDividers()[0];
+    engine.onInput({ type: "pointerdown", x: div.x + 1, y: div.y + 1 });
+    const handled = engine.onInput({ type: "pointermove", x: div.x + 80, y: div.y + 1 });
+    assert.strictEqual(handled, true);
+  });
+
+  it("onInput mouseup ends drag", () => {
+    const engine = new LayoutEngine(DarkTheme);
+    engine.setRoot({
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.4,
+      children: [
+        { type: "tab", panels: ["p1"], activeTab: 0 },
+        { type: "tab", panels: ["p2"], activeTab: 0 },
+      ],
+    });
+    engine.compute(800, 600);
+    const div = engine.getSplitDividers()[0];
+    engine.onInput({ type: "pointerdown", x: div.x + 1, y: div.y + 1 });
+    assert.ok(engine._dragState !== null);
+    engine.onInput({ type: "pointerup" });
+    assert.strictEqual(engine._dragState, null);
+  });
+
+  it("onInput mousedown outside divider returns false", () => {
+    const engine = new LayoutEngine(DarkTheme);
+    engine.setRoot({
+      type: "split",
+      direction: "horizontal",
+      ratio: 0.4,
+      children: [
+        { type: "tab", panels: ["p1"], activeTab: 0 },
+        { type: "tab", panels: ["p2"], activeTab: 0 },
+      ],
+    });
+    engine.compute(800, 600);
+    const handled = engine.onInput({ type: "pointerdown", x: 0, y: 0 });
+    assert.strictEqual(handled, false);
+  });
+});
+
+describe("InputRouter", () => {
+  it("construction and defaults", () => {
+    const router = new InputRouter(new OverlayContext(), makeMockPanels(), makeMockLayout());
+    assert.strictEqual(router.focusedPanelId, null);
+  });
+
+  it("process dispatches click to panel via hitTest", () => {
+    let handled = false;
+    const panels = makeMockPanels();
+    const testPanel = {
+      id: "test",
+      handleInput(event) { handled = true; return true; },
+    };
+    panels.register(testPanel);
+    const layout = makeMockLayout({
+      hitTest(x, y) { return { type: "panel", panelId: "test" }; },
+    });
+    const router = new InputRouter(new OverlayContext(), panels, layout);
+    const result = router.process({ type: "click", x: 100, y: 100 });
+    assert.strictEqual(result, true);
+    assert.strictEqual(handled, true);
+    assert.strictEqual(router.focusedPanelId, "test");
+  });
+
+  it("process click outside panels clears focus", () => {
+    const router = new InputRouter(new OverlayContext(), makeMockPanels(), makeMockLayout());
+    router.focus("performance");
+    const result = router.process({ type: "click", x: 0, y: 0 });
+    assert.strictEqual(result, true);
+    assert.strictEqual(router.focusedPanelId, null);
+  });
+
+  it("process keyboard goes to focused panel", () => {
+    let handled = false;
+    const panels = makeMockPanels();
+    const testPanel = {
+      id: "focused",
+      handleInput(event) { handled = true; return true; },
+    };
+    panels.register(testPanel);
+    const router = new InputRouter(new OverlayContext(), panels, makeMockLayout());
+    router.focus("focused");
+    const result = router.process({ type: "keydown", key: "ArrowLeft" });
+    assert.strictEqual(result, true);
+    assert.strictEqual(handled, true);
+  });
+
+  it("process keyboard with no focused panel returns false", () => {
+    const router = new InputRouter(new OverlayContext(), makeMockPanels(), makeMockLayout());
+    const result = router.process({ type: "keydown", key: "Enter" });
+    assert.strictEqual(result, false);
+  });
+
+  it("process Escape clears focus", () => {
+    const router = new InputRouter(new OverlayContext(), makeMockPanels(), makeMockLayout());
+    router.focus("performance");
+    const result = router.process({ type: "keydown", key: "Escape" });
+    assert.strictEqual(result, true);
+    assert.strictEqual(router.focusedPanelId, null);
+  });
+
+  it("process layout phase delegates to layout.onInput", () => {
+    let layoutHandled = false;
+    const layout = makeMockLayout({
+      onInput() { layoutHandled = true; return true; },
+    });
+    const router = new InputRouter(new OverlayContext(), makeMockPanels(), layout);
+    const result = router.process({ type: "pointerdown", x: 10, y: 10 });
+    assert.strictEqual(result, true);
+    assert.strictEqual(layoutHandled, true);
+  });
+
+  it("process panel stops at layout phase if handled", () => {
+    let panelHit = false;
+    const layout = makeMockLayout({
+      onInput() { return true; },
+    });
+    const panels = makeMockPanels();
+    panels.register({ id: "p", handleInput() { panelHit = true; return true; } });
+    const router = new InputRouter(new OverlayContext(), panels, layout);
+    router.process({ type: "pointerdown", x: 10, y: 10 });
+    assert.strictEqual(panelHit, false);
+  });
+
+  it("handleWidgetInput is called when panel has the method", () => {
+    let widgetCalled = false;
+    const panels = makeMockPanels();
+    const panel = {
+      id: "test",
+      handleWidgetInput() { widgetCalled = true; return true; },
+      handleInput() { return false; },
+    };
+    panels.register(panel);
+    const layout = makeMockLayout({
+      hitTest() { return { type: "panel", panelId: "test" }; },
+    });
+    const router = new InputRouter(new OverlayContext(), panels, layout);
+    router.focus("test");
+    router.process({ type: "click", x: 50, y: 50 });
+    assert.strictEqual(widgetCalled, true);
+  });
+});
+
+describe("OverlaySession input", () => {
+  it("creates InputRouter and SelectionManager", () => {
+    const session = new OverlaySession();
+    assert.ok(session.input instanceof InputRouter);
+    assert.ok(session.selection instanceof SelectionManager);
+    assert.ok(session.context.input instanceof InputRouter);
+    assert.ok(session.context.selection instanceof SelectionManager);
+  });
+
+  it("processInput delegates to router", () => {
+    const session = new OverlaySession();
+    session.show();
+    const result = session.processInput({ type: "click", x: 0, y: 0 });
+    // Click outside will be handled by bubble phase
+    assert.strictEqual(result, true);
+  });
+
+  it("processInput returns false when hidden", () => {
+    const session = new OverlaySession();
+    const result = session.processInput({ type: "click", x: 0, y: 0 });
+    assert.strictEqual(result, false);
   });
 });

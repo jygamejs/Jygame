@@ -30,3 +30,5 @@ export { MetricSearchIndex } from "./metrics/MetricSearchIndex.js";
 export { EventViewerPanel } from "./panels/EventViewerPanel.js";
 export { CaptureBrowserPanel } from "./panels/CaptureBrowserPanel.js";
 export { SettingsPanel } from "./panels/SettingsPanel.js";
+export { InputRouter } from "./InputRouter.js";
+export { SelectionManager } from "./SelectionManager.js";
