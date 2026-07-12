@@ -14,3 +14,9 @@ export { KeyCode } from "./KeyCode.js";
 export { Modifier } from "./Modifier.js";
 export { Keyboard } from "./Keyboard.js";
 export { KeyboardState } from "./KeyboardState.js";
+
+export { PointerType } from "./PointerType.js";
+export { Pointer } from "./Pointer.js";
+export { PointerHistory } from "./PointerHistory.js";
+export { PointerStorage } from "./PointerStorage.js";
+export { PointerManager } from "./PointerManager.js";
