@@ -26,3 +26,16 @@ export { Mouse } from "./Mouse.js";
 
 export { TouchSurface } from "./TouchSurface.js";
 export { Stylus } from "./Stylus.js";
+
+export { GestureType } from "./GestureType.js";
+export { GestureEvent } from "./GestureEvent.js";
+export { GestureRecognizer } from "./GestureRecognizer.js";
+export { GestureEngine } from "./GestureEngine.js";
+export { TapRecognizer } from "./recognizers/TapRecognizer.js";
+export { DoubleTapRecognizer } from "./recognizers/DoubleTapRecognizer.js";
+export { LongPressRecognizer } from "./recognizers/LongPressRecognizer.js";
+export { DragRecognizer } from "./recognizers/DragRecognizer.js";
+export { SwipeRecognizer } from "./recognizers/SwipeRecognizer.js";
+export { PinchRecognizer } from "./recognizers/PinchRecognizer.js";
+export { RotateRecognizer } from "./recognizers/RotateRecognizer.js";
+export { PanRecognizer } from "./recognizers/PanRecognizer.js";
