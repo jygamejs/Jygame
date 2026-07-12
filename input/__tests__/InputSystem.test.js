@@ -42,7 +42,7 @@ describe("InputSystem", () => {
     assert.ok(stopped);
   });
 
-  it("update calls backend.poll and devices.update", () => {
+  it("update calls backend.poll and clears queue", () => {
     const sys = new InputSystem();
     let polled = false;
     const backend = {
@@ -56,7 +56,8 @@ describe("InputSystem", () => {
     sys.setBackend(backend);
     sys.update();
     assert.ok(polled);
-    assert.strictEqual(sys.events.length, 1);
+    // Queue is cleared after update
+    assert.strictEqual(sys.events.length, 0);
   });
 
   it("update does not throw when no backend is set", () => {

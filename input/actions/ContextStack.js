@@ -32,6 +32,14 @@ export class ContextStack {
     return this._contexts.reduce((a, b) => a.priority >= b.priority ? a : b);
   }
 
+  snapshot() {
+    for (const ctx of this._contexts) {
+      for (const entry of ctx.actionMap.entries()) {
+        entry.state.snapshot();
+      }
+    }
+  }
+
   evaluate(deviceRegistry) {
     const sorted = [...this._contexts].sort((a, b) => b.priority - a.priority);
     const consumed = new Set();

@@ -31,7 +31,15 @@ export class CoordinateSystem {
     if (!this._camera) {
       return { x: viewportPoint.x, y: viewportPoint.y };
     }
-    return this._camera.unproject(viewportPoint.x, viewportPoint.y);
+    if (typeof this._camera.unproject === "function") {
+      return this._camera.unproject(viewportPoint.x, viewportPoint.y);
+    }
+    if (typeof this._camera.screenToWorld === "function") {
+      const out = {};
+      this._camera.screenToWorld(viewportPoint.x, viewportPoint.y, out);
+      return out;
+    }
+    return { x: viewportPoint.x, y: viewportPoint.y };
   }
 
   toUI(viewportPoint) {
@@ -41,7 +49,13 @@ export class CoordinateSystem {
   toScreen(worldPoint) {
     let vp = { x: worldPoint.x, y: worldPoint.y };
     if (this._camera) {
-      vp = this._camera.project(worldPoint.x, worldPoint.y);
+      if (typeof this._camera.project === "function") {
+        vp = this._camera.project(worldPoint.x, worldPoint.y);
+      } else if (typeof this._camera.worldToScreen === "function") {
+        const out = {};
+        this._camera.worldToScreen(worldPoint.x, worldPoint.y, out);
+        vp = out;
+      }
     }
     return {
       x: vp.x * this._devicePixelRatio + this._canvasRect.x,

@@ -1,5 +1,9 @@
 import { Clock } from "../time/Clock.js";
 import { Input, InputContext } from "../input/Input.js";
+import { InputSystem } from "../input/InputSystem.js";
+import { BrowserBackend } from "../input/BrowserBackend.js";
+import { ContextStack } from "../input/actions/ContextStack.js";
+import { CoordinateSystem } from "../input/CoordinateSystem.js";
 import { Scene } from "./Scene.js";
 import { Diagnostics, MetricCategory, MetricUnit, MetricType, resolveMetricIds }
   from "../debug/index.js";
@@ -50,6 +54,15 @@ export class Game {
     this.input = new InputContext();
     this.input.init(container);
     Input.setDefault(this.input);
+
+    this.inputSystem = new InputSystem();
+    const backend = new BrowserBackend(container);
+    this.inputSystem.setBackend(backend);
+    this.inputSystem.contextStack = new ContextStack();
+    this.inputSystem.coordinateSystem = new CoordinateSystem({
+      canvasRect: { x: 0, y: 0, width, height },
+      devicePixelRatio: window.devicePixelRatio || 1,
+    });
 
     this._visibilityHandler = null;
     if (autoPause) {
@@ -442,7 +455,10 @@ export class Game {
   _frame(diag, ticks, realDt) {
     const mids = this._diagIds;
 
-    const doInput = () => { this.input.updateFrame(); };
+    const doInput = () => {
+      this.input.updateFrame();
+      this.inputSystem.update();
+    };
     if (diag && mids && mids.frameInput >= 0) {
       diag.scope(mids.frameInput, doInput);
     } else { doInput(); }

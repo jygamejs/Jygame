@@ -53,6 +53,18 @@ export class Camera {
     out.y = this.y + a * this._sin + b * this._cos;
   }
 
+  project(x, y) {
+    const out = {};
+    this.worldToScreen(x, y, out);
+    return out;
+  }
+
+  unproject(x, y) {
+    const out = {};
+    this.screenToWorld(x, y, out);
+    return out;
+  }
+
   follow(entity) {
     this.x = entity.transform.x;
     this.y = entity.transform.y;

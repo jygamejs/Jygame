@@ -4,6 +4,8 @@ import { DefaultWorldBuilder } from "../ecs/bootstrap/DefaultWorldBuilder.js";
 import { CanvasContext } from "../ecs/render/CanvasContext.js";
 import { Camera } from "../camera/Camera.js";
 import { Sprite } from "../display/Sprite.js";
+import { InputContext } from "../input/actions/InputContext.js";
+import { ActionMap } from "../input/actions/ActionMap.js";
 
 export class Scene extends EcsScene {
   constructor() {
@@ -19,6 +21,9 @@ export class Scene extends EcsScene {
     this.blocksUpdateBelow = true;
     this.blocksRenderBelow = false;
     this._prevDefaultWorld = null;
+    this._inputContext = null;
+    this._actionMap = new ActionMap();
+    this._inputPriority = 0;
   }
 
   _createWorld() {
@@ -60,6 +65,19 @@ export class Scene extends EcsScene {
 
       const cam = new Camera(0, 0, this._game.width, this._game.height);
       this._world.setResource(Camera, cam);
+
+      if (this._game.inputSystem && this._game.inputSystem.coordinateSystem) {
+        this._game.inputSystem.coordinateSystem.camera = cam;
+      }
+
+      if (this._game.inputSystem && this._game.inputSystem.contextStack) {
+        this._inputContext = new InputContext(
+          this.constructor.name,
+          this._actionMap,
+          { priority: this._inputPriority },
+        );
+        this._game.inputSystem.contextStack.push(this._inputContext);
+      }
     }
 
     this._prevDefaultWorld = Sprite._defaultWorld;
@@ -80,6 +98,13 @@ export class Scene extends EcsScene {
       try { fn(); } catch (err) { console.error(err); }
     }
     this._cleanups = [];
+
+    if (this._game && this._game.inputSystem && this._game.inputSystem.contextStack) {
+      if (this._inputContext) {
+        this._game.inputSystem.contextStack.pop(this._inputContext.name);
+        this._inputContext = null;
+      }
+    }
 
     if (Sprite._defaultWorld === this._world) {
       Sprite._defaultWorld = this._prevDefaultWorld;

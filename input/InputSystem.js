@@ -6,15 +6,18 @@ export class InputSystem {
     this._devices = new DeviceRegistry();
     this._events = new InputEventQueue(options.queueCapacity || 64);
     this._backend = null;
-    this._actions = null;
+    this._contextStack = null;
+    this._coordinateSystem = null;
   }
 
   get devices() { return this._devices; }
   get events() { return this._events; }
   get backend() { return this._backend; }
-  get actions() { return this._actions; }
+  get contextStack() { return this._contextStack; }
+  get coordinateSystem() { return this._coordinateSystem; }
 
-  set actions(acts) { this._actions = acts; }
+  set contextStack(cs) { this._contextStack = cs; }
+  set coordinateSystem(cs) { this._coordinateSystem = cs; }
 
   setBackend(backend) {
     if (this._backend) this._backend.stop();
@@ -22,10 +25,25 @@ export class InputSystem {
     if (backend) backend.start();
   }
 
+  snapshot() {
+    if (this._contextStack) {
+      this._contextStack.snapshot();
+    }
+  }
+
   update() {
+    this.snapshot();
+
     if (this._backend) {
       this._backend.poll(this._events);
     }
+
     this._devices.update(this._events);
+
+    if (this._contextStack) {
+      this._contextStack.evaluate(this._devices);
+    }
+
+    this._events.clear();
   }
 }
