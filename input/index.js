@@ -23,3 +23,6 @@ export { PointerManager } from "./PointerManager.js";
 
 export { MouseButton } from "./MouseButton.js";
 export { Mouse } from "./Mouse.js";
+
+export { TouchSurface } from "./TouchSurface.js";
+export { Stylus } from "./Stylus.js";
