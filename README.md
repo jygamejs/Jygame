@@ -439,9 +439,6 @@ Resolution order: `Physical Key → Device → Binding → Processor → ActionS
 `ContextStack` supports priority-based shadowing — a pause menu context at higher
 priority can block gameplay bindings with `consumePolicy: "block"`.
 
-Architecture reference: [`docs/audit/input-system-architecture.md`](docs/audit/input-system-architecture.md)
-and beginner-friendly guide at [`docs/audit/input-system-guide.md`](docs/audit/input-system-guide.md).
-
 ## License
 
 GNU General Public License v3.0
