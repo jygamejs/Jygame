@@ -126,6 +126,30 @@ export class TestBackend extends InputBackend {
     return this;
   }
 
+  compositionStart(data = "") {
+    this._events.push({
+      event: new InputEvent(EventType.COMPOSITION_START, { data }),
+      tier: Tier.HIGH,
+    });
+    return this;
+  }
+
+  compositionUpdate(data = "") {
+    this._events.push({
+      event: new InputEvent(EventType.COMPOSITION_UPDATE, { data }),
+      tier: Tier.HIGH,
+    });
+    return this;
+  }
+
+  compositionEnd(data = "") {
+    this._events.push({
+      event: new InputEvent(EventType.COMPOSITION_END, { data }),
+      tier: Tier.HIGH,
+    });
+    return this;
+  }
+
   clear() {
     this._events = [];
     return this;

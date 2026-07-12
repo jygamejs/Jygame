@@ -16,6 +16,9 @@ export class BrowserBackend extends InputBackend {
     this._boundPointerUp = this._onPointerUp.bind(this);
     this._boundPointerCancel = this._onPointerCancel.bind(this);
     this._boundWheel = this._onWheel.bind(this);
+    this._boundCompositionStart = this._onCompositionStart.bind(this);
+    this._boundCompositionUpdate = this._onCompositionUpdate.bind(this);
+    this._boundCompositionEnd = this._onCompositionEnd.bind(this);
   }
 
   get name() { return "browser"; }
@@ -30,6 +33,9 @@ export class BrowserBackend extends InputBackend {
     el.addEventListener("pointerup", this._boundPointerUp, { passive: false });
     el.addEventListener("pointercancel", this._boundPointerCancel, { passive: false });
     el.addEventListener("wheel", this._boundWheel, { passive: false });
+    el.addEventListener("compositionstart", this._boundCompositionStart);
+    el.addEventListener("compositionupdate", this._boundCompositionUpdate);
+    el.addEventListener("compositionend", this._boundCompositionEnd);
     el.style.touchAction = "none";
     this._attached = true;
   }
@@ -44,6 +50,9 @@ export class BrowserBackend extends InputBackend {
     el.removeEventListener("pointerup", this._boundPointerUp);
     el.removeEventListener("pointercancel", this._boundPointerCancel);
     el.removeEventListener("wheel", this._boundWheel);
+    el.removeEventListener("compositionstart", this._boundCompositionStart);
+    el.removeEventListener("compositionupdate", this._boundCompositionUpdate);
+    el.removeEventListener("compositionend", this._boundCompositionEnd);
     el.style.touchAction = "";
     this._attached = false;
   }
@@ -149,6 +158,24 @@ export class BrowserBackend extends InputBackend {
       deltaZ: e.deltaZ,
       deltaMode: e.deltaMode,
     }), Tier.NORMAL);
+  }
+
+  _onCompositionStart(e) {
+    this._queue.push(new InputEvent(EventType.COMPOSITION_START, {
+      data: e.data || "",
+    }), Tier.HIGH);
+  }
+
+  _onCompositionUpdate(e) {
+    this._queue.push(new InputEvent(EventType.COMPOSITION_UPDATE, {
+      data: e.data || "",
+    }), Tier.HIGH);
+  }
+
+  _onCompositionEnd(e) {
+    this._queue.push(new InputEvent(EventType.COMPOSITION_END, {
+      data: e.data || "",
+    }), Tier.HIGH);
   }
 
   get _queue() {

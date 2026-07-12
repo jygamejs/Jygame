@@ -27,6 +27,8 @@ export { Mouse } from "./Mouse.js";
 export { TouchSurface } from "./TouchSurface.js";
 export { Stylus } from "./Stylus.js";
 
+export { TextInput } from "./TextInput.js";
+
 export { GestureType } from "./GestureType.js";
 export { GestureEvent } from "./GestureEvent.js";
 export { GestureRecognizer } from "./GestureRecognizer.js";
