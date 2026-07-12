@@ -19,6 +19,14 @@ class TierBuffer {
     this._count++;
   }
 
+  each(fn) {
+    let pos = this._head;
+    for (let i = 0; i < this._count; i++) {
+      fn(this._buffer[pos]);
+      pos = (pos + 1) % this._capacity;
+    }
+  }
+
   drain(fn) {
     while (this._count > 0) {
       const event = this._buffer[this._head];
@@ -51,6 +59,12 @@ export class InputEventQueue {
 
   push(event, tier = Tier.NORMAL) {
     this._tiers[tier].push(event);
+  }
+
+  each(fn) {
+    this._tiers[Tier.HIGH].each(fn);
+    this._tiers[Tier.NORMAL].each(fn);
+    this._tiers[Tier.LOW].each(fn);
   }
 
   drain(fn) {

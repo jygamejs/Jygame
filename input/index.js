@@ -9,3 +9,8 @@ export { Tier } from "./Tier.js";
 export { InputBackend } from "./InputBackend.js";
 export { BrowserBackend } from "./BrowserBackend.js";
 export { TestBackend } from "./TestBackend.js";
+
+export { KeyCode } from "./KeyCode.js";
+export { Modifier } from "./Modifier.js";
+export { Keyboard } from "./Keyboard.js";
+export { KeyboardState } from "./KeyboardState.js";

@@ -55,7 +55,7 @@ export class DeviceRegistry {
     }
   }
 
-  update() {
-    this.forEach(device => device.update());
+  update(queue) {
+    this.forEach(device => device.update(queue));
   }
 }

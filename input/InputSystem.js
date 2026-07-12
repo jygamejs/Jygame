@@ -26,6 +26,6 @@ export class InputSystem {
     if (this._backend) {
       this._backend.poll(this._events);
     }
-    this._devices.update();
+    this._devices.update(this._events);
   }
 }
