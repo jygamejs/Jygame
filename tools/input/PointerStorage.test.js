@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import * as assert from "node:assert";
-import { PointerStorage } from "../PointerStorage.js";
+import { PointerStorage } from "../../input/PointerStorage.js";
 
 describe("PointerStorage", () => {
   it("starts with no active pointers", () => {

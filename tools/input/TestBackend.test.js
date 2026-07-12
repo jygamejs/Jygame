@@ -1,8 +1,8 @@
 import { describe, it } from "node:test";
 import * as assert from "node:assert";
-import { TestBackend } from "../TestBackend.js";
-import { InputEventQueue } from "../InputEventQueue.js";
-import { EventType } from "../EventType.js";
+import { TestBackend } from "../../input/TestBackend.js";
+import { InputEventQueue } from "../../input/InputEventQueue.js";
+import { EventType } from "../../input/EventType.js";
 
 describe("TestBackend", () => {
   it("has name 'test'", () => {

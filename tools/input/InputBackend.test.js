@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import * as assert from "node:assert";
-import { InputBackend } from "../InputBackend.js";
+import { InputBackend } from "../../input/InputBackend.js";
 
 describe("InputBackend", () => {
   it("has a name getter returning 'abstract'", () => {

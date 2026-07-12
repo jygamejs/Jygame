@@ -1,11 +1,11 @@
 import { describe, it } from "node:test";
 import * as assert from "node:assert";
-import { Stylus } from "../Stylus.js";
-import { PointerManager } from "../PointerManager.js";
-import { InputEventQueue } from "../InputEventQueue.js";
-import { InputEvent } from "../InputEvent.js";
-import { EventType } from "../EventType.js";
-import { Tier } from "../Tier.js";
+import { Stylus } from "../../input/Stylus.js";
+import { PointerManager } from "../../input/PointerManager.js";
+import { InputEventQueue } from "../../input/InputEventQueue.js";
+import { InputEvent } from "../../input/InputEvent.js";
+import { EventType } from "../../input/EventType.js";
+import { Tier } from "../../input/Tier.js";
 
 function penDown(id, options = {}) {
   return new InputEvent(EventType.POINTER_DOWN, {

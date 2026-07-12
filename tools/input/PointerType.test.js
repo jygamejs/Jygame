@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import * as assert from "node:assert";
-import { PointerType } from "../PointerType.js";
+import { PointerType } from "../../input/PointerType.js";
 
 describe("PointerType", () => {
   it("defines MOUSE", () => {

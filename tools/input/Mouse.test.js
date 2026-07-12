@@ -1,11 +1,11 @@
 import { describe, it } from "node:test";
 import * as assert from "node:assert";
-import { Mouse } from "../Mouse.js";
-import { MouseButton } from "../MouseButton.js";
-import { InputEventQueue } from "../InputEventQueue.js";
-import { InputEvent } from "../InputEvent.js";
-import { EventType } from "../EventType.js";
-import { Tier } from "../Tier.js";
+import { Mouse } from "../../input/Mouse.js";
+import { MouseButton } from "../../input/MouseButton.js";
+import { InputEventQueue } from "../../input/InputEventQueue.js";
+import { InputEvent } from "../../input/InputEvent.js";
+import { EventType } from "../../input/EventType.js";
+import { Tier } from "../../input/Tier.js";
 
 function pointerEvent(type, data = {}) {
   return new InputEvent(type, {

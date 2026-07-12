@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import * as assert from "node:assert";
-import { Modifier } from "../Modifier.js";
+import { Modifier } from "../../input/Modifier.js";
 
 describe("Modifier", () => {
   it("NONE is 0", () => {

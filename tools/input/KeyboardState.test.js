@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import * as assert from "node:assert";
-import { KeyboardState } from "../KeyboardState.js";
-import { KeyCode } from "../KeyCode.js";
+import { KeyboardState } from "../../input/KeyboardState.js";
+import { KeyCode } from "../../input/KeyCode.js";
 
 describe("KeyboardState", () => {
   it("starts with all keys up", () => {

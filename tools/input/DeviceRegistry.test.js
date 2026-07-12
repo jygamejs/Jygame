@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import * as assert from "node:assert";
-import { DeviceRegistry } from "../DeviceRegistry.js";
-import { Device } from "../Device.js";
+import { DeviceRegistry } from "../../input/DeviceRegistry.js";
+import { Device } from "../../input/Device.js";
 
 class TestDeviceA extends Device {
   constructor(name) {

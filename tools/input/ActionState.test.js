@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import * as assert from "node:assert";
-import { ActionKind } from "../ActionKind.js";
-import { ActionState } from "../actions/ActionState.js";
+import { ActionKind } from "../../input/ActionKind.js";
+import { ActionState } from "../../input/actions/ActionState.js";
 
 describe("ActionKind", () => {
   it("DIGITAL is 0", () => assert.strictEqual(ActionKind.DIGITAL, 0));

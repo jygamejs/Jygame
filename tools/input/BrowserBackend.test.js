@@ -1,8 +1,8 @@
 import { describe, it, mock } from "node:test";
 import * as assert from "node:assert";
-import { BrowserBackend } from "../BrowserBackend.js";
-import { InputEventQueue } from "../InputEventQueue.js";
-import { EventType } from "../EventType.js";
+import { BrowserBackend } from "../../input/BrowserBackend.js";
+import { InputEventQueue } from "../../input/InputEventQueue.js";
+import { EventType } from "../../input/EventType.js";
 
 function createMockElement() {
   const listeners = {};

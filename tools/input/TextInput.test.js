@@ -1,10 +1,10 @@
 import { describe, it } from "node:test";
 import * as assert from "node:assert";
-import { TextInput } from "../TextInput.js";
-import { InputEventQueue } from "../InputEventQueue.js";
-import { InputEvent } from "../InputEvent.js";
-import { EventType } from "../EventType.js";
-import { Tier } from "../Tier.js";
+import { TextInput } from "../../input/TextInput.js";
+import { InputEventQueue } from "../../input/InputEventQueue.js";
+import { InputEvent } from "../../input/InputEvent.js";
+import { EventType } from "../../input/EventType.js";
+import { Tier } from "../../input/Tier.js";
 
 function keyDown(key, printable = true) {
   return new InputEvent(EventType.KEY_DOWN, {

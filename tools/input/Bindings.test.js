@@ -1,18 +1,18 @@
 import { describe, it } from "node:test";
 import * as assert from "node:assert";
-import { DeviceRegistry } from "../DeviceRegistry.js";
-import { Keyboard } from "../Keyboard.js";
-import { Mouse } from "../Mouse.js";
-import { KeyCode } from "../KeyCode.js";
-import { MouseButton } from "../MouseButton.js";
-import { InputEventQueue } from "../InputEventQueue.js";
-import { InputEvent } from "../InputEvent.js";
-import { EventType } from "../EventType.js";
-import { Tier } from "../Tier.js";
-import { KeyBinding } from "../actions/KeyBinding.js";
-import { MouseButtonBinding } from "../actions/MouseButtonBinding.js";
-import { WheelBinding } from "../actions/WheelBinding.js";
-import { Binding } from "../actions/Binding.js";
+import { DeviceRegistry } from "../../input/DeviceRegistry.js";
+import { Keyboard } from "../../input/Keyboard.js";
+import { Mouse } from "../../input/Mouse.js";
+import { KeyCode } from "../../input/KeyCode.js";
+import { MouseButton } from "../../input/MouseButton.js";
+import { InputEventQueue } from "../../input/InputEventQueue.js";
+import { InputEvent } from "../../input/InputEvent.js";
+import { EventType } from "../../input/EventType.js";
+import { Tier } from "../../input/Tier.js";
+import { KeyBinding } from "../../input/actions/KeyBinding.js";
+import { MouseButtonBinding } from "../../input/actions/MouseButtonBinding.js";
+import { WheelBinding } from "../../input/actions/WheelBinding.js";
+import { Binding } from "../../input/actions/Binding.js";
 
 function keyDown(domCode) {
   return new InputEvent(EventType.KEY_DOWN, {

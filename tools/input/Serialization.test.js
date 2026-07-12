@@ -1,36 +1,36 @@
 import { describe, it } from "node:test";
 import * as assert from "node:assert";
-import { KeyCode } from "../KeyCode.js";
-import { GestureType } from "../GestureType.js";
-import { MouseButton } from "../MouseButton.js";
-import { ActionKind } from "../ActionKind.js";
+import { KeyCode } from "../../input/KeyCode.js";
+import { GestureType } from "../../input/GestureType.js";
+import { MouseButton } from "../../input/MouseButton.js";
+import { ActionKind } from "../../input/ActionKind.js";
 
-import { KeyBinding } from "../actions/KeyBinding.js";
-import { MouseButtonBinding } from "../actions/MouseButtonBinding.js";
-import { WheelBinding } from "../actions/WheelBinding.js";
-import { ChordBinding } from "../actions/ChordBinding.js";
-import { CompositeBinding } from "../actions/CompositeBinding.js";
-import { GestureBinding } from "../actions/GestureBinding.js";
-import { GamepadButtonBinding } from "../actions/GamepadButtonBinding.js";
-import { GamepadAxisBinding } from "../actions/GamepadAxisBinding.js";
-import { deserializeBinding } from "../actions/Binding.js";
+import { KeyBinding } from "../../input/actions/KeyBinding.js";
+import { MouseButtonBinding } from "../../input/actions/MouseButtonBinding.js";
+import { WheelBinding } from "../../input/actions/WheelBinding.js";
+import { ChordBinding } from "../../input/actions/ChordBinding.js";
+import { CompositeBinding } from "../../input/actions/CompositeBinding.js";
+import { GestureBinding } from "../../input/actions/GestureBinding.js";
+import { GamepadButtonBinding } from "../../input/actions/GamepadButtonBinding.js";
+import { GamepadAxisBinding } from "../../input/actions/GamepadAxisBinding.js";
+import { deserializeBinding } from "../../input/actions/Binding.js";
 
-import { DeadZoneProcessor } from "../actions/processors/DeadZoneProcessor.js";
-import { ScaleProcessor } from "../actions/processors/ScaleProcessor.js";
-import { InvertProcessor } from "../actions/processors/InvertProcessor.js";
-import { SmoothProcessor } from "../actions/processors/SmoothProcessor.js";
-import { deserializeProcessor } from "../actions/processors/Processor.js";
+import { DeadZoneProcessor } from "../../input/actions/processors/DeadZoneProcessor.js";
+import { ScaleProcessor } from "../../input/actions/processors/ScaleProcessor.js";
+import { InvertProcessor } from "../../input/actions/processors/InvertProcessor.js";
+import { SmoothProcessor } from "../../input/actions/processors/SmoothProcessor.js";
+import { deserializeProcessor } from "../../input/actions/processors/Processor.js";
 
-import { ActionMap } from "../actions/ActionMap.js";
-import { InputContext } from "../actions/InputContext.js";
-import { DeviceRegistry } from "../DeviceRegistry.js";
-import { Keyboard } from "../Keyboard.js";
-import { InputEventQueue } from "../InputEventQueue.js";
-import { InputEvent } from "../InputEvent.js";
-import { EventType } from "../EventType.js";
-import { Tier } from "../Tier.js";
-import { ActionEvaluator } from "../actions/ActionEvaluator.js";
-import { ActionState } from "../actions/ActionState.js";
+import { ActionMap } from "../../input/actions/ActionMap.js";
+import { InputContext } from "../../input/actions/InputContext.js";
+import { DeviceRegistry } from "../../input/DeviceRegistry.js";
+import { Keyboard } from "../../input/Keyboard.js";
+import { InputEventQueue } from "../../input/InputEventQueue.js";
+import { InputEvent } from "../../input/InputEvent.js";
+import { EventType } from "../../input/EventType.js";
+import { Tier } from "../../input/Tier.js";
+import { ActionEvaluator } from "../../input/actions/ActionEvaluator.js";
+import { ActionState } from "../../input/actions/ActionState.js";
 
 function keyDown(domCode) {
   return new InputEvent(EventType.KEY_DOWN, {

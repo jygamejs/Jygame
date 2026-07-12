@@ -1,20 +1,20 @@
 import { describe, it } from "node:test";
 import * as assert from "node:assert";
-import { DeviceRegistry } from "../DeviceRegistry.js";
-import { Keyboard } from "../Keyboard.js";
-import { KeyCode } from "../KeyCode.js";
-import { InputEventQueue } from "../InputEventQueue.js";
-import { InputEvent } from "../InputEvent.js";
-import { EventType } from "../EventType.js";
-import { Tier } from "../Tier.js";
-import { ActionKind } from "../ActionKind.js";
-import { ActionMap } from "../actions/ActionMap.js";
-import { InputContext } from "../actions/InputContext.js";
-import { ContextStack } from "../actions/ContextStack.js";
-import { ActionEvaluator } from "../actions/ActionEvaluator.js";
-import { KeyBinding } from "../actions/KeyBinding.js";
-import { MouseButtonBinding } from "../actions/MouseButtonBinding.js";
-import { MouseButton } from "../MouseButton.js";
+import { DeviceRegistry } from "../../input/DeviceRegistry.js";
+import { Keyboard } from "../../input/Keyboard.js";
+import { KeyCode } from "../../input/KeyCode.js";
+import { InputEventQueue } from "../../input/InputEventQueue.js";
+import { InputEvent } from "../../input/InputEvent.js";
+import { EventType } from "../../input/EventType.js";
+import { Tier } from "../../input/Tier.js";
+import { ActionKind } from "../../input/ActionKind.js";
+import { ActionMap } from "../../input/actions/ActionMap.js";
+import { InputContext } from "../../input/actions/InputContext.js";
+import { ContextStack } from "../../input/actions/ContextStack.js";
+import { ActionEvaluator } from "../../input/actions/ActionEvaluator.js";
+import { KeyBinding } from "../../input/actions/KeyBinding.js";
+import { MouseButtonBinding } from "../../input/actions/MouseButtonBinding.js";
+import { MouseButton } from "../../input/MouseButton.js";
 
 function keyDown(domCode) {
   return new InputEvent(EventType.KEY_DOWN, {

@@ -1,22 +1,22 @@
 import { describe, it, mock } from "node:test";
 import * as assert from "node:assert";
-import { InputSystem } from "../InputSystem.js";
-import { InputEventQueue } from "../InputEventQueue.js";
-import { InputEvent } from "../InputEvent.js";
-import { EventType } from "../EventType.js";
-import { Tier } from "../Tier.js";
-import { Device } from "../Device.js";
-import { DeviceRegistry } from "../DeviceRegistry.js";
-import { ActionKind } from "../ActionKind.js";
-import { ActionMap } from "../actions/ActionMap.js";
-import { ActionEvaluator } from "../actions/ActionEvaluator.js";
-import { ContextStack } from "../actions/ContextStack.js";
-import { InputContext } from "../actions/InputContext.js";
-import { CoordinateSystem } from "../CoordinateSystem.js";
-import { KeyBinding } from "../actions/KeyBinding.js";
-import { KeyCode } from "../KeyCode.js";
-import { Keyboard } from "../Keyboard.js";
-import { Space } from "../Space.js";
+import { InputSystem } from "../../input/InputSystem.js";
+import { InputEventQueue } from "../../input/InputEventQueue.js";
+import { InputEvent } from "../../input/InputEvent.js";
+import { EventType } from "../../input/EventType.js";
+import { Tier } from "../../input/Tier.js";
+import { Device } from "../../input/Device.js";
+import { DeviceRegistry } from "../../input/DeviceRegistry.js";
+import { ActionKind } from "../../input/ActionKind.js";
+import { ActionMap } from "../../input/actions/ActionMap.js";
+import { ActionEvaluator } from "../../input/actions/ActionEvaluator.js";
+import { ContextStack } from "../../input/actions/ContextStack.js";
+import { InputContext } from "../../input/actions/InputContext.js";
+import { CoordinateSystem } from "../../input/CoordinateSystem.js";
+import { KeyBinding } from "../../input/actions/KeyBinding.js";
+import { KeyCode } from "../../input/KeyCode.js";
+import { Keyboard } from "../../input/Keyboard.js";
+import { Space } from "../../input/Space.js";
 
 class FakeBackend {
   constructor() { this.events = []; }

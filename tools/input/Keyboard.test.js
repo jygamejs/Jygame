@@ -1,12 +1,12 @@
 import { describe, it } from "node:test";
 import * as assert from "node:assert";
-import { Keyboard } from "../Keyboard.js";
-import { InputEventQueue } from "../InputEventQueue.js";
-import { InputEvent } from "../InputEvent.js";
-import { EventType } from "../EventType.js";
-import { KeyCode } from "../KeyCode.js";
-import { Modifier } from "../Modifier.js";
-import { Tier } from "../Tier.js";
+import { Keyboard } from "../../input/Keyboard.js";
+import { InputEventQueue } from "../../input/InputEventQueue.js";
+import { InputEvent } from "../../input/InputEvent.js";
+import { EventType } from "../../input/EventType.js";
+import { KeyCode } from "../../input/KeyCode.js";
+import { Modifier } from "../../input/Modifier.js";
+import { Tier } from "../../input/Tier.js";
 
 function keyDownEvent(code, options = {}) {
   return new InputEvent(EventType.KEY_DOWN, {

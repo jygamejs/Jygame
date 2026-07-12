@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import * as assert from "node:assert";
-import { Space } from "../Space.js";
-import { CoordinateSystem } from "../CoordinateSystem.js";
+import { Space } from "../../input/Space.js";
+import { CoordinateSystem } from "../../input/CoordinateSystem.js";
 
 function approx(a, b, eps = 1e-10) {
   return Math.abs(a - b) < eps;

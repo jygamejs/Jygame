@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import * as assert from "node:assert";
-import { KeyCode } from "../KeyCode.js";
+import { KeyCode } from "../../input/KeyCode.js";
 
 describe("KeyCode", () => {
   it("has KEY_COUNT set to 115", () => {

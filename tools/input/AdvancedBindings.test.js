@@ -1,25 +1,25 @@
 import { describe, it } from "node:test";
 import * as assert from "node:assert";
-import { DeviceRegistry } from "../DeviceRegistry.js";
-import { Keyboard } from "../Keyboard.js";
-import { Mouse } from "../Mouse.js";
-import { KeyCode } from "../KeyCode.js";
-import { Modifier } from "../Modifier.js";
-import { MouseButton } from "../MouseButton.js";
-import { GestureEngine } from "../GestureEngine.js";
-import { PointerManager } from "../PointerManager.js";
-import { GestureType } from "../GestureType.js";
-import { InputEventQueue } from "../InputEventQueue.js";
-import { InputEvent } from "../InputEvent.js";
-import { EventType } from "../EventType.js";
-import { Tier } from "../Tier.js";
-import { ActionKind } from "../ActionKind.js";
-import { KeyBinding } from "../actions/KeyBinding.js";
-import { ChordBinding } from "../actions/ChordBinding.js";
-import { CompositeBinding } from "../actions/CompositeBinding.js";
-import { GestureBinding } from "../actions/GestureBinding.js";
-import { GamepadButtonBinding } from "../actions/GamepadButtonBinding.js";
-import { GamepadAxisBinding } from "../actions/GamepadAxisBinding.js";
+import { DeviceRegistry } from "../../input/DeviceRegistry.js";
+import { Keyboard } from "../../input/Keyboard.js";
+import { Mouse } from "../../input/Mouse.js";
+import { KeyCode } from "../../input/KeyCode.js";
+import { Modifier } from "../../input/Modifier.js";
+import { MouseButton } from "../../input/MouseButton.js";
+import { GestureEngine } from "../../input/GestureEngine.js";
+import { PointerManager } from "../../input/PointerManager.js";
+import { GestureType } from "../../input/GestureType.js";
+import { InputEventQueue } from "../../input/InputEventQueue.js";
+import { InputEvent } from "../../input/InputEvent.js";
+import { EventType } from "../../input/EventType.js";
+import { Tier } from "../../input/Tier.js";
+import { ActionKind } from "../../input/ActionKind.js";
+import { KeyBinding } from "../../input/actions/KeyBinding.js";
+import { ChordBinding } from "../../input/actions/ChordBinding.js";
+import { CompositeBinding } from "../../input/actions/CompositeBinding.js";
+import { GestureBinding } from "../../input/actions/GestureBinding.js";
+import { GamepadButtonBinding } from "../../input/actions/GamepadButtonBinding.js";
+import { GamepadAxisBinding } from "../../input/actions/GamepadAxisBinding.js";
 
 function keyDown(domCode, options = {}) {
   return new InputEvent(EventType.KEY_DOWN, {

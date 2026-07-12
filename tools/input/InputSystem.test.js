@@ -1,12 +1,12 @@
 import { describe, it } from "node:test";
 import * as assert from "node:assert";
-import { InputSystem } from "../InputSystem.js";
-import { Device } from "../Device.js";
-import { InputEventQueue } from "../InputEventQueue.js";
-import { DeviceRegistry } from "../DeviceRegistry.js";
-import { InputEvent } from "../InputEvent.js";
-import { EventType } from "../EventType.js";
-import { Tier } from "../Tier.js";
+import { InputSystem } from "../../input/InputSystem.js";
+import { Device } from "../../input/Device.js";
+import { InputEventQueue } from "../../input/InputEventQueue.js";
+import { DeviceRegistry } from "../../input/DeviceRegistry.js";
+import { InputEvent } from "../../input/InputEvent.js";
+import { EventType } from "../../input/EventType.js";
+import { Tier } from "../../input/Tier.js";
 
 describe("InputSystem", () => {
   it("constructs with default devices and events", () => {

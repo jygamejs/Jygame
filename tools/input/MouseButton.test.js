@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import * as assert from "node:assert";
-import { MouseButton } from "../MouseButton.js";
+import { MouseButton } from "../../input/MouseButton.js";
 
 describe("MouseButton", () => {
   it("LEFT is 0", () => { assert.strictEqual(MouseButton.LEFT, 0); });

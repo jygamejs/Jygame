@@ -1,25 +1,25 @@
 import { describe, it } from "node:test";
 import * as assert from "node:assert";
-import { DeviceRegistry } from "../DeviceRegistry.js";
-import { Keyboard } from "../Keyboard.js";
-import { KeyCode } from "../KeyCode.js";
-import { InputEventQueue } from "../InputEventQueue.js";
-import { InputEvent } from "../InputEvent.js";
-import { EventType } from "../EventType.js";
-import { Tier } from "../Tier.js";
-import { ActionKind } from "../ActionKind.js";
-import { ActionState } from "../actions/ActionState.js";
-import { ActionEvaluator } from "../actions/ActionEvaluator.js";
-import { Processor } from "../actions/processors/Processor.js";
-import { DeadZoneProcessor } from "../actions/processors/DeadZoneProcessor.js";
-import { ScaleProcessor } from "../actions/processors/ScaleProcessor.js";
-import { InvertProcessor } from "../actions/processors/InvertProcessor.js";
-import { SmoothProcessor } from "../actions/processors/SmoothProcessor.js";
-import { KeyBinding } from "../actions/KeyBinding.js";
-import { MouseButtonBinding } from "../actions/MouseButtonBinding.js";
-import { CompositeBinding } from "../actions/CompositeBinding.js";
-import { Mouse } from "../Mouse.js";
-import { MouseButton } from "../MouseButton.js";
+import { DeviceRegistry } from "../../input/DeviceRegistry.js";
+import { Keyboard } from "../../input/Keyboard.js";
+import { KeyCode } from "../../input/KeyCode.js";
+import { InputEventQueue } from "../../input/InputEventQueue.js";
+import { InputEvent } from "../../input/InputEvent.js";
+import { EventType } from "../../input/EventType.js";
+import { Tier } from "../../input/Tier.js";
+import { ActionKind } from "../../input/ActionKind.js";
+import { ActionState } from "../../input/actions/ActionState.js";
+import { ActionEvaluator } from "../../input/actions/ActionEvaluator.js";
+import { Processor } from "../../input/actions/processors/Processor.js";
+import { DeadZoneProcessor } from "../../input/actions/processors/DeadZoneProcessor.js";
+import { ScaleProcessor } from "../../input/actions/processors/ScaleProcessor.js";
+import { InvertProcessor } from "../../input/actions/processors/InvertProcessor.js";
+import { SmoothProcessor } from "../../input/actions/processors/SmoothProcessor.js";
+import { KeyBinding } from "../../input/actions/KeyBinding.js";
+import { MouseButtonBinding } from "../../input/actions/MouseButtonBinding.js";
+import { CompositeBinding } from "../../input/actions/CompositeBinding.js";
+import { Mouse } from "../../input/Mouse.js";
+import { MouseButton } from "../../input/MouseButton.js";
 
 function keyDown(domCode) {
   return new InputEvent(EventType.KEY_DOWN, {
