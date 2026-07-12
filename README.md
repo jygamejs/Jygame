@@ -144,7 +144,7 @@ Full API reference, guides, and examples: [jygame-documentation.vercel.app](http
 | Import | Description |
 |---|---|
 | `Game` | Main game loop with fixed timestep, canvas setup, UI layer, scene stack (`pushScene`, `popScene`, `replaceScene`, `peekScene`, `switchScene`), and lifecycle management. |
-| `Scene` | Engine Scene (extends ECS Scene). Lifecycle hooks (`enter`, `exit`, `pause`, `resume`, `update`, `interpolate`, `render`, `renderUI`), blocking properties, stack delegators, and auto-cleaned event helpers (`on`, `onSwipe`, `onTap`, `cleanup`). |
+| `Scene` | Engine Scene (extends ECS Scene). Lifecycle hooks (`onEnter`, `onExit`, `onCreate`, `pause`, `resume`, `update`, `interpolate`, `render`, `renderUI`), blocking properties, stack delegators, auto-cleaned event helpers (`on`, `onSwipe`, `onTap`, `cleanup`), and built-in `_actionMap`/`_inputContext` for input. |
 | `DefaultWorldBuilder` | Creates a pre-configured `World` with all engine components, systems, and resources registered. |
 | `Sprite` | Convenience entity wrapper with `Transform`, `Collider`, `Velocity`, `Renderable`, `Visible`. Exposes `x`, `y`, `width`, `height`, `angle`, `scale`, `velocity`, `image`, `style` shorthands. |
 | `Group` | Entity container. Iterable (`for...of`). Collision queries delegate to `CollisionSystem`. Optional `SpatialHash` acceleration. `dispose()` for cleanup. |
@@ -153,8 +153,7 @@ Full API reference, guides, and examples: [jygame-documentation.vercel.app](http
 | `Rect` | AABB rectangle utility with collision, containment, overlap, and anchor helpers. |
 | `Clock` | Fixed-timestep accumulator for deterministic updates. |
 | `Timer` | Countdown timer with optional looping. |
-| `Input` | Keyboard (`isDown`, `justPressed`, `justReleased`), action bindings (`bind`/`unbind`), and touch (swipe/tap) input handling. |
-| `InputContext` | `Input` implementation — pluggable context for per-scene bindings. |
+| `Input`, `OldInputContext` | Legacy input singleton (kept for migration; new code uses the modern Input System below). |
 | `State` | Observable state container with subscribe/unsubscribe. |
 | `Storage` | `localStorage` wrapper with JSON serialization. |
 | `Color`, `Colors` | Color class with parsing, manipulation, and 96 named palettes. |
@@ -170,6 +169,94 @@ Full API reference, guides, and examples: [jygame-documentation.vercel.app](http
 | `AudioDefinition` | Audio asset descriptor with metadata. |
 | `Pool` | Low-level object pool for allocation-free reuse. |
 | `ActivePool` | Lifecycle-aware object pool. Tracks active/inactive objects, O(1) acquire/release via index-tagged objects. |
+
+### Input System
+
+| Import | Description |
+|---|---|
+| `InputSystem` | Orchestrates per-frame input: `snapshot()` → `backend.poll()` → notify consumers → `devices.update()` → `contextStack.evaluate()` → `events.clear()`. |
+| `InputEvent` | Typed event with data payload and metadata. |
+| `InputEventQueue` | Bounded FIFO queue with tier-aware prioritisation. |
+| `EventType` | Enum: `KEY_DOWN`, `KEY_UP`, `POINTER_DOWN`, `POINTER_MOVE`, `POINTER_UP`, `WHEEL`, `COMPOSITION_*`, `GESTURE`. |
+| `Device` | Base class for input devices. Each device `update(queue)` peeks at events read-only. |
+| `DeviceRegistry` | Maps device types to instances. `get(ClassType)` / `getAll(ClassType)`. |
+| `InputBackend` | Abstract backend. `start()` / `stop()` / `poll(queue)`. |
+| `BrowserBackend` | DOM backend — binds `keydown`/`keyup`/`pointer*`/`wheel`/`composition*` on a target element. |
+| `TestBackend` | Programmatic backend for injecting events in tests. |
+| `KeyCode` | Enum of all physical key codes (e.g. `KEY_W`, `SPACE`, `ARROW_UP`). |
+| `Modifier` | Bitmask flags: `SHIFT`, `CTRL`, `ALT`, `META`. |
+| `Keyboard` | Device. Tracks `pressed`/`justPressed`/`justReleased`/`repeat` for every key. |
+| `MouseButton` | Enum: `LEFT`, `MIDDLE`, `RIGHT`, `BACK`, `FORWARD`. |
+| `Mouse` | Device. Tracks button states, position, and wheel delta. `resetWheel()` to clear. |
+| `PointerType` | Enum: `MOUSE`, `TOUCH`, `PEN`. |
+| `PointerManager` | Device. Tracks all active pointers with history storage. |
+| `TouchSurface` | Device. Multi-touch contact tracking. |
+| `Stylus` | Device. Pen-specific data (pressure, tilt, twist). |
+| `TextInput` | Device. IME composition events and consumed character queue. |
+| `GestureType` | Enum: `TAP`, `DOUBLE_TAP`, `LONG_PRESS`, `DRAG`, `SWIPE`, `PINCH`, `ROTATE`, `PAN`. |
+| `GestureEvent` | Gesture event with type, position, velocity, motion deltas. |
+| `GestureEngine` | Device. Reads from `PointerManager`, pushes `GESTURE` events. |
+| `GestureRecognizer` | Base class. 8 built-in recognizers: `TapRecognizer`, `DoubleTapRecognizer`, `LongPressRecognizer`, `DragRecognizer`, `SwipeRecognizer`, `PinchRecognizer`, `RotateRecognizer`, `PanRecognizer`. |
+
+### Input Actions
+
+| Import | Description |
+|---|---|
+| `ActionKind` | Enum: `DIGITAL` (on/off), `VECTOR2` (analogue 2D). |
+| `ActionState` | Per-action runtime state: `pressed`, `justPressed`, `justReleased`, `strength`, `vector`, `buffer(durationMs)` / `consumeBuffered()`. |
+| `Binding` | Base class for all bindings. `evaluate(deviceRegistry)` returns strength `[0, 1]`. |
+| `KeyBinding` | Evaluates true when a specific `KeyCode` is held. |
+| `MouseButtonBinding` | Evaluates true when a specific `MouseButton` is held. |
+| `WheelBinding` | Reads `Mouse.wheel` delta. |
+| `ChordBinding` | Combines multiple bindings with optional modifers — all must be active. |
+| `CompositeBinding` | Aggregates sub-bindings with per-direction vectors, normalised to unit circle. Ideal for WASD + Arrow stick emulation. |
+| `GestureBinding` | Matches a `GestureType` (e.g. swipe, pinch). |
+| `GamepadButtonBinding` | Gamepad button binding. |
+| `GamepadAxisBinding` | Gamepad axis binding. |
+| `ActionEvaluator` | Runs bindings through optional processors, picks the highest-strength result, and updates the corresponding `ActionState`. |
+| `Processor` | Base class for post-processing binding strength/vector. |
+| `DeadZoneProcessor` | Discards values below a threshold. |
+| `ScaleProcessor` | Multiplies strength by a factor. |
+| `InvertProcessor` | Negates strength or vector axis. |
+| `SmoothProcessor` | Moving-average filter for analogue input. |
+| `ActionMap` | Collection of named actions, each with a list of bindings and an `ActionState`. `bind(name, binding, kind)` / `getState(name)` / `serialize()` / `static deserialize(data)`. |
+| `InputContext` | Named container for an `ActionMap` with `priority` and `consumePolicy` ("block"/"pass"). |
+| `ContextStack` | Ordered stack of `InputContext`s. Higher-priority contexts shadow lower ones. `evaluate(deviceRegistry)` runs all contexts in priority order. |
+| `Space` | Enum: `SCREEN`, `VIEWPORT`, `WORLD`, `UI`. |
+| `CoordinateSystem` | Manages transformations between all four spaces. Supports `project`/`unproject` and `worldToScreen`/`screenToWorld` camera interfaces. |
+
+### Debug & Diagnostics
+
+| Import | Description |
+|---|---|
+| `Diagnostics` | Frame-level metric aggregation with timers, counters, and gauges. Built-in budget/warn/crit thresholds. |
+| `DiagnosticsConfig` | Configuration for diagnostics (metric registration, capture limits). |
+| `MetricRegistry` | Global registry of typed metrics. |
+| `MetricDescriptor` | Descriptor for a single metric (name, category, unit, type, budget). |
+| `MetricType` | Enum: `TIMER`, `GAUGE`, `COUNTER`. |
+| `MetricUnit` | Enum: `MILLISECONDS`, `FPS`, `COUNT`, `BYTES`, `PERCENT`. |
+| `MetricCategory` | Enum: `FRAME`, `ECS`, `RENDER`, `INPUT`, `PHYSICS`, `AUDIO`, `ASSETS`, `STREAMING`, `SCENE`. |
+| `CPUTimer` | High-resolution CPU timer backed by `performance.now()`. |
+| `FrameStorage` | Circular buffer of frame snapshots. |
+| `FrameSnapshot` | Snapshot of all metric values at a given frame. |
+| `FrameHistory` | Rolling window of frame data for trend analysis. |
+| `TriggerEngine` | Fires callbacks when metrics cross configurable thresholds. |
+| `Analysis` | Frame analysis utilities (min, max, avg, percentile over a window). |
+| `CaptureResult` | Snapshot of captured metric data. |
+| `resolveMetricIds` | Resolves metric name strings to numeric IDs for fast frame-loop scoping. |
+| `DebugOverlay` | HUD overlay with `addInputConsumer`-based key bindings (F1 toggles, F2 profiles, etc.). Access via `game.debug`. |
+| `OverlaySession` | Full debug session manager — panels, themes, layout, persistence. |
+| `OverlayContext` | Debug overlay rendering context. |
+| `PanelManager` | Manages debug panel lifecycle. |
+| `LayoutEngine` | Panel layout with `createDefaultLayout()`. |
+| `DarkTheme`, `LightTheme` | Built-in overlay themes. |
+| `PerformancePanel` | Real-time FPS, frame timings, budget bars. |
+| `FrameGraphPanel` | Visual frame-by-frame breakdown (input/update/render). |
+| `TimelinePanel` | System-level timeline view. |
+| `MetricBrowserPanel` | Browse/search all registered metrics. |
+| `EventViewerPanel` | Entity-component event log. |
+| `CaptureBrowserPanel` | Browse saved metric captures. |
+| `SettingsPanel` | Overlay configuration panel. |
 
 ### Audio Effects
 
@@ -325,22 +412,35 @@ Exposes `x`, `y`, `width`, `height`, `velocity`, `style`, `image` shorthands.
 `Group` is a pure entity container (iterable). Collision queries delegate
 to `CollisionSystem`. Optional `SpatialHash` acceleration.
 
-### Action Bindings
+### Input Actions
 
-Actions decouple gameplay logic from physical keys:
+Actions decouple gameplay logic from physical keys via an `ActionMap` + `ContextStack` pipeline.
+Bindings are evaluated against the `DeviceRegistry` each frame, processed through optional
+`Processor` chains, and written to `ActionState` instances:
 
 ```js
-Input.bind("JUMP", "SPACE");
-Input.bind("JUMP", "W");
+import { ActionKind, CompositeBinding, KeyBinding, KeyCode } from "jygame";
 
-// Later: key mapping resolves W → UP, bindings resolve UP → JUMP
-if (Input.justPressed("JUMP")) {
-  player.jump();
-}
+const move = new CompositeBinding(ActionKind.VECTOR2, [
+  { binding: new KeyBinding(KeyCode.KEY_D), vector: [ 1,  0] },
+  { binding: new KeyBinding(KeyCode.KEY_A), vector: [-1,  0] },
+  { binding: new KeyBinding(KeyCode.KEY_W), vector: [ 0, -1] },
+  { binding: new KeyBinding(KeyCode.KEY_S), vector: [ 0,  1] },
+]);
+this._actionMap.bind("move", move, ActionKind.VECTOR2);
+
+// Each frame:
+const v = this._actionMap.getState("move").vector;
+this.player.velocity.x = v.x * 200;
+this.player.velocity.y = v.y * 200;
 ```
 
-Resolution order: `Physical Key → Key Alias → Action`. `isDown`,
-`justPressed`, and `justReleased` all follow this chain automatically.
+Resolution order: `Physical Key → Device → Binding → Processor → ActionState`.
+`ContextStack` supports priority-based shadowing — a pause menu context at higher
+priority can block gameplay bindings with `consumePolicy: "block"`.
+
+Architecture reference: [`docs/audit/input-system-architecture.md`](docs/audit/input-system-architecture.md)
+and beginner-friendly guide at [`docs/audit/input-system-guide.md`](docs/audit/input-system-guide.md).
 
 ## License
 
