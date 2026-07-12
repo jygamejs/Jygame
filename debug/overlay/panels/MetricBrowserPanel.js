@@ -157,12 +157,20 @@ export class MetricBrowserPanel extends Panel {
     ctx.fillRect(barX, y, barW, barH);
 
     if (tr) {
-      if (this._query) {
-        tr.render(ctx, this._query, barX + 6, y + barH / 2, {
-          size: theme.fontSize,
-          color: theme.text,
-          baseline: "middle",
-        });
+      const displayText = this._query || "";
+      tr.render(ctx, displayText || "Search metrics...", barX + 6, y + barH / 2, {
+        size: theme.fontSize,
+        color: displayText ? theme.text : theme.textDim,
+        baseline: "middle",
+      });
+
+      if (this._searchActive) {
+        const cursorX = barX + 8 + (tr.measure ? tr.measure(ctx, displayText, { size: theme.fontSize }).width : 0);
+        ctx.fillStyle = theme.text;
+        ctx.fillRect(cursorX, y + 4, 1, barH - 8);
+      }
+
+      if (displayText) {
         const clearLabel = "\u00D7";
         const clearM = tr.measure(ctx, clearLabel, { size: theme.fontSize + 2 });
         const clearX = barX + barW - clearM.width - 6;
@@ -172,16 +180,36 @@ export class MetricBrowserPanel extends Panel {
           baseline: "middle",
         });
         this._clickRegions.push({ x: clearX - 4, y, w: clearM.width + 12, h: barH, handler: () => { this._query = ""; } });
-      } else {
-        tr.render(ctx, "Search metrics...", barX + 6, y + barH / 2, {
-          size: theme.fontSize,
-          color: theme.textDim,
-          baseline: "middle",
-        });
       }
     }
 
+    this._clickRegions.push({
+      x: barX, y, w: barW, h: barH,
+      handler: () => this.activateSearch(),
+    });
+
     return y + barH + 4;
+  }
+
+  activateSearch() {
+    this._searchActive = true;
+    if (this.ctx.input && typeof this.ctx.input.setTextTarget === "function") {
+      this.ctx.input.setTextTarget(this);
+    }
+  }
+
+  deactivateSearch() {
+    this._searchActive = false;
+  }
+
+  appendQuery(char) {
+    this._query += char;
+    this.setQuery(this._query);
+  }
+
+  backspaceQuery() {
+    this._query = this._query.slice(0, -1);
+    this.setQuery(this._query);
   }
 
   _drawTypeFilters(ctx, x, y, w, theme, tr, pad, sp) {

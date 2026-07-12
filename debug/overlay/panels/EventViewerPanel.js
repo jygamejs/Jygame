@@ -59,6 +59,27 @@ export class EventViewerPanel extends Panel {
   setSeverityFilter(val) { this._severityFilter = val; }
   setSearchQuery(q) { this._searchQuery = q; }
 
+  activateSearch() {
+    this._searchActive = true;
+    if (this.ctx.input && typeof this.ctx.input.setTextTarget === "function") {
+      this.ctx.input.setTextTarget(this);
+    }
+  }
+
+  deactivateSearch() {
+    this._searchActive = false;
+  }
+
+  appendQuery(char) {
+    this._searchQuery += char;
+    this.setSearchQuery(this._searchQuery);
+  }
+
+  backspaceQuery() {
+    this._searchQuery = this._searchQuery.slice(0, -1);
+    this.setSearchQuery(this._searchQuery);
+  }
+
   update(data) {
     const history = this.ctx.history;
     if (!history || !history.count) {
@@ -132,14 +153,17 @@ export class EventViewerPanel extends Panel {
     ctx.fillRect(barX, y, barW, barH);
 
     if (tr) {
-      if (this._searchQuery) {
-        tr.render(ctx, this._searchQuery, barX + 6, y + barH / 2, {
-          size: theme.fontSize, color: theme.text, baseline: "middle",
-        });
-      } else {
-        tr.render(ctx, "Search events...", barX + 6, y + barH / 2, {
-          size: theme.fontSize, color: theme.textDim, baseline: "middle",
-        });
+      const displayText = this._searchQuery || "";
+      tr.render(ctx, displayText || "Search events...", barX + 6, y + barH / 2, {
+        size: theme.fontSize,
+        color: displayText ? theme.text : theme.textDim,
+        baseline: "middle",
+      });
+
+      if (this._searchActive) {
+        const cursorX = barX + 8 + (tr.measure ? tr.measure(ctx, displayText, { size: theme.fontSize }).width : 0);
+        ctx.fillStyle = theme.text;
+        ctx.fillRect(cursorX, y + 4, 1, barH - 8);
       }
 
       // Clear button
@@ -154,6 +178,11 @@ export class EventViewerPanel extends Panel {
         handler: () => this.clear(),
       });
     }
+
+    this._clickRegions.push({
+      x: barX, y, w: barW, h: barH,
+      handler: () => this.activateSearch(),
+    });
 
     return y + barH + 4;
   }

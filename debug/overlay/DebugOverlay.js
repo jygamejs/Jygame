@@ -21,9 +21,29 @@ export class DebugOverlay {
     }
   }
 
-  show() { this._sync(); this._session.show(); }
-  hide() { this._session.hide(); }
-  toggle() { this._sync(); this._session.toggle(); }
+  show() {
+    this._sync();
+    this._session.setupDefaultPanels();
+    this._session.show();
+    const ic = this._game.input;
+    if (ic && !this._wired) {
+      ic.onInput = (event) => this._session.processInput(event);
+      this._wired = true;
+    }
+  }
+
+  hide() {
+    this._session.hide();
+  }
+
+  toggle() {
+    this._sync();
+    if (this._session.visible) {
+      this.hide();
+    } else {
+      this.show();
+    }
+  }
 
   panel(id) { return this._session.panels.get(id); }
 

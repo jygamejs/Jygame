@@ -4,12 +4,27 @@ export class InputRouter {
     this._panels = panels;
     this._layout = layout;
     this._focusedPanelId = null;
+    this._textTarget = null;
   }
 
   get focusedPanelId() { return this._focusedPanelId; }
 
+  get textTarget() { return this._textTarget; }
+
   focus(panelId) {
     this._focusedPanelId = panelId;
+  }
+
+  setTextTarget(panel) {
+    this._textTarget = panel;
+    if (panel) this._focusedPanelId = panel.id;
+  }
+
+  clearTextTarget() {
+    if (this._textTarget && typeof this._textTarget.deactivateSearch === "function") {
+      this._textTarget.deactivateSearch();
+    }
+    this._textTarget = null;
   }
 
   process(event) {
@@ -31,9 +46,32 @@ export class InputRouter {
 
     if (event.type === "keydown") {
       if (event.key === "Escape") {
+        if (this._textTarget) {
+          this.clearTextTarget();
+          return true;
+        }
         this._focusedPanelId = null;
         return true;
       }
+
+      if (this._textTarget && typeof this._textTarget.appendQuery === "function") {
+        if (event.printable) {
+          this._textTarget.appendQuery(event.key);
+          return true;
+        }
+        if (event.key === "Backspace") {
+          if (typeof this._textTarget.backspaceQuery === "function") {
+            this._textTarget.backspaceQuery();
+          }
+          return true;
+        }
+        if (event.key === "Enter") {
+          this.clearTextTarget();
+          return true;
+        }
+        return false;
+      }
+
       if (commands) {
         const cmdName = commands.resolveShortcut(event.key);
         if (cmdName) {
@@ -94,6 +132,7 @@ export class InputRouter {
     if (event.type === "click" || event.type === "pointerdown") {
       if (!this._layout.hitTest(event.x, event.y)) {
         this._focusedPanelId = null;
+        this.clearTextTarget();
         return true;
       }
     }

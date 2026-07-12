@@ -3720,3 +3720,144 @@ describe("Edge case unit tests", () => {
     assert.strictEqual(b.y, 200);
   });
 });
+
+describe("Input text handling", () => {
+  it("InputRouter setTextTarget and clearTextTarget", () => {
+    const session = new OverlaySession();
+    const router = session.context.input;
+    const panel = { id: "test" };
+    assert.strictEqual(router.textTarget, null);
+    router.setTextTarget(panel);
+    assert.strictEqual(router.textTarget, panel);
+    router.clearTextTarget();
+    assert.strictEqual(router.textTarget, null);
+  });
+
+  it("capture phase routes printable keys to text target", () => {
+    const session = new OverlaySession();
+    const router = session.context.input;
+    const query = [];
+    const panel = { id: "searchPanel", appendQuery: (c) => query.push(c) };
+    router.setTextTarget(panel);
+    router._capturePhase({ type: "keydown", key: "a", printable: true });
+    router._capturePhase({ type: "keydown", key: "b", printable: true });
+    assert.deepStrictEqual(query, ["a", "b"]);
+  });
+
+  it("capture phase backspace on text target", () => {
+    const session = new OverlaySession();
+    const router = session.context.input;
+    const chars = [];
+    const panel = { id: "sp", appendQuery: (c) => chars.push(c), backspaceQuery: () => chars.pop() };
+    router.setTextTarget(panel);
+    router._capturePhase({ type: "keydown", key: "x", printable: true });
+    router._capturePhase({ type: "keydown", key: "Backspace", printable: false });
+    assert.deepStrictEqual(chars, []);
+  });
+
+  it("capture phase escape clears text target", () => {
+    const session = new OverlaySession();
+    const router = session.context.input;
+    const panel = { id: "sp", appendQuery() {}, backspaceQuery() {}, deactivateSearch() {} };
+    router.setTextTarget(panel);
+    assert.ok(router.textTarget);
+    router._capturePhase({ type: "keydown", key: "Escape", printable: false });
+    assert.strictEqual(router.textTarget, null);
+  });
+
+  it("capture phase does not resolve shortcuts when text target active", () => {
+    const session = new OverlaySession();
+    const router = session.context.input;
+    const commands = session.commands;
+    let shortcutExecuted = false;
+    commands.execute = () => { shortcutExecuted = true; };
+    const panel = { id: "p", appendQuery(c) {} };
+    router.setTextTarget(panel);
+    router._capturePhase({ type: "keydown", key: "1", printable: true });
+    assert.strictEqual(shortcutExecuted, false);
+  });
+
+  it("MetricBrowserPanel activateSearch sets text target", () => {
+    const session = new OverlaySession();
+    const router = session.context.input;
+    session.context.input = router;
+    const panel = new MetricBrowserPanel(session.context);
+    panel.activateSearch();
+    assert.strictEqual(router.textTarget, panel);
+    assert.ok(panel._searchActive);
+  });
+
+  it("MetricBrowserPanel appendQuery appends char", () => {
+    const session = new OverlaySession();
+    const panel = new MetricBrowserPanel(session.context);
+    panel.appendQuery("r");
+    assert.strictEqual(panel._query, "r");
+    panel.appendQuery("e");
+    assert.strictEqual(panel._query, "re");
+  });
+
+  it("MetricBrowserPanel backspaceQuery removes last char", () => {
+    const session = new OverlaySession();
+    const panel = new MetricBrowserPanel(session.context);
+    panel.appendQuery("ab");
+    panel.backspaceQuery();
+    assert.strictEqual(panel._query, "a");
+  });
+
+  it("MetricBrowserPanel deactivateSearch clears flag", () => {
+    const session = new OverlaySession();
+    const panel = new MetricBrowserPanel(session.context);
+    panel.activateSearch();
+    assert.ok(panel._searchActive);
+    panel.deactivateSearch();
+    assert.strictEqual(panel._searchActive, false);
+  });
+
+  it("EventViewerPanel search text methods", () => {
+    const session = new OverlaySession();
+    const panel = new EventViewerPanel(session.context);
+    panel.appendQuery("test");
+    assert.strictEqual(panel._searchQuery, "test");
+    panel.backspaceQuery();
+    assert.strictEqual(panel._searchQuery, "tes");
+    panel.activateSearch();
+    assert.ok(panel._searchActive);
+    panel.deactivateSearch();
+    assert.strictEqual(panel._searchActive, false);
+  });
+
+  it("click outside panel clears text target", () => {
+    const session = new OverlaySession();
+    session.show();
+    const router = session.context.input;
+    const panel = { id: "sp", appendQuery() {}, backspaceQuery() {}, deactivateSearch() {} };
+    router.setTextTarget(panel);
+    assert.ok(router.textTarget);
+    // Click outside any layout panel
+    router._bubblePhase({ type: "click", x: -100, y: -100 });
+    assert.strictEqual(router.textTarget, null);
+  });
+
+  it("setupDefaultPanels registers all 7 panels and creates layout", () => {
+    const session = new OverlaySession();
+    assert.strictEqual(session.panels.count, 0);
+    session.setupDefaultPanels();
+    assert.strictEqual(session.panels.count, 7);
+    assert.ok(session.layout.root);
+    // Idempotent
+    session.setupDefaultPanels();
+    assert.strictEqual(session.panels.count, 7);
+  });
+
+  it("setupDefaultPanels panels are accessible by id", () => {
+    const session = new OverlaySession();
+    session.setupDefaultPanels();
+    assert.ok(session.panels.get("performance"));
+    assert.ok(session.panels.get("framegraph"));
+    assert.ok(session.panels.get("timeline"));
+    assert.ok(session.panels.get("metrics"));
+    assert.ok(session.panels.get("events"));
+    assert.ok(session.panels.get("captures"));
+    assert.ok(session.panels.get("settings"));
+  });
+});

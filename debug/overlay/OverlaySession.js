@@ -3,6 +3,13 @@ import { PanelManager } from "./PanelManager.js";
 import { LayoutEngine } from "./LayoutEngine.js";
 import { DarkTheme } from "./theme/DarkTheme.js";
 import { LightTheme } from "./theme/LightTheme.js";
+import { PerformancePanel } from "./panels/PerformancePanel.js";
+import { FrameGraphPanel } from "./panels/FrameGraphPanel.js";
+import { TimelinePanel } from "./panels/TimelinePanel.js";
+import { MetricBrowserPanel } from "./panels/MetricBrowserPanel.js";
+import { EventViewerPanel } from "./panels/EventViewerPanel.js";
+import { CaptureBrowserPanel } from "./panels/CaptureBrowserPanel.js";
+import { SettingsPanel } from "./panels/SettingsPanel.js";
 import { SparklineRenderer } from "./renderers/SparklineRenderer.js";
 import { HistogramRenderer } from "./renderers/HistogramRenderer.js";
 import { FrameBarRenderer } from "./renderers/FrameBarRenderer.js";
@@ -70,6 +77,23 @@ export class OverlaySession {
     const savedLayout = this._persistence.loadLayout();
     if (savedLayout) {
       this._layout.restore(savedLayout);
+    }
+  }
+
+  setupDefaultPanels() {
+    if (this._panels.count > 0) return;
+    const ctx = this._ctx;
+    this._panels.register(new PerformancePanel(ctx));
+    this._panels.register(new FrameGraphPanel(ctx));
+    this._panels.register(new TimelinePanel(ctx));
+    this._panels.register(new MetricBrowserPanel(ctx));
+    this._panels.register(new EventViewerPanel(ctx));
+    this._panels.register(new CaptureBrowserPanel(ctx));
+    this._panels.register(new SettingsPanel(ctx));
+    if (!this._layout.root) {
+      this._layout.createDefaultLayout([
+        "performance", "framegraph", "timeline", "events",
+      ]);
     }
   }
 

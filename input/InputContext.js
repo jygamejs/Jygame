@@ -127,6 +127,8 @@ export class InputContext {
     this._keyMap.delete(rawKey);
   }
 
+  set onInput(fn) { this._onInput = fn; }
+
   setKeyMap(map) {
     this._keyMap = new Map(Object.entries(map));
   }
@@ -253,6 +255,14 @@ export class InputContext {
     if (raw.startsWith("Arrow") || raw === " ") {
       e.preventDefault();
     }
+
+    if (this._onInput) {
+      this._onInput({
+        type: "keydown",
+        key: raw,
+        printable: raw.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey,
+      });
+    }
   }
 
   _handleKeyUp(e) {
@@ -283,6 +293,14 @@ export class InputContext {
     this._pointerX = e.clientX;
     this._pointerY = e.clientY;
     if (e.cancelable) e.preventDefault();
+
+    if (this._onInput) {
+      this._onInput({
+        type: "pointerdown",
+        x: e.clientX,
+        y: e.clientY,
+      });
+    }
   }
 
   _handlePointerMove(e) {
