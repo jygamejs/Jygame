@@ -15,7 +15,7 @@ export { CollisionQuery } from "./ecs/collision/CollisionQuery.js";
 export { Sprite } from "./display/Sprite.js";
 export { Group } from "./display/Group.js";
 export { Input, InputContext } from "./input/Input.js";
-export { LoadingTask } from "./core/LoadingTask.js";
+export { LoadingTask } from "./loaders/LoadingTask.js";
 export { ImageLoader } from "./loaders/ImageLoader.js";
 export { FontLoader } from "./loaders/FontLoader.js";
 export { Scene } from "./core/Scene.js";

@@ -1,6 +1,11 @@
 import { OverlaySession } from "./OverlaySession.js";
 import { MetricSearchIndex } from "./metrics/MetricSearchIndex.js";
 
+function toSimpleEvent(inputEvent) {
+  const e = { type: inputEvent.type, ...inputEvent.data };
+  return e;
+}
+
 export class DebugOverlay {
   constructor(game) {
     this._game = game;
@@ -25,9 +30,11 @@ export class DebugOverlay {
     this._sync();
     this._session.setupDefaultPanels();
     this._session.show();
-    const ic = this._game.input;
-    if (ic && !this._wired) {
-      ic.onInput = (event) => this._session.processInput(event);
+    if (this._game.inputSystem && !this._wired) {
+      this._consumer = event => {
+        this._session.processInput(toSimpleEvent(event));
+      };
+      this._game.inputSystem.addInputConsumer(this._consumer);
       this._wired = true;
     }
   }
@@ -86,5 +93,11 @@ export class DebugOverlay {
   render(ctx, width, height) { this._session.render(ctx, width, height); }
   processInput(event) { return this._session.processInput(event); }
 
-  destroy() { this._session.destroy(); }
+  destroy() {
+    if (this._wired && this._game.inputSystem) {
+      this._game.inputSystem.removeInputConsumer(this._consumer);
+      this._wired = false;
+    }
+    this._session.destroy();
+  }
 }

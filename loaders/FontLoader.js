@@ -1,4 +1,4 @@
-import { LoadingTask } from "../core/LoadingTask.js";
+import { LoadingTask } from "./LoadingTask.js";
 import { Diagnostics, MetricCategory, MetricUnit, MetricType, resolveMetricIds }
   from "../debug/index.js";
 

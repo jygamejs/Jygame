@@ -294,4 +294,98 @@ describe("InputSystem full integration", () => {
     sys.update();
     assert.strictEqual(sys.events.length, 0);
   });
+
+  it("addInputConsumer receives events during update", () => {
+    const sys = new InputSystem();
+    const backend = {
+      start() {},
+      stop() {},
+      poll(queue) {
+        queue.push(new InputEvent(EventType.KEY_DOWN, {
+          key: "a", code: "KeyA", repeat: false,
+          ctrl: false, shift: false, alt: false, meta: false,
+          printable: true,
+        }), Tier.HIGH);
+      },
+    };
+    sys.setBackend(backend);
+
+    const received = [];
+    sys.addInputConsumer(event => { received.push(event); });
+    sys.update();
+
+    assert.strictEqual(received.length, 1);
+    assert.strictEqual(received[0].type, EventType.KEY_DOWN);
+    assert.strictEqual(received[0].data.key, "a");
+  });
+
+  it("removeInputConsumer stops receiving events", () => {
+    const sys = new InputSystem();
+    const backend = {
+      start() {},
+      stop() {},
+      poll(queue) {
+        queue.push(new InputEvent(EventType.KEY_DOWN, {
+          key: "x", code: "KeyX", repeat: false,
+          ctrl: false, shift: false, alt: false, meta: false,
+          printable: false,
+        }), Tier.HIGH);
+      },
+    };
+    sys.setBackend(backend);
+
+    const received = [];
+    const fn = event => { received.push(event); };
+    sys.addInputConsumer(fn);
+    sys.removeInputConsumer(fn);
+    sys.update();
+
+    assert.strictEqual(received.length, 0);
+  });
+
+  it("multiple consumers all receive events", () => {
+    const sys = new InputSystem();
+    const backend = {
+      start() {},
+      stop() {},
+      poll(queue) {
+        queue.push(new InputEvent(EventType.KEY_DOWN, {
+          key: "b", code: "KeyB", repeat: false,
+          ctrl: false, shift: false, alt: false, meta: false,
+          printable: false,
+        }), Tier.HIGH);
+      },
+    };
+    sys.setBackend(backend);
+
+    const a = []; const b = [];
+    sys.addInputConsumer(e => a.push(e));
+    sys.addInputConsumer(e => b.push(e));
+    sys.update();
+
+    assert.strictEqual(a.length, 1);
+    assert.strictEqual(b.length, 1);
+  });
+
+  it("addInputConsumer does not add duplicates", () => {
+    const sys = new InputSystem();
+    let count = 0;
+    const fn = () => { count++; };
+    sys.addInputConsumer(fn);
+    sys.addInputConsumer(fn);
+    const backend = {
+      start() {},
+      stop() {},
+      poll(queue) {
+        queue.push(new InputEvent(EventType.KEY_DOWN, {
+          key: "d", code: "KeyD", repeat: false,
+          ctrl: false, shift: false, alt: false, meta: false,
+          printable: false,
+        }), Tier.HIGH);
+      },
+    };
+    sys.setBackend(backend);
+    sys.update();
+    assert.strictEqual(count, 1);
+  });
 });
