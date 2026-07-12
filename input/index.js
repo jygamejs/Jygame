@@ -47,6 +47,8 @@ export { SmoothProcessor } from "./actions/processors/SmoothProcessor.js";
 export { ActionMap } from "./actions/ActionMap.js";
 export { InputContext } from "./actions/InputContext.js";
 export { ContextStack } from "./actions/ContextStack.js";
+export { Space } from "./Space.js";
+export { CoordinateSystem } from "./CoordinateSystem.js";
 
 export { TextInput } from "./TextInput.js";
 
