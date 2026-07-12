@@ -14,44 +14,39 @@ A lightweight 2D game framework for the browser built on an **archetype-based EC
 
 ```js
 import {
-  Game, Scene, World, Input, DefaultWorldBuilder,
-  Transform, Velocity, Renderable, Visible,
+  Game, Scene,
   Sprite, Colors,
+  ActionKind, CompositeBinding, KeyBinding, KeyCode,
 } from "jygame";
 
 class MyScene extends Scene {
-  enter() {
-    // ECS world with all built-in systems registered
-    this.world = DefaultWorldBuilder.createDefault();
-
-    // Sprite is a convenience wrapper that creates an ECS entity
-    this.player = new Sprite(100, 200, 32, 48);
+  onEnter() {
+    this.player = new Sprite(100, 100, 32, 32, this.world);
     this.player.style.fill = Colors.GreenShades.MagicalMalachite;
 
-    // Direct ECS access
-    this.player.velocity.x = 0;
-    this.player.velocity.y = 0;
+    const move = new CompositeBinding(ActionKind.VECTOR2, [
+      { binding: new KeyBinding(KeyCode.KEY_D),        vector: [ 1,  0] },
+      { binding: new KeyBinding(KeyCode.KEY_A),        vector: [-1,  0] },
+      { binding: new KeyBinding(KeyCode.KEY_W),        vector: [ 0, -1] },
+      { binding: new KeyBinding(KeyCode.KEY_S),        vector: [ 0,  1] },
+      { binding: new KeyBinding(KeyCode.ARROW_RIGHT),  vector: [ 1,  0] },
+      { binding: new KeyBinding(KeyCode.ARROW_LEFT),   vector: [-1,  0] },
+      { binding: new KeyBinding(KeyCode.ARROW_UP),     vector: [ 0, -1] },
+      { binding: new KeyBinding(KeyCode.ARROW_DOWN),   vector: [ 0,  1] },
+    ]);
+    this._actionMap.bind("move", move, ActionKind.VECTOR2);
   }
 
   update(dt) {
-    // Input binds and queries
-    Input.bind("JUMP", "SPACE");
-    if (Input.justPressed("JUMP")) console.log("jump");
-
-    if (Input.isDown("RIGHT")) this.player.velocity.x = 200;
-    else if (Input.isDown("LEFT")) this.player.velocity.x = -200;
-    else this.player.velocity.x = 0;
-
-    if (Input.isDown("UP")) this.player.velocity.y = -200;
-    else if (Input.isDown("DOWN")) this.player.velocity.y = 200;
-    else this.player.velocity.y = 0;
-
-    // Systems run automatically via world.update(dt)
+    const speed = 200;
+    const m = this._actionMap.getState("move").vector;
+    this.player.velocity.x = m.x * speed;
+    this.player.velocity.y = m.y * speed;
   }
 
   render(ctx) {
-    ctx.clearRect(0, 0, 800, 600);
-    // RenderSystem draws all entities with Transform + Renderable + Visible
+    ctx.fillStyle = this.player.style.fill;
+    ctx.fillRect(this.player.x, this.player.y, this.player.width, this.player.height);
   }
 }
 

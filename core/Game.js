@@ -4,6 +4,12 @@ import { InputSystem } from "../input/InputSystem.js";
 import { BrowserBackend } from "../input/BrowserBackend.js";
 import { ContextStack } from "../input/actions/ContextStack.js";
 import { CoordinateSystem } from "../input/CoordinateSystem.js";
+import { Keyboard } from "../input/Keyboard.js";
+import { Mouse } from "../input/Mouse.js";
+import { PointerManager } from "../input/PointerManager.js";
+import { TouchSurface } from "../input/TouchSurface.js";
+import { Stylus } from "../input/Stylus.js";
+import { TextInput } from "../input/TextInput.js";
 import { Scene } from "./Scene.js";
 import { Diagnostics, MetricCategory, MetricUnit, MetricType, resolveMetricIds }
   from "../debug/index.js";
@@ -63,6 +69,14 @@ export class Game {
       canvasRect: { x: 0, y: 0, width, height },
       devicePixelRatio: window.devicePixelRatio || 1,
     });
+
+    // Register standard input devices
+    this.inputSystem.devices.register(new Keyboard());
+    this.inputSystem.devices.register(new Mouse());
+    this.inputSystem.devices.register(new PointerManager());
+    this.inputSystem.devices.register(new TouchSurface());
+    this.inputSystem.devices.register(new Stylus());
+    this.inputSystem.devices.register(new TextInput());
 
     this._visibilityHandler = null;
     if (autoPause) {

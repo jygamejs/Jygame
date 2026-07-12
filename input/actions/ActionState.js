@@ -53,6 +53,9 @@ export class ActionState {
     if (vector) {
       this._vector.x = vector.x;
       this._vector.y = vector.y;
+    } else if (this._strength === 0) {
+      this._vector.x = 0;
+      this._vector.y = 0;
     }
   }
 }

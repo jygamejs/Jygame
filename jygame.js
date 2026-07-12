@@ -33,6 +33,7 @@ export { RenderSystem } from "./ecs/systems/RenderSystem.js";
 export { Camera } from "./camera/Camera.js";
 export { CollisionSystem } from "./ecs/systems/CollisionSystem.js";
 export { World } from "./ecs/core/World.js";
+export { DefaultWorldBuilder } from "./ecs/bootstrap/DefaultWorldBuilder.js";
 export { Particle } from "./display/Particle.js";
 export { ParticleSystem } from "./particles/ParticleSystem.js";
 export { FadeModifier } from "./modifiers/FadeModifier.js";
