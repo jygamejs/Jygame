@@ -20,3 +20,6 @@ export { Pointer } from "./Pointer.js";
 export { PointerHistory } from "./PointerHistory.js";
 export { PointerStorage } from "./PointerStorage.js";
 export { PointerManager } from "./PointerManager.js";
+
+export { MouseButton } from "./MouseButton.js";
+export { Mouse } from "./Mouse.js";

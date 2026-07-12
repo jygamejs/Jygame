@@ -88,6 +88,7 @@ export class BrowserBackend extends InputBackend {
       x: e.clientX,
       y: e.clientY,
       type: e.pointerType,
+      button: e.button,
       pressure: e.pressure,
       tiltX: e.tiltX,
       tiltY: e.tiltY,
@@ -122,6 +123,7 @@ export class BrowserBackend extends InputBackend {
       x: e.clientX,
       y: e.clientY,
       type: e.pointerType,
+      button: e.button,
       pressure: e.pressure,
       isPrimary: e.isPrimary,
     }), Tier.HIGH);
