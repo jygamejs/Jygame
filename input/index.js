@@ -33,6 +33,11 @@ export { Binding } from "./actions/Binding.js";
 export { KeyBinding } from "./actions/KeyBinding.js";
 export { MouseButtonBinding } from "./actions/MouseButtonBinding.js";
 export { WheelBinding } from "./actions/WheelBinding.js";
+export { ChordBinding } from "./actions/ChordBinding.js";
+export { CompositeBinding } from "./actions/CompositeBinding.js";
+export { GestureBinding } from "./actions/GestureBinding.js";
+export { GamepadButtonBinding } from "./actions/GamepadButtonBinding.js";
+export { GamepadAxisBinding } from "./actions/GamepadAxisBinding.js";
 
 export { TextInput } from "./TextInput.js";
 
