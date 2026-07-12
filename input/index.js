@@ -27,6 +27,13 @@ export { Mouse } from "./Mouse.js";
 export { TouchSurface } from "./TouchSurface.js";
 export { Stylus } from "./Stylus.js";
 
+export { ActionKind } from "./ActionKind.js";
+export { ActionState } from "./actions/ActionState.js";
+export { Binding } from "./actions/Binding.js";
+export { KeyBinding } from "./actions/KeyBinding.js";
+export { MouseButtonBinding } from "./actions/MouseButtonBinding.js";
+export { WheelBinding } from "./actions/WheelBinding.js";
+
 export { TextInput } from "./TextInput.js";
 
 export { GestureType } from "./GestureType.js";
