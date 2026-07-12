@@ -1,4 +1,4 @@
-import { Binding } from "./Binding.js";
+import { Binding, registerBinding } from "./Binding.js";
 import { GestureEngine } from "../GestureEngine.js";
 
 export class GestureBinding extends Binding {
@@ -17,10 +17,12 @@ export class GestureBinding extends Binding {
   }
 
   serialize() {
-    return { type: this.type, gestureType: this._gestureType };
+    return { ...super.serialize(), gestureType: this._gestureType };
   }
 
   static deserialize(data) {
     return new GestureBinding(data.gestureType);
   }
 }
+
+registerBinding("gesture", GestureBinding);

@@ -1,4 +1,4 @@
-import { Processor } from "./Processor.js";
+import { Processor, registerProcessor } from "./Processor.js";
 
 export class SmoothProcessor extends Processor {
   constructor(samples = 4) {
@@ -29,4 +29,10 @@ export class SmoothProcessor extends Processor {
   serialize() {
     return { type: this.type, samples: this._samples };
   }
+
+  static deserialize(data) {
+    return new SmoothProcessor(data.samples);
+  }
 }
+
+registerProcessor("smooth", SmoothProcessor);

@@ -111,6 +111,7 @@ describe("ChordBinding", () => {
     assert.deepStrictEqual(data, {
       type: "chord", keyCode: KeyCode.KEY_Z,
       ctrl: true, shift: true, alt: false, meta: false,
+      processors: [],
     });
     const restored = ChordBinding.deserialize(data);
     assert.strictEqual(restored.keyCode, KeyCode.KEY_Z);
@@ -250,7 +251,7 @@ describe("GestureBinding", () => {
   it("serializes and deserializes", () => {
     const g = new GestureBinding(GestureType.PINCH);
     const data = g.serialize();
-    assert.deepStrictEqual(data, { type: "gesture", gestureType: GestureType.PINCH });
+    assert.deepStrictEqual(data, { type: "gesture", gestureType: GestureType.PINCH, processors: [] });
     const restored = GestureBinding.deserialize(data);
     assert.strictEqual(restored.gestureType, GestureType.PINCH);
   });
@@ -276,7 +277,7 @@ describe("GamepadButtonBinding", () => {
   it("serializes and deserializes", () => {
     const g = new GamepadButtonBinding(3, 0);
     const data = g.serialize();
-    assert.deepStrictEqual(data, { type: "gamepadButton", button: 3, gamepadIndex: 0 });
+    assert.deepStrictEqual(data, { type: "gamepadButton", button: 3, gamepadIndex: 0, processors: [] });
     const restored = GamepadButtonBinding.deserialize(data);
     assert.strictEqual(restored.button, 3);
   });
@@ -302,7 +303,7 @@ describe("GamepadAxisBinding", () => {
   it("serializes and deserializes", () => {
     const g = new GamepadAxisBinding(1, 0);
     const data = g.serialize();
-    assert.deepStrictEqual(data, { type: "gamepadAxis", axis: 1, gamepadIndex: 0 });
+    assert.deepStrictEqual(data, { type: "gamepadAxis", axis: 1, gamepadIndex: 0, processors: [] });
     const restored = GamepadAxisBinding.deserialize(data);
     assert.strictEqual(restored.axis, 1);
   });

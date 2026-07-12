@@ -1,4 +1,4 @@
-import { Binding } from "./Binding.js";
+import { Binding, registerBinding } from "./Binding.js";
 import { Keyboard } from "../Keyboard.js";
 import { KeyCode } from "../KeyCode.js";
 
@@ -18,10 +18,12 @@ export class KeyBinding extends Binding {
   }
 
   serialize() {
-    return { type: this.type, keyCode: this._keyCode };
+    return { ...super.serialize(), keyCode: this._keyCode };
   }
 
   static deserialize(data) {
     return new KeyBinding(data.keyCode);
   }
 }
+
+registerBinding("key", KeyBinding);

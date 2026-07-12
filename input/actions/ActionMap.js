@@ -1,5 +1,6 @@
 import { ActionKind } from "../ActionKind.js";
 import { ActionState } from "./ActionState.js";
+import { deserializeBinding } from "./Binding.js";
 
 export class ActionMap {
   constructor() {
@@ -61,5 +62,26 @@ export class ActionMap {
 
   clear() {
     this._actions.clear();
+  }
+
+  serialize() {
+    const actions = {};
+    for (const [name, entry] of this._actions) {
+      actions[name] = {
+        kind: entry.state.kind,
+        bindings: entry.bindings.map(b => b.serialize()),
+      };
+    }
+    return actions;
+  }
+
+  static deserialize(data) {
+    const map = new ActionMap();
+    for (const [name, entry] of Object.entries(data)) {
+      for (const bindingData of entry.bindings) {
+        map.bind(name, deserializeBinding(bindingData), entry.kind);
+      }
+    }
+    return map;
   }
 }

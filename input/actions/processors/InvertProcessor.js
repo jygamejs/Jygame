@@ -1,4 +1,4 @@
-import { Processor } from "./Processor.js";
+import { Processor, registerProcessor } from "./Processor.js";
 
 export class InvertProcessor extends Processor {
   get type() { return "invert"; }
@@ -10,4 +10,10 @@ export class InvertProcessor extends Processor {
   serialize() {
     return { type: this.type };
   }
+
+  static deserialize(data) {
+    return new InvertProcessor();
+  }
 }
+
+registerProcessor("invert", InvertProcessor);

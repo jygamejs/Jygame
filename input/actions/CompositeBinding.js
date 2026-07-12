@@ -1,4 +1,4 @@
-import { Binding } from "./Binding.js";
+import { Binding, registerBinding, deserializeBinding } from "./Binding.js";
 import { ActionKind } from "../ActionKind.js";
 
 export class CompositeBinding extends Binding {
@@ -39,7 +39,7 @@ export class CompositeBinding extends Binding {
 
   serialize() {
     return {
-      type: this.type,
+      ...super.serialize(),
       kind: this._kind,
       subBindings: this._subBindings.map(sb => ({
         vector: sb.vector,
@@ -49,7 +49,12 @@ export class CompositeBinding extends Binding {
   }
 
   static deserialize(data) {
-    // Requires binding factory to reconstruct — returns raw data for now
-    throw new Error("CompositeBinding.deserialize requires a binding registry");
+    const subBindings = data.subBindings.map(sb => ({
+      vector: sb.vector,
+      binding: deserializeBinding(sb.binding),
+    }));
+    return new CompositeBinding(data.kind, subBindings);
   }
 }
+
+registerBinding("composite", CompositeBinding);

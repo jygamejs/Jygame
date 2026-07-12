@@ -1,4 +1,4 @@
-import { Binding } from "./Binding.js";
+import { Binding, registerBinding } from "./Binding.js";
 import { Keyboard } from "../Keyboard.js";
 import { Modifier } from "../Modifier.js";
 
@@ -29,7 +29,7 @@ export class ChordBinding extends Binding {
 
   serialize() {
     return {
-      type: this.type,
+      ...super.serialize(),
       keyCode: this._keyCode,
       ctrl: this._ctrl,
       shift: this._shift,
@@ -47,3 +47,5 @@ export class ChordBinding extends Binding {
     });
   }
 }
+
+registerBinding("chord", ChordBinding);

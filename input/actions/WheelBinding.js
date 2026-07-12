@@ -1,4 +1,4 @@
-import { Binding } from "./Binding.js";
+import { Binding, registerBinding } from "./Binding.js";
 import { Mouse } from "../Mouse.js";
 
 export class WheelBinding extends Binding {
@@ -26,10 +26,12 @@ export class WheelBinding extends Binding {
   }
 
   serialize() {
-    return { type: this.type, direction: this._direction };
+    return { ...super.serialize(), direction: this._direction };
   }
 
   static deserialize(data) {
     return new WheelBinding(data.direction);
   }
 }
+
+registerBinding("wheel", WheelBinding);

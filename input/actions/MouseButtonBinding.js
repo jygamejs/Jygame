@@ -1,4 +1,4 @@
-import { Binding } from "./Binding.js";
+import { Binding, registerBinding } from "./Binding.js";
 import { Mouse } from "../Mouse.js";
 
 export class MouseButtonBinding extends Binding {
@@ -17,10 +17,12 @@ export class MouseButtonBinding extends Binding {
   }
 
   serialize() {
-    return { type: this.type, button: this._button };
+    return { ...super.serialize(), button: this._button };
   }
 
   static deserialize(data) {
     return new MouseButtonBinding(data.button);
   }
 }
+
+registerBinding("mouseButton", MouseButtonBinding);

@@ -67,9 +67,9 @@ describe("Binding base", () => {
     assert.strictEqual(b.evaluate(new DeviceRegistry()), 0);
   });
 
-  it("serialize returns type", () => {
+  it("serialize returns type and processors", () => {
     const b = new Binding();
-    assert.deepStrictEqual(b.serialize(), { type: "binding" });
+    assert.deepStrictEqual(b.serialize(), { type: "binding", processors: [] });
   });
 });
 
@@ -124,7 +124,7 @@ describe("KeyBinding", () => {
   it("serializes and deserializes", () => {
     const b = new KeyBinding(KeyCode.ENTER);
     const data = b.serialize();
-    assert.deepStrictEqual(data, { type: "key", keyCode: KeyCode.ENTER });
+    assert.deepStrictEqual(data, { type: "key", keyCode: KeyCode.ENTER, processors: [] });
     const restored = KeyBinding.deserialize(data);
     assert.strictEqual(restored.keyCode, KeyCode.ENTER);
   });
@@ -181,7 +181,7 @@ describe("MouseButtonBinding", () => {
   it("serializes and deserializes", () => {
     const b = new MouseButtonBinding(MouseButton.BACK);
     const data = b.serialize();
-    assert.deepStrictEqual(data, { type: "mouseButton", button: MouseButton.BACK });
+    assert.deepStrictEqual(data, { type: "mouseButton", button: MouseButton.BACK, processors: [] });
     const restored = MouseButtonBinding.deserialize(data);
     assert.strictEqual(restored.button, MouseButton.BACK);
   });
@@ -266,7 +266,7 @@ describe("WheelBinding", () => {
   it("serializes and deserializes", () => {
     const b = new WheelBinding("horizontal");
     const data = b.serialize();
-    assert.deepStrictEqual(data, { type: "wheel", direction: "horizontal" });
+    assert.deepStrictEqual(data, { type: "wheel", direction: "horizontal", processors: [] });
     const restored = WheelBinding.deserialize(data);
     assert.strictEqual(restored.direction, "horizontal");
   });

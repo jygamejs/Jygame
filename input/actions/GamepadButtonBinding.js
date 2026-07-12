@@ -1,4 +1,4 @@
-import { Binding } from "./Binding.js";
+import { Binding, registerBinding } from "./Binding.js";
 
 export class GamepadButtonBinding extends Binding {
   constructor(button, gamepadIndex = 0) {
@@ -16,10 +16,12 @@ export class GamepadButtonBinding extends Binding {
   }
 
   serialize() {
-    return { type: this.type, button: this._button, gamepadIndex: this._gamepadIndex };
+    return { ...super.serialize(), button: this._button, gamepadIndex: this._gamepadIndex };
   }
 
   static deserialize(data) {
     return new GamepadButtonBinding(data.button, data.gamepadIndex);
   }
 }
+
+registerBinding("gamepadButton", GamepadButtonBinding);

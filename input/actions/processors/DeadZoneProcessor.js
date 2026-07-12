@@ -1,4 +1,4 @@
-import { Processor } from "./Processor.js";
+import { Processor, registerProcessor } from "./Processor.js";
 
 export class DeadZoneProcessor extends Processor {
   constructor(inner = 0.15, outer = 0.95) {
@@ -22,4 +22,10 @@ export class DeadZoneProcessor extends Processor {
   serialize() {
     return { type: this.type, inner: this._inner, outer: this._outer };
   }
+
+  static deserialize(data) {
+    return new DeadZoneProcessor(data.inner, data.outer);
+  }
 }
+
+registerProcessor("deadZone", DeadZoneProcessor);

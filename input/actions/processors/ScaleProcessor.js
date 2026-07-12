@@ -1,4 +1,4 @@
-import { Processor } from "./Processor.js";
+import { Processor, registerProcessor } from "./Processor.js";
 
 export class ScaleProcessor extends Processor {
   constructor(factor = 1) {
@@ -16,4 +16,10 @@ export class ScaleProcessor extends Processor {
   serialize() {
     return { type: this.type, factor: this._factor };
   }
+
+  static deserialize(data) {
+    return new ScaleProcessor(data.factor);
+  }
 }
+
+registerProcessor("scale", ScaleProcessor);

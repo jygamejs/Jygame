@@ -10,4 +10,13 @@ export class InputContext {
   get actionMap() { return this._actionMap; }
   get priority() { return this._priority; }
   get consumePolicy() { return this._consumePolicy; }
+
+  serialize() {
+    return {
+      name: this._name,
+      priority: this._priority,
+      consumePolicy: this._consumePolicy,
+      actionMap: this._actionMap.serialize(),
+    };
+  }
 }
