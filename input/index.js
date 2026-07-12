@@ -38,6 +38,12 @@ export { CompositeBinding } from "./actions/CompositeBinding.js";
 export { GestureBinding } from "./actions/GestureBinding.js";
 export { GamepadButtonBinding } from "./actions/GamepadButtonBinding.js";
 export { GamepadAxisBinding } from "./actions/GamepadAxisBinding.js";
+export { ActionEvaluator } from "./actions/ActionEvaluator.js";
+export { Processor } from "./actions/processors/Processor.js";
+export { DeadZoneProcessor } from "./actions/processors/DeadZoneProcessor.js";
+export { ScaleProcessor } from "./actions/processors/ScaleProcessor.js";
+export { InvertProcessor } from "./actions/processors/InvertProcessor.js";
+export { SmoothProcessor } from "./actions/processors/SmoothProcessor.js";
 
 export { TextInput } from "./TextInput.js";
 
