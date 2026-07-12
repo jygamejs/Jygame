@@ -44,6 +44,9 @@ export { DeadZoneProcessor } from "./actions/processors/DeadZoneProcessor.js";
 export { ScaleProcessor } from "./actions/processors/ScaleProcessor.js";
 export { InvertProcessor } from "./actions/processors/InvertProcessor.js";
 export { SmoothProcessor } from "./actions/processors/SmoothProcessor.js";
+export { ActionMap } from "./actions/ActionMap.js";
+export { InputContext } from "./actions/InputContext.js";
+export { ContextStack } from "./actions/ContextStack.js";
 
 export { TextInput } from "./TextInput.js";
 
