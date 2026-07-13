@@ -1,5 +1,5 @@
 export class ViewContext {
-  constructor({ history, registry, analysis, theme, selection, renderers, cache, config } = {}) {
+  constructor({ history, registry, analysis, theme, selection, renderers, cache, config, captures, commands } = {}) {
     this.history = history ?? null;
     this.registry = registry ?? null;
     this.analysis = analysis ?? null;
@@ -8,6 +8,8 @@ export class ViewContext {
     this.renderers = renderers ?? null;
     this.cache = cache ?? null;
     this.config = config ?? {};
+    this.captures = captures ?? [];
+    this.commands = commands ?? null;
   }
 
   with(overrides) {
@@ -20,6 +22,8 @@ export class ViewContext {
       renderers: overrides.renderers ?? this.renderers,
       cache: overrides.cache ?? this.cache,
       config: overrides.config ?? this.config,
+      captures: overrides.captures ?? this.captures,
+      commands: overrides.commands ?? this.commands,
     });
   }
 }

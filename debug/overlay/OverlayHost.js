@@ -19,6 +19,20 @@ export class OverlayHost {
     this._commands = new CommandSystem();
     this._commands.on("afterExecute", () => this._requestRender());
 
+    this._captures = [];
+
+    this._commands.register("export:capture", (cap) => {
+      const json = JSON.stringify(cap.toJSON(), null, 2);
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `capture-${cap.timestamp}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      return true;
+    });
+
     this._selection = new SelectionManager();
     this._animation = new AnimationSystem();
     this._animation.on("changed", () => this._requestRender());
@@ -59,6 +73,12 @@ export class OverlayHost {
     this._commands.register("view:timeline:toggle", () => this._toggleView("timeline"), "3");
     this._commands.register("view:metrics:toggle", () => this._toggleView("metrics"), "4");
     this._commands.register("view:events:toggle", () => this._toggleView("events"), "5");
+    this._commands.register("view:captures:toggle", () => this._toggleView("captures"), "6");
+    this._commands.register("capture:manual", () => {
+      const diag = this._game._getDiag?.();
+      if (diag) diag.captureNow();
+      return true;
+    }, "F9");
 
     const savedLayout = this._persistence.load("layout");
     if (savedLayout) this._layout.restore(savedLayout);
@@ -87,7 +107,25 @@ export class OverlayHost {
         renderers: this._renderers,
         cache: this._cache,
         config: this._persistence.load("settings") ?? {},
+        captures: this._captures,
+        commands: this._commands,
       });
+      if (!this._captureWired) {
+        this._captureWired = true;
+        diag.onCapture((result) => {
+          this._captures.push(result);
+          this._requestRender();
+        });
+        diag.addTrigger({
+          name: "Slow Frame",
+          metricName: "frame.total",
+          operator: ">",
+          threshold: 16.67,
+          preFrames: 10,
+          postFrames: 5,
+          cooldown: 60,
+        });
+      }
     }
     this._activeViews.forEach(id => this._getView(id)?.onActivate());
     this._requestRender();
@@ -116,6 +154,8 @@ export class OverlayHost {
       renderers: this._renderers,
       cache: this._cache,
       config: this._persistence.load("settings") ?? {},
+      captures: this._captures,
+      commands: this._commands,
     });
     return this._cachedContext;
   }

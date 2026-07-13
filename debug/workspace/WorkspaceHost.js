@@ -25,6 +25,19 @@ export class WorkspaceHost {
 
     this._selection = new SelectionManager();
     this._commands = new CommandSystem();
+    this._captures = [];
+
+    this._commands.register("export:capture", (cap) => {
+      const json = JSON.stringify(cap.toJSON(), null, 2);
+      const blob = new Blob([json], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `capture-${cap.timestamp}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      return true;
+    });
 
     this._viewRegistry = new ViewRegistry();
     this._viewRegistry.register("performance", PerformanceView);
@@ -84,6 +97,8 @@ export class WorkspaceHost {
       renderers: this._renderers,
       cache: this._cache,
       config: this._userConfig,
+      captures: this._captures,
+      commands: this._commands,
     });
     return this._cachedContext;
   }

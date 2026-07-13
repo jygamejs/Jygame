@@ -6,6 +6,7 @@ import { FrameSnapshot } from "./FrameSnapshot.js";
 import { FrameEvent } from "./FrameEvent.js";
 import { FrameHistory } from "./FrameHistory.js";
 import { TriggerEngine } from "./TriggerEngine.js";
+import { CaptureResult } from "./CaptureResult.js";
 import { Analysis } from "./Analysis.js";
 
 export class Diagnostics {
@@ -174,6 +175,27 @@ export class Diagnostics {
       return fn();
     } finally {
       timer.stop();
+    }
+  }
+
+  captureNow(name = "manual") {
+    const preCount = Math.min(60, this._history.count - 1);
+    const snapshots = [];
+    for (let j = preCount; j >= 0; j--) {
+      const snap = this._history.at(j);
+      if (snap) snapshots.push(snap);
+    }
+    snapshots.reverse();
+    const result = new CaptureResult({
+      name,
+      timestamp: performance.now(),
+      preFrames: snapshots.length - 1,
+      postFrames: 0,
+      snapshots,
+      registry: this._metrics,
+    });
+    for (let i = 0; i < this._triggerEngine._captureCallbacks.length; i++) {
+      this._triggerEngine._captureCallbacks[i](result);
     }
   }
 

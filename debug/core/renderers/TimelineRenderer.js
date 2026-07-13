@@ -28,7 +28,7 @@ export class TimelineRenderer {
         ctx.fillText(model.isExpanded(row.id) ? "▾" : "▸", rect.x + 4, y + 9);
       }
 
-      const barX = rect.x + 20;
+      const barX = rect.x + 6;
       if (fbr) {
         fbr.render(ctx, barX, y, rect.x + rect.width - barX, 18, {
           duration: row.value,
