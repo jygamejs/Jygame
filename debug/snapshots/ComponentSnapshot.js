@@ -12,4 +12,12 @@ export class ComponentSnapshot {
     this.componentName = "";
     this.fields = {};
   }
+
+  toJSON() {
+    return {
+      componentId: this.componentId,
+      componentName: this.componentName,
+      fields: { ...this.fields },
+    };
+  }
 }

@@ -15,3 +15,15 @@ export { TriggerEngine } from "./TriggerEngine.js";
 export { CaptureResult } from "./CaptureResult.js";
 export { Analysis } from "./Analysis.js";
 export { resolveMetricIds } from "./resolveMetricIds.js";
+
+export { enableDebugWorkspace, takeDebugSnapshot } from "./EnableDebugWorkspace.js";
+
+export { DebugBackend } from "./workspace/backend/DebugBackend.js";
+export { NullDebugBackend } from "./workspace/backend/NullDebugBackend.js";
+export { BrowserDebugBackend } from "./workspace/backend/BrowserDebugBackend.js";
+export { TestDebugBackend } from "./workspace/backend/TestDebugBackend.js";
+
+export { SnapshotBuilder } from "./snapshots/SnapshotBuilder.js";
+export { EntitySnapshot } from "./snapshots/EntitySnapshot.js";
+export { ComponentSnapshot } from "./snapshots/ComponentSnapshot.js";
+export { WorldSnapshot } from "./snapshots/WorldSnapshot.js";

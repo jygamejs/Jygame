@@ -14,6 +14,7 @@ import { Scene } from "./Scene.js";
 import { Diagnostics, MetricCategory, MetricUnit, MetricType, resolveMetricIds }
   from "../debug/index.js";
 import { DebugOverlay } from "../debug/overlay/DebugOverlay.js";
+import { enableDebugWorkspace, takeDebugSnapshot } from "../debug/EnableDebugWorkspace.js";
 
 export class Game {
   constructor({ parent, width, height, fps = 60, maxTicks = 5, autoPause = true, scaleToFit = null }) {
@@ -141,6 +142,10 @@ export class Game {
     target.style.transform = `scale(${scale})`;
     target.style.marginTop = marginV + "px";
     target.style.marginBottom = marginV + "px";
+  }
+
+  enableDebugWorkspace(backend) {
+    enableDebugWorkspace(this, backend);
   }
 
   get debug() {
@@ -499,6 +504,10 @@ export class Game {
 
     this._flushSceneOps();
 
+    if (this._snapshotBuilder) {
+      takeDebugSnapshot(this);
+    }
+
     const alpha = this.clock.alpha;
     const renderStart = this._findBlockingIndex("blocksRenderBelow");
     this._interpolateScenes(alpha, renderStart);
@@ -531,6 +540,7 @@ export class Game {
     if (this._resizeObserver) this._resizeObserver.disconnect();
     this._resetSceneStack();
     this.input.destroy();
+    if (this._debugBackend) this._debugBackend.close();
     if (this._debugOverlay) this._debugOverlay.destroy();
   }
 }

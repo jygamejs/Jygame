@@ -12,4 +12,14 @@ export class EntitySnapshot {
     this.archetypeId = 0;
     this.components = [];
   }
+
+  toJSON() {
+    return {
+      entityId: this.entityId,
+      archetypeId: this.archetypeId,
+      components: this.components.map(c => c.toJSON
+        ? c.toJSON()
+        : { componentId: c.componentId, componentName: c.componentName, fields: c.fields }),
+    };
+  }
 }
