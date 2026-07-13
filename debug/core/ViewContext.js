@@ -1,10 +1,12 @@
 export class ViewContext {
-  constructor({ history, registry, analysis, theme, selection, config } = {}) {
+  constructor({ history, registry, analysis, theme, selection, renderers, cache, config } = {}) {
     this.history = history ?? null;
     this.registry = registry ?? null;
     this.analysis = analysis ?? null;
     this.theme = theme ?? null;
     this.selection = selection ?? null;
+    this.renderers = renderers ?? null;
+    this.cache = cache ?? null;
     this.config = Object.freeze({ ...config });
     Object.freeze(this);
   }
@@ -16,6 +18,8 @@ export class ViewContext {
       analysis: overrides.analysis ?? this.analysis,
       theme: overrides.theme ?? this.theme,
       selection: overrides.selection ?? this.selection,
+      renderers: overrides.renderers ?? this.renderers,
+      cache: overrides.cache ?? this.cache,
       config: overrides.config ?? this.config,
     });
   }

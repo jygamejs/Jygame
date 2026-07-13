@@ -49,7 +49,9 @@ export class WorkspaceHost {
     });
 
     this._boundClick = this._onClick.bind(this);
+    this._boundKeyDown = this._onKeyDown.bind(this);
     canvas.addEventListener("click", this._boundClick);
+    document.addEventListener("keydown", this._boundKeyDown);
   }
 
   get selection() { return this._selection; }
@@ -98,12 +100,38 @@ export class WorkspaceHost {
     const rect = this._canvas.getBoundingClientRect();
     const x = (e.clientX - rect.left) * (this._canvas.width / rect.width);
     const y = (e.clientY - rect.top) * (this._canvas.height / rect.height);
-    if (y > TAB_HEIGHT) return;
-    for (const tab of this._tabRects) {
-      if (x >= tab.x && x <= tab.x + tab.w) {
-        this.activateView(tab.id);
-        return;
+    if (y <= TAB_HEIGHT) {
+      for (const tab of this._tabRects) {
+        if (x >= tab.x && x <= tab.x + tab.w) {
+          this.activateView(tab.id);
+          return;
+        }
       }
+      return;
+    }
+    const view = this._getView(this._activeViewId);
+    if (view && view.handleInput) {
+      view.handleInput(
+        { type: "click", x, y, button: e.button },
+        { x: 0, y: TAB_HEIGHT, width: this._canvas.width, height: this._canvas.height - TAB_HEIGHT }
+      );
+    }
+  }
+
+  _onKeyDown(e) {
+    const view = this._getView(this._activeViewId);
+    if (!view) return;
+    if (e.key === "Escape" && view.handleInput) {
+      view.handleInput(
+        { type: "keydown", key: e.key },
+        { x: 0, y: TAB_HEIGHT, width: this._canvas.width, height: this._canvas.height - TAB_HEIGHT }
+      );
+    }
+    if (view.appendQuery && e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      view.appendQuery(e.key);
+    } else if (view.backspaceQuery && e.key === "Backspace") {
+      view.backspaceQuery();
+      e.preventDefault();
     }
   }
 
@@ -158,6 +186,7 @@ export class WorkspaceHost {
     this._views.forEach(view => view.dispose());
     this._views.clear();
     this._canvas.removeEventListener("click", this._boundClick);
+    document.removeEventListener("keydown", this._boundKeyDown);
     this._backend?.close();
   }
 }
