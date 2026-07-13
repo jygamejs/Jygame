@@ -9,6 +9,8 @@ export class FrameGraphView extends View {
     this._data = null;
     this._visibleMetrics = new Set();
     this._initialized = false;
+    this._legendOffset = 0;
+    this._clickRegions = [];
   }
 
   update(dt) {
@@ -199,30 +201,88 @@ export class FrameGraphView extends View {
 
   _drawLegend(ctx, px, py, pw, ph, theme, data, tr, pad, legendH) {
     const legendY = py + ph - legendH;
-    let legendX = px + pad;
+    const metrics = data.metrics;
+    if (!metrics.length) return;
 
-    for (const metric of data.metrics) {
-      const dotSize = 8;
+    const btnW = 16;
+    const btnH = legendH - 4;
+    const btnY = legendY + (legendH - btnH) / 2;
+
+    if (this._legendOffset >= metrics.length) this._legendOffset = 0;
+
+    const leftBtnX = px + pad;
+    const rightBtnX = px + pw - pad - btnW;
+    const leftActive = this._legendOffset > 0;
+    const rightActive = this._legendOffset < metrics.length - 1;
+
+    ctx.fillStyle = theme.background;
+    ctx.fillRect(leftBtnX, btnY, btnW, btnH);
+    if (tr) {
+      tr.render(ctx, "\u25C0", leftBtnX + btnW / 2, btnY + btnH / 2, {
+        size: theme.fontSizeSmall, color: leftActive ? theme.textAccent : theme.textDim,
+        align: "center", baseline: "middle",
+      });
+    }
+    this._clickRegions.push({ x: leftBtnX, y: btnY, w: btnW, h: btnH,
+      handler: () => { this._legendOffset = Math.max(0, this._legendOffset - 1); } });
+
+    const startX = leftBtnX + btnW + 4;
+    const maxX = rightBtnX - 4;
+    let legendX = startX;
+    const dotSize = 8;
+
+    for (let i = this._legendOffset; i < metrics.length; i++) {
+      const metric = metrics[i];
       const isVis = metric.visible;
+      const label = metric.displayName;
+      const m = tr ? tr.measure(ctx, label, { size: theme.fontSizeSmall }) : { width: 50 };
+      const itemW = dotSize + 4 + m.width + theme.spacing * 2;
+
+      if (legendX + itemW > maxX) break;
 
       ctx.fillStyle = isVis ? metric.color : theme.textDim;
       ctx.fillRect(legendX, legendY + (legendH - dotSize) / 2, dotSize, dotSize);
 
+      this._clickRegions.push({
+        x: legendX, y: legendY, w: itemW, h: legendH,
+        handler: () => this.toggleMetric(metric.name),
+      });
+
       if (tr) {
-        const label = metric.displayName;
         tr.render(ctx, label, legendX + dotSize + 4, legendY + (legendH - 10) / 2, {
           size: theme.fontSizeSmall,
-          color: isVis ? theme.text : theme.textDim,
+          color: isVis ? theme.textAccent : theme.textDim,
           baseline: "middle",
         });
-        const m = tr.measure(ctx, label, { size: theme.fontSizeSmall });
-        legendX += dotSize + 4 + m.width + theme.spacing * 2;
-      } else {
-        legendX += dotSize + 4 + 80;
       }
 
-      if (legendX > px + pw - pad) break;
+      legendX += itemW;
     }
+
+    ctx.fillStyle = theme.background;
+    ctx.fillRect(rightBtnX, btnY, btnW, btnH);
+    if (tr) {
+      tr.render(ctx, "\u25B6", rightBtnX + btnW / 2, btnY + btnH / 2, {
+        size: theme.fontSizeSmall, color: rightActive ? theme.textAccent : theme.textDim,
+        align: "center", baseline: "middle",
+      });
+    }
+    this._clickRegions.push({ x: rightBtnX, y: btnY, w: btnW, h: btnH,
+      handler: () => { this._legendOffset = Math.min(metrics.length - 1, this._legendOffset + 1); } });
+  }
+
+  handleInput(event, rect) {
+    if (event.type !== "click" && event.type !== "pointerdown") return false;
+    const ex = event.x;
+    const ey = event.y;
+    for (const region of this._clickRegions) {
+      if (ex >= region.x && ex <= region.x + region.w &&
+          ey >= region.y && ey <= region.y + region.h) {
+        region.handler();
+        return true;
+      }
+    }
+    return false;
   }
 
   _niceYSteps(min, max, count) {
