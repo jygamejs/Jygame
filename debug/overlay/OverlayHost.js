@@ -74,14 +74,6 @@ export class OverlayHost {
     this._commands.register("view:metrics:toggle", () => this._toggleView("metrics"), "4");
     this._commands.register("view:events:toggle", () => this._toggleView("events"), "5");
     this._commands.register("view:captures:toggle", () => this._toggleView("captures"), "6");
-    this._boundCaptureKey = (e) => {
-      if ((e.ctrlKey || e.metaKey) && (e.key === "i" || e.key === "I")) {
-        e.preventDefault();
-        e.stopPropagation();
-        this._commands.execute("capture:manual");
-      }
-    };
-    document.addEventListener("keydown", this._boundCaptureKey);
 
     this._commands.register("capture:manual", () => {
       const diag = this._game._getDiag?.();
@@ -93,12 +85,12 @@ export class OverlayHost {
       return true;
     });
 
-    const savedLayout = this._persistence.load("layout");
-    if (savedLayout) this._layout.restore(savedLayout);
-
     if (game.inputSystem) {
       game.inputSystem.addInputConsumer((event) => this._processInput(event));
     }
+
+    const savedLayout = this._persistence.load("layout");
+    if (savedLayout) this._layout.restore(savedLayout);
   }
 
   get visible() { return this._visible; }
@@ -195,7 +187,12 @@ export class OverlayHost {
 
   _processInput(event) {
     if (event.type === "keydown" || event.type === "KEY_DOWN") {
-      const key = event.data?.key ?? event.key;
+      const data = event.data ?? {};
+      const key = data.key ?? event.key;
+      if ((data.ctrl || data.meta) && (key === "i" || key === "I")) {
+        this._commands.execute("capture:manual");
+        return true;
+      }
       const cmdName = this._commands.resolveShortcut(key);
       if (cmdName && this._commands.execute(cmdName)) return true;
     }
@@ -241,7 +238,6 @@ export class OverlayHost {
   }
 
   destroy() {
-    document.removeEventListener("keydown", this._boundCaptureKey);
     this.hide();
     this._views.forEach(view => view.dispose());
     this._views.clear();
