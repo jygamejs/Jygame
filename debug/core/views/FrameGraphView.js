@@ -11,6 +11,8 @@ export class FrameGraphView extends View {
     this._initialized = false;
     this._legendOffset = 0;
     this._clickRegions = [];
+    this._hiddenCategories = new Set();
+    this._categories = [];
   }
 
   update(dt) {
@@ -44,6 +46,12 @@ export class FrameGraphView extends View {
       this._initialized = true;
     }
 
+    const catSet = new Set();
+    for (const desc of metricDescs) {
+      if (desc.category != null) catSet.add(desc.category);
+    }
+    this._categories = [...catSet].sort();
+
     const metrics = [];
     let yMin = Infinity;
     let yMax = -Infinity;
@@ -58,7 +66,8 @@ export class FrameGraphView extends View {
       }
       if (values.length < 2) continue;
 
-      const visible = this._visibleMetrics.has(desc.name);
+      const catHidden = desc.category != null && this._hiddenCategories.has(desc.category);
+      const visible = this._visibleMetrics.has(desc.name) && !catHidden;
       if (visible) {
         const localMin = Math.min(...values);
         const localMax = Math.max(...values);
@@ -246,10 +255,58 @@ export class FrameGraphView extends View {
     this._clickRegions.push({ x: leftBtnX, y: btnY, w: btnW, h: btnH,
       handler: () => { this._legendOffset = Math.max(0, this._legendOffset - 1); } });
 
-    const startX = leftBtnX + btnW + 4;
+    const catNames = { 0:"Frame", 1:"ECS", 2:"Render", 3:"Audio", 4:"Particles", 5:"Physics", 6:"Streaming", 7:"Assets", 8:"Scene", 9:"Input" };
+    const catColors = {
+      0: theme.categoryFrame  || "#88ccff",
+      1: theme.categoryEcs    || "#88ff88",
+      2: theme.categoryRender || "#ff8888",
+      3: theme.categoryAudio  || "#ff88ff",
+      4: theme.categoryParticle || "#ffff88",
+      5: theme.categoryPhysics || "#88ffff",
+      6: theme.categoryStreaming || "#ff8844",
+      7: theme.categoryAsset || "#44ff88",
+      8: theme.categoryScene || "#ff44ff",
+      9: theme.categoryInput || "#44ddff",
+    };
+
     const maxX = rightBtnX - 4;
-    let legendX = startX;
     const dotSize = 8;
+    let legendX = leftBtnX + btnW + 4;
+
+    for (const cat of this._categories) {
+      const label = catNames[cat] || String(cat);
+      const catColor = catColors[cat] || "#88ccff";
+      const hidden = this._hiddenCategories.has(cat);
+      const m = tr ? tr.measure(ctx, label, { size: theme.fontSizeSmall }) : { width: 40 };
+      const pillW = m.width + 14;
+
+      if (legendX + pillW + 4 > maxX) break;
+
+      ctx.fillStyle = hidden ? theme.background : catColor;
+      ctx.fillRect(legendX, btnY, pillW, btnH);
+
+      if (tr) {
+        tr.render(ctx, label, legendX + pillW / 2, btnY + btnH / 2, {
+          size: theme.fontSizeSmall,
+          color: hidden ? theme.textDim : theme.textInverse,
+          align: "center", baseline: "middle",
+        });
+      }
+
+      const catStart = legendX;
+      const catW = pillW;
+      this._clickRegions.push({
+        x: catStart, y: btnY, w: catW, h: btnH,
+        handler: () => {
+          if (this._hiddenCategories.has(cat)) this._hiddenCategories.delete(cat);
+          else this._hiddenCategories.add(cat);
+        },
+      });
+
+      legendX += pillW + 4;
+    }
+
+    let itemX = legendX + 4;
 
     for (let i = this._legendOffset; i < metrics.length; i++) {
       const metric = metrics[i];
@@ -258,25 +315,25 @@ export class FrameGraphView extends View {
       const m = tr ? tr.measure(ctx, label, { size: theme.fontSizeSmall }) : { width: 50 };
       const itemW = dotSize + 4 + m.width + theme.spacing * 2;
 
-      if (legendX + itemW > maxX) break;
+      if (itemX + itemW > maxX) break;
 
       ctx.fillStyle = isVis ? metric.color : theme.textDim;
-      ctx.fillRect(legendX, legendY + (legendH - dotSize) / 2, dotSize, dotSize);
+      ctx.fillRect(itemX, legendY + (legendH - dotSize) / 2, dotSize, dotSize);
 
       this._clickRegions.push({
-        x: legendX, y: legendY, w: itemW, h: legendH,
+        x: itemX, y: legendY, w: itemW, h: legendH,
         handler: () => this.toggleMetric(metric.name),
       });
 
       if (tr) {
-        tr.render(ctx, label, legendX + dotSize + 4, legendY + (legendH - 10) / 2, {
+        tr.render(ctx, label, itemX + dotSize + 4, legendY + (legendH - 10) / 2, {
           size: theme.fontSizeSmall,
           color: isVis ? theme.textAccent : theme.textDim,
           baseline: "middle",
         });
       }
 
-      legendX += itemW;
+      itemX += itemW;
     }
 
     ctx.fillStyle = theme.background;
