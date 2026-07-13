@@ -35,10 +35,12 @@ export class SnapshotBuilder {
       this._metricDescriptors.push({
         id: desc.id,
         name: desc.name,
+        displayName: desc.displayName ?? desc.name,
         type: desc.type,
         category: desc.category,
         unit: desc.unit,
         budget: desc.budget,
+        color: desc.color,
       });
     });
   }
