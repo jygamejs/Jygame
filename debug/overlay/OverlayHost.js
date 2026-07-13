@@ -1,4 +1,5 @@
-import { ViewRegistry, ViewContext, CommandSystem, SelectionManager, PersistenceManager, TooltipManager, AnimationSystem } from "../core/index.js";
+import { ViewRegistry, ViewContext, CommandSystem, SelectionManager, PersistenceManager, TooltipManager, AnimationSystem, OffscreenCache } from "../core/index.js";
+import { TextRenderer, SparklineRenderer, HistogramRenderer, FrameBarRenderer, TimelineRenderer } from "../core/renderers/index.js";
 import { DarkTheme, LightTheme } from "../core/theme/index.js";
 import { PerformanceView, FrameGraphView, TimelineView, MetricBrowserView, EventViewerView, CaptureBrowserView, SettingsView } from "../core/views/index.js";
 import { OverlayLayout } from "./OverlayLayout.js";
@@ -26,6 +27,15 @@ export class OverlayHost {
     this._tooltips = new TooltipManager();
     this._tooltips.on("visibilityChanged", () => this._requestRender());
 
+    this._cache = new OffscreenCache();
+    this._renderers = {
+      text: new TextRenderer(),
+      sparkline: new SparklineRenderer(),
+      histogram: new HistogramRenderer(),
+      frameBar: new FrameBarRenderer(),
+      timeline: new TimelineRenderer(),
+    };
+
     this._viewRegistry = new ViewRegistry();
     this._viewRegistry.register("performance", PerformanceView);
     this._viewRegistry.register("framegraph", FrameGraphView);
@@ -40,6 +50,7 @@ export class OverlayHost {
     this._activeViews = new Set(["performance", "framegraph", "timeline", "events"]);
 
     this._layout = new OverlayLayout(DarkTheme);
+    this._layout.createDefaultLayout(["performance", "framegraph", "timeline", "events", "metrics", "captures", "settings"]);
     this._renderRequested = false;
 
     this._commands.register("overlay:toggle", () => this.toggle(), "`");
@@ -69,10 +80,13 @@ export class OverlayHost {
     if (diag) {
       this._cachedContext = new ViewContext({
         history: diag.history,
-        registry: diag.registry,
+        registry: diag.metrics,
         analysis: diag.analysis,
         theme: this._theme || DarkTheme,
         selection: this._selection,
+        renderers: this._renderers,
+        cache: this._cache,
+        config: this._persistence.load("settings") ?? {},
       });
     }
     this._activeViews.forEach(id => this._getView(id)?.onActivate());
@@ -95,10 +109,12 @@ export class OverlayHost {
     const diag = this._game._getDiag?.();
     this._cachedContext = new ViewContext({
       history: diag?.history ?? null,
-      registry: diag?.registry ?? null,
+      registry: diag?.metrics ?? null,
       analysis: diag?.analysis ?? null,
       theme: this._theme || DarkTheme,
       selection: this._selection,
+      renderers: this._renderers,
+      cache: this._cache,
       config: this._persistence.load("settings") ?? {},
     });
     return this._cachedContext;
@@ -134,7 +150,7 @@ export class OverlayHost {
     for (const id of this._activeViews) {
       const view = this._getView(id);
       if (!view) continue;
-      const rect = this._layout?.getViewRect(id);
+      const rect = this._layout?.getPanelRect(id);
       if (rect && view.handleInput(event, rect)) return true;
     }
     return false;
@@ -162,7 +178,7 @@ export class OverlayHost {
     for (const id of this._activeViews) {
       const view = this._getView(id);
       if (!view) continue;
-      const rect = this._layout.getViewRect(id);
+      const rect = this._layout.getPanelRect(id);
       if (rect) {
         view.rect = rect;
         view.render(ctx, rect);

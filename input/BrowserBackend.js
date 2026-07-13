@@ -8,6 +8,7 @@ export class BrowserBackend extends InputBackend {
     super();
     this._target = target;
     this._attached = false;
+    this.__eventQueue = [];
 
     this._boundKeyDown = this._onKeyDown.bind(this);
     this._boundKeyUp = this._onKeyUp.bind(this);
@@ -187,9 +188,13 @@ export class BrowserBackend extends InputBackend {
   set _eventQueue(q) { this.__eventQueue = q; }
   get _eventQueue() { return this.__eventQueue; }
 
-  // Override poll to stash the queue reference
+  // Override poll to drain pre-poll events and then use the system queue
   poll(queue) {
-    if (!this.__eventQueue) {
+    if (this.__eventQueue !== queue) {
+      for (let i = 0; i < this.__eventQueue.length; i++) {
+        queue.push(this.__eventQueue[i]);
+      }
+      this.__eventQueue.length = 0;
       this.__eventQueue = queue;
     }
   }

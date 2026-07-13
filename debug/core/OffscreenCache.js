@@ -3,7 +3,7 @@ export class OffscreenCache {
     this._canvases = new Map();
   }
 
-  get(key, width, height) {
+  get(key, factory, width, height) {
     const existing = this._canvases.get(key);
     if (existing && existing.width >= width && existing.height >= height) {
       return existing;
@@ -11,8 +11,14 @@ export class OffscreenCache {
     const canvas = document.createElement("canvas");
     canvas.width = width;
     canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    if (ctx && factory) factory(ctx, width, height);
     this._canvases.set(key, canvas);
     return canvas;
+  }
+
+  invalidateAll() {
+    this._canvases.clear();
   }
 
   has(key) {
