@@ -37,10 +37,13 @@ export class SettingsView extends View {
   }
 
   _adjustSetting(key, delta) {
-    this._setSetting(key, this._getSetting(key) + delta);
+    const old = this._getSetting(key);
+    this._setSetting(key, old + delta);
+    console.log(`[SettingsView] ${key}: ${old} -> ${this._getSetting(key)}`);
   }
 
   _setTheme(mode) {
+    console.log(`[SettingsView] _setTheme("${mode}")`);
     if (!this.ctx.config) this.ctx.config = {};
     this.ctx.config.theme = mode;
     this.ctx.theme = mode === "light" ? LightTheme : DarkTheme;
@@ -128,6 +131,7 @@ export class SettingsView extends View {
     const btnSize = 20;
     const btnY = y + (rowH - btnSize) / 2;
     const rightEdge = x + w - pad;
+    const incX = rightEdge - btnSize;
     const gap = 56;
     const decX = incX - gap;
 

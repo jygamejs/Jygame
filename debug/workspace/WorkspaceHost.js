@@ -40,6 +40,7 @@ export class WorkspaceHost {
     this._activeViewId = "performance";
     this._getView("performance")?.onActivate();
     this._tabRects = [];
+    this._userConfig = {};
 
     this._backend.onMessage((msg) => {
       if (msg?.type === "snapshot" && msg.payload) {
@@ -82,7 +83,7 @@ export class WorkspaceHost {
       selection: this._selection,
       renderers: this._renderers,
       cache: this._cache,
-      config: {},
+      config: this._userConfig,
     });
     return this._cachedContext;
   }
@@ -110,11 +111,13 @@ export class WorkspaceHost {
       return;
     }
     const view = this._getView(this._activeViewId);
+    console.log(`[WorkspaceHost] click at (${x}, ${y}) — activeView: ${this._activeViewId}, hasHandleInput: ${!!(view?.handleInput)}`);
     if (view && view.handleInput) {
-      view.handleInput(
+      const handled = view.handleInput(
         { type: "click", x, y, button: e.button },
         { x: 0, y: TAB_HEIGHT, width: this._canvas.width, height: this._canvas.height - TAB_HEIGHT }
       );
+      console.log(`[WorkspaceHost] handleInput returned ${handled}`);
     }
   }
 
