@@ -13,7 +13,7 @@ import { TextInput } from "../input/TextInput.js";
 import { Scene } from "./Scene.js";
 import { Diagnostics, MetricCategory, MetricUnit, MetricType, resolveMetricIds }
   from "../debug/index.js";
-import { DebugOverlay } from "../debug/overlay/DebugOverlay.js";
+import { OverlayHost } from "../debug/overlay/OverlayHost.js";
 import { enableDebugWorkspace, takeDebugSnapshot } from "../debug/EnableDebugWorkspace.js";
 
 export class Game {
@@ -156,7 +156,7 @@ export class Game {
 
   get debug() {
     if (!this._debugOverlay) {
-      this._debugOverlay = new DebugOverlay(this);
+      this._debugOverlay = new OverlayHost(this);
     }
     return this._debugOverlay;
   }
