@@ -3,6 +3,7 @@ import { DarkTheme } from "../theme/DarkTheme.js";
 import { MetricType } from "../../MetricType.js";
 
 export class FrameGraphPanel extends Panel {
+  static metadata = { id: "framegraph", title: "Frame Graph", icon: "\u26A1", group: "Analysis", pinned: false, searchable: true };
   constructor(context) {
     super("framegraph", "Frame Graph", context, {
       icon: "\u26A1",

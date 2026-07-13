@@ -12,6 +12,7 @@ const SETTING_DEFS = {
 const SETTING_KEYS = ["fpsTarget", "refreshRate", "fontSize", "opacity"];
 
 export class SettingsPanel extends Panel {
+  static metadata = { id: "settings", title: "Settings", icon: "\u2699", group: "Tools", pinned: true, searchable: false };
   constructor(context) {
     super("settings", "Settings", context, {
       icon: "\u2699",

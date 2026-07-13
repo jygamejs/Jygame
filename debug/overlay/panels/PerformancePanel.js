@@ -3,6 +3,7 @@ import { DarkTheme } from "../theme/DarkTheme.js";
 import { MetricType } from "../../MetricType.js";
 
 export class PerformancePanel extends Panel {
+  static metadata = { id: "performance", title: "Performance", icon: "\u26A1", group: "Analysis", pinned: true, searchable: true };
   constructor(context) {
     super("performance", "Performance", context, {
       icon: "\u26A1",

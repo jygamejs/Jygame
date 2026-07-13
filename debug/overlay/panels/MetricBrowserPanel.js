@@ -23,6 +23,7 @@ for (const [k, v] of Object.entries(MetricCategory)) {
 }
 
 export class MetricBrowserPanel extends Panel {
+  static metadata = { id: "metrics", title: "Metrics", icon: "\u2630", group: "Analysis", pinned: false, searchable: true };
   constructor(context) {
     super("metrics", "Metric Browser", context, {
       icon: "\u2630",

@@ -2,6 +2,7 @@ import { Panel } from "../Panel.js";
 import { DarkTheme } from "../theme/DarkTheme.js";
 
 export class CaptureBrowserPanel extends Panel {
+  static metadata = { id: "captures", title: "Captures", icon: "\u29C9", group: "Analysis", pinned: false, searchable: true };
   constructor(context) {
     super("captures", "Capture Browser", context, {
       icon: "\u29C9",

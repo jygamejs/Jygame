@@ -23,6 +23,8 @@ export { NullDebugBackend } from "./workspace/backend/NullDebugBackend.js";
 export { BrowserDebugBackend } from "./workspace/backend/BrowserDebugBackend.js";
 export { TestDebugBackend } from "./workspace/backend/TestDebugBackend.js";
 
+export { WorkspaceSession } from "./workspace/session/WorkspaceSession.js";
+
 export { SnapshotBuilder } from "./snapshots/SnapshotBuilder.js";
 export { EntitySnapshot } from "./snapshots/EntitySnapshot.js";
 export { ComponentSnapshot } from "./snapshots/ComponentSnapshot.js";

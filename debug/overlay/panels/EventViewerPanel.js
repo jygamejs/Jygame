@@ -11,6 +11,7 @@ const SEVERITY_LABELS = ["All", "Error", "Warn", "Info"];
 const SEVERITY_VALUES = ["all", "error", "warn", "info"];
 
 export class EventViewerPanel extends Panel {
+  static metadata = { id: "events", title: "Events", icon: "\u25CB", group: "Analysis", pinned: false, searchable: true };
   constructor(context) {
     super("events", "Event Viewer", context, {
       icon: "\u25CB",

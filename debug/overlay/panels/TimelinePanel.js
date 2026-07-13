@@ -4,6 +4,7 @@ import { TimelineRenderer } from "../timeline/TimelineRenderer.js";
 import { TimelineInteraction } from "../timeline/TimelineInteraction.js";
 
 export class TimelinePanel extends Panel {
+  static metadata = { id: "timeline", title: "Timeline", icon: "\u231A", group: "Analysis", pinned: false, searchable: true };
   constructor(context) {
     super("timeline", "Timeline", context, {
       icon: "\u231A",
