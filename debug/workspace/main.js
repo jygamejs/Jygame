@@ -4,8 +4,9 @@ import { BrowserDebugBackend } from "./backend/BrowserDebugBackend.js";
 const canvas = document.getElementById("workspace-canvas");
 
 function resize() {
-  canvas.width = window.innerWidth;
-  canvas.height = window.innerHeight;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = Math.round(rect.width * devicePixelRatio);
+  canvas.height = Math.round(rect.height * devicePixelRatio);
 }
 window.addEventListener("resize", resize);
 resize();
@@ -15,13 +16,22 @@ backend.open();
 
 const host = new WorkspaceHost(canvas, backend);
 
-function frame() {
+let lastTime = performance.now();
+function frame(time) {
+  const dt = Math.min((time - lastTime) / 1000, 0.05);
+  lastTime = time;
+
   const rect = canvas.getBoundingClientRect();
-  if (canvas.width !== Math.round(rect.width * devicePixelRatio) ||
-      canvas.height !== Math.round(rect.height * devicePixelRatio)) {
-    canvas.width = Math.round(rect.width * devicePixelRatio);
-    canvas.height = Math.round(rect.height * devicePixelRatio);
+  const cw = Math.round(rect.width * devicePixelRatio);
+  const ch = Math.round(rect.height * devicePixelRatio);
+  if (canvas.width !== cw || canvas.height !== ch) {
+    canvas.width = cw;
+    canvas.height = ch;
   }
+
+  host.update(dt);
+  host._render();
+
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
