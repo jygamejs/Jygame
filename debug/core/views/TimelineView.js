@@ -10,6 +10,7 @@ export class TimelineView extends View {
     this._model = new Timeline(this.ctx);
     this._rowRects = [];
     this._renderer = new TimelineRenderer(this.ctx, this);
+    this._frameNumber = 0;
   }
 
   update(dt) {
@@ -17,6 +18,8 @@ export class TimelineView extends View {
     if (!history || !history.count) return;
     const idx = this._model.frameIndex >= 0 ? this._model.frameIndex : history.count - 1;
     this._model.frameIndex = idx;
+    const snap = history.at(idx);
+    this._frameNumber = snap?.frame ?? idx;
   }
 
   render(ctx, rect) {
@@ -26,7 +29,7 @@ export class TimelineView extends View {
     ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
 
     this._rowRects = [];
-    this._renderer.render(ctx, rect, this._model);
+    this._renderer.render(ctx, rect, this._model, this._frameNumber);
   }
 
   handleInput(event, rect) {

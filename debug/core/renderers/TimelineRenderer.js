@@ -4,7 +4,7 @@ export class TimelineRenderer {
     this._interaction = interaction;
   }
 
-  render(ctx, rect, model) {
+  render(ctx, rect, model, frameNumber) {
     const theme = this.ctx.theme;
     if (!theme) return;
 
@@ -12,7 +12,7 @@ export class TimelineRenderer {
     const fbr = this.ctx.renderers?.frameBar;
 
     if (tr) {
-      tr.render(ctx, `Frame ${model.frameIndex >= 0 ? model.frameIndex : ""}`, rect.x + 4, rect.y + 4, {
+      tr.render(ctx, `Frame ${frameNumber ?? ""}`, rect.x + 4, rect.y + 4, {
         size: theme.fontSizeSmall,
         color: theme.textDim,
       });
@@ -28,7 +28,7 @@ export class TimelineRenderer {
         ctx.fillText(model.isExpanded(row.id) ? "▾" : "▸", rect.x + 4, y + 9);
       }
 
-      const barX = row.children.length > 0 ? rect.x + 20 : rect.x + 4;
+      const barX = rect.x + 20;
       if (fbr) {
         fbr.render(ctx, barX, y, rect.x + rect.width - barX, 18, {
           duration: row.value,
