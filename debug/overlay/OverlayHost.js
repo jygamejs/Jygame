@@ -74,11 +74,24 @@ export class OverlayHost {
     this._commands.register("view:metrics:toggle", () => this._toggleView("metrics"), "4");
     this._commands.register("view:events:toggle", () => this._toggleView("events"), "5");
     this._commands.register("view:captures:toggle", () => this._toggleView("captures"), "6");
+    this._boundCaptureKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === "i" || e.key === "I")) {
+        e.preventDefault();
+        e.stopPropagation();
+        this._commands.execute("capture:manual");
+      }
+    };
+    document.addEventListener("keydown", this._boundCaptureKey);
+
     this._commands.register("capture:manual", () => {
       const diag = this._game._getDiag?.();
-      if (diag) diag.captureNow();
+      if (diag) {
+        diag.captureNow();
+        const idx = this._captures.length;
+        if (typeof console !== "undefined") console.log(`[jygame] capture #${idx} saved (frame ${diag.lastSnapshot?.frame ?? "?"})`);
+      }
       return true;
-    }, "F9");
+    });
 
     const savedLayout = this._persistence.load("layout");
     if (savedLayout) this._layout.restore(savedLayout);
@@ -228,6 +241,7 @@ export class OverlayHost {
   }
 
   destroy() {
+    document.removeEventListener("keydown", this._boundCaptureKey);
     this.hide();
     this._views.forEach(view => view.dispose());
     this._views.clear();
