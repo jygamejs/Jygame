@@ -69,7 +69,7 @@ export class FrameGraphView extends View {
       metrics.push({
         name: desc.name,
         displayName: desc.displayName,
-        color: desc.color || "#88ccff",
+        color: this._metricColor(desc, metrics.length),
         values,
         visible,
       });
@@ -90,6 +90,26 @@ export class FrameGraphView extends View {
     const graphYMax = yMax + padding;
 
     this._data = { metrics, yMin: graphYMin, yMax: graphYMax, frameCount };
+  }
+
+  _metricColor(desc, index) {
+    if (desc.color) return desc.color;
+    const theme = this.ctx.theme;
+    const catColors = {
+      0: theme?.categoryFrame  || "#88ccff",
+      1: theme?.categoryEcs    || "#88ff88",
+      2: theme?.categoryRender || "#ff8888",
+      3: theme?.categoryAudio  || "#ff88ff",
+      4: theme?.categoryParticle || "#ffff88",
+      5: theme?.categoryPhysics || "#88ffff",
+      6: theme?.categoryStreaming || "#ff8844",
+      7: theme?.categoryAsset || "#44ff88",
+      8: theme?.categoryScene || "#ff44ff",
+      9: theme?.categoryInput || "#44ddff",
+    };
+    if (desc.category != null && catColors[desc.category]) return catColors[desc.category];
+    const palette = ["#88ccff", "#ff8888", "#88ff88", "#ff88ff", "#ffff88", "#88ffff", "#ff8844", "#44ff88", "#ff44ff", "#44ddff"];
+    return palette[index % palette.length];
   }
 
   toggleMetric(name) {
