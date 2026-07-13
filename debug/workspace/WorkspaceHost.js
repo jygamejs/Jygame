@@ -3,6 +3,7 @@ import { TextRenderer, SparklineRenderer, HistogramRenderer, FrameBarRenderer, T
 import { DarkTheme, LightTheme } from "../core/theme/index.js";
 import { PerformanceView, FrameGraphView, TimelineView, MetricBrowserView, EventViewerView, CaptureBrowserView, SettingsView } from "../core/views/index.js";
 import { WorkspaceSnapshotStore } from "./WorkspaceSnapshotStore.js";
+import { CaptureResult } from "../CaptureResult.js";
 
 const TAB_HEIGHT = 32;
 
@@ -135,6 +136,12 @@ export class WorkspaceHost {
   }
 
   _onKeyDown(e) {
+    if ((e.ctrlKey || e.metaKey) && (e.key === "i" || e.key === "I")) {
+      e.preventDefault();
+      e.stopPropagation();
+      this._captureFromStore();
+      return;
+    }
     const view = this._getView(this._activeViewId);
     if (!view) return;
     if (e.key === "Escape" && view.handleInput) {
@@ -148,6 +155,31 @@ export class WorkspaceHost {
     } else if (view.backspaceQuery && e.key === "Backspace") {
       view.backspaceQuery();
       e.preventDefault();
+    }
+  }
+
+  _captureFromStore() {
+    const snapshots = this._store._snapshots;
+    if (snapshots.length === 0) return;
+    const count = Math.min(snapshots.length, 65);
+    const frames = [];
+    for (let i = count - 1; i >= 0; i--) {
+      const diag = snapshots[i].diagnostics;
+      if (diag) frames.push(diag);
+    }
+    if (frames.length === 0) return;
+    const capture = new CaptureResult({
+      name: "manual",
+      timestamp: performance.now(),
+      preFrames: frames.length - 1,
+      postFrames: 0,
+      snapshots: frames,
+      registry: this._store.registry,
+    });
+    this._captures.push(capture);
+    this._render();
+    if (typeof console !== "undefined") {
+      console.log(`[jygame] capture #${this._captures.length} saved (${frames.length} frames)`);
     }
   }
 
