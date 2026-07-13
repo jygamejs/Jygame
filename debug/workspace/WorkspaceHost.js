@@ -1,7 +1,7 @@
 import { ViewRegistry, ViewContext, CommandSystem, SelectionManager, OffscreenCache } from "../core/index.js";
 import { TextRenderer, SparklineRenderer, HistogramRenderer, FrameBarRenderer, TimelineRenderer } from "../core/renderers/index.js";
 import { DarkTheme } from "../core/theme/index.js";
-import { PerformanceView, FrameGraphView, MetricBrowserView, EventViewerView } from "../core/views/index.js";
+import { PerformanceView, FrameGraphView, TimelineView, MetricBrowserView, EventViewerView, CaptureBrowserView, SettingsView } from "../core/views/index.js";
 import { WorkspaceSnapshotStore } from "./WorkspaceSnapshotStore.js";
 
 const TAB_HEIGHT = 32;
@@ -29,8 +29,11 @@ export class WorkspaceHost {
     this._viewRegistry = new ViewRegistry();
     this._viewRegistry.register("performance", PerformanceView);
     this._viewRegistry.register("framegraph", FrameGraphView);
+    this._viewRegistry.register("timeline", TimelineView);
     this._viewRegistry.register("metrics", MetricBrowserView);
     this._viewRegistry.register("events", EventViewerView);
+    this._viewRegistry.register("captures", CaptureBrowserView);
+    this._viewRegistry.register("settings", SettingsView);
 
     this._contextProvider = () => this._currentContext();
     this._views = new Map();
