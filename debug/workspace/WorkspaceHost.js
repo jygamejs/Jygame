@@ -138,11 +138,12 @@ export class WorkspaceHost {
 
   _render() {
     this._cachedContext = null;
+    const theme = this._userConfig.theme === "light" ? LightTheme : DarkTheme;
     const ctx = this._ctx2d;
     const w = this._canvas.width;
     const h = this._canvas.height;
 
-    ctx.fillStyle = DarkTheme.background;
+    ctx.fillStyle = theme.background;
     ctx.fillRect(0, 0, w, h);
 
     const tr = this._renderers.text;
@@ -158,13 +159,13 @@ export class WorkspaceHost {
       const measured = tr ? tr.measure(ctx, label, { size: 13 }) : { width: label.length * 8 };
       const tabW = measured.width + 24;
 
-      ctx.fillStyle = isActive ? DarkTheme.panelBg : DarkTheme.panelHeaderBg;
+      ctx.fillStyle = isActive ? theme.panelBg : theme.panelHeaderBg;
       ctx.fillRect(cursorX, 0, tabW, TAB_HEIGHT);
 
       if (tr) {
         tr.render(ctx, label, cursorX + 12, TAB_HEIGHT / 2, {
           size: 13,
-          color: isActive ? DarkTheme.textAccent : DarkTheme.textDim,
+          color: isActive ? theme.textAccent : theme.textDim,
           baseline: "middle",
           align: "left",
         });
@@ -174,7 +175,7 @@ export class WorkspaceHost {
       cursorX += tabW;
     }
 
-    ctx.fillStyle = DarkTheme.border;
+    ctx.fillStyle = theme.border;
     ctx.fillRect(0, TAB_HEIGHT - 1, w, 1);
 
     const view = this._getView(this._activeViewId);
