@@ -143,7 +143,7 @@ Full API reference, guides, and examples: [jygame-documentation.vercel.app](http
 
 | Import | Description |
 |---|---|
-| `Game` | Main game loop with fixed timestep, canvas setup, UI layer, scene stack (`pushScene`, `popScene`, `replaceScene`, `peekScene`, `switchScene`), and lifecycle management. |
+| `Game` | Main game loop with fixed timestep, canvas setup, UI layer, scene stack (`pushScene`, `popScene`, `replaceScene`, `peekScene`, `switchScene`), and lifecycle management. Accepts `debug` option (default `true`) — press **Ctrl+F3** to open the debug workspace. Set `debug: false` to strip all debug code for final builds. |
 | `Scene` | Engine Scene (extends ECS Scene). Lifecycle hooks (`onEnter`, `onExit`, `onCreate`, `pause`, `resume`, `update`, `interpolate`, `render`, `renderUI`), blocking properties, stack delegators, auto-cleaned event helpers (`on`, `onSwipe`, `onTap`, `cleanup`), and built-in `_actionMap`/`_inputContext` for input. |
 | `DefaultWorldBuilder` | Creates a pre-configured `World` with all engine components, systems, and resources registered. |
 | `Sprite` | Convenience entity wrapper with `Transform`, `Collider`, `Velocity`, `Renderable`, `Visible`. Exposes `x`, `y`, `width`, `height`, `angle`, `scale`, `velocity`, `image`, `style` shorthands. |
@@ -227,6 +227,16 @@ Full API reference, guides, and examples: [jygame-documentation.vercel.app](http
 
 ### Debug & Diagnostics
 
+The debug system is enabled by default (`debug: true` in the Game constructor). Press **Ctrl+F3** at any time to open the standalone debug workspace in a new window — it displays real-time frame metrics, a system timeline, metric browser, event log, and capture viewer.
+
+To disable all debug overhead for production builds, pass `debug: false` to the Game constructor:
+
+```js
+const game = new Game({ parent: "#game", width: 800, height: 600, debug: false });
+```
+
+This strips diagnostics, the debug overlay, snapshot broadcasting, and the Ctrl+F3 shortcut entirely.
+
 | Import | Description |
 |---|---|
 | `Diagnostics` | Frame-level metric aggregation with timers, counters, and gauges. Built-in budget/warn/crit thresholds. |
@@ -244,7 +254,7 @@ Full API reference, guides, and examples: [jygame-documentation.vercel.app](http
 | `Analysis` | Frame analysis utilities (min, max, avg, percentile over a window). |
 | `CaptureResult` | Snapshot of captured metric data. |
 | `resolveMetricIds` | Resolves metric name strings to numeric IDs for fast frame-loop scoping. |
-| `DebugOverlay` | HUD overlay with `addInputConsumer`-based key bindings (F1 toggles, F2 profiles, etc.). Access via `game.debug`. |
+| `DebugOverlay` | In-game HUD overlay toggled with backtick (`` ` ``). Access via `game.debug`. |
 | `OverlaySession` | Full debug session manager — panels, themes, layout, persistence. |
 | `OverlayContext` | Debug overlay rendering context. |
 | `PanelManager` | Manages debug panel lifecycle. |
