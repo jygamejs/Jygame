@@ -181,12 +181,12 @@ export class OverlayHost {
   }
 
   _processInput(event) {
-    if (!this._visible) return false;
     if (event.type === "keydown" || event.type === "KEY_DOWN") {
       const key = event.data?.key ?? event.key;
       const cmdName = this._commands.resolveShortcut(key);
-      if (cmdName) return this._commands.execute(cmdName);
+      if (cmdName && this._commands.execute(cmdName)) return true;
     }
+    if (!this._visible) return false;
     for (const id of this._activeViews) {
       const view = this._getView(id);
       if (!view) continue;

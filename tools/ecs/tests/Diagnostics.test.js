@@ -717,6 +717,42 @@ describe("Diagnostics (integration)", () => {
       assert.strictEqual(d.lastSnapshot.counter(id), 1);
     }
   });
+
+  it("captureNow emits a CaptureResult with recent frames", () => {
+    const d = basicDiag();
+    for (let i = 0; i < 5; i++) {
+      d.beginFrame(i, 16.6);
+      d.recordCounter(3, i);
+      d.endFrame();
+    }
+
+    const results = [];
+    d.onCapture((r) => results.push(r));
+    d.captureNow("test-capture");
+
+    assert.strictEqual(results.length, 1);
+    assert.strictEqual(results[0].name, "test-capture");
+    assert.strictEqual(results[0].snapshots.length, 5);
+    assert.strictEqual(results[0].snapshots[0].frame, 4);
+    assert.strictEqual(results[0].snapshots[4].frame, 0);
+    assert.strictEqual(results[0].preFrames, 4);
+    assert.strictEqual(results[0].postFrames, 0);
+  });
+
+  it("captureNow works with no prior frames (single frame)", () => {
+    const d = basicDiag();
+    d.beginFrame(0, 16.6);
+    d.recordCounter(3, 42);
+    d.endFrame();
+
+    const results = [];
+    d.onCapture((r) => results.push(r));
+    d.captureNow("empty-history");
+
+    assert.strictEqual(results.length, 1);
+    assert.strictEqual(results[0].snapshots.length, 1);
+    assert.strictEqual(results[0].snapshots[0].frame, 0);
+  });
 });
 
 // ─── Commit 2: ECS Integration ──────────────────────
