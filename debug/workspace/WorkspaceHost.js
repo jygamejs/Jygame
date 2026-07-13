@@ -1,6 +1,6 @@
 import { ViewRegistry, ViewContext, CommandSystem, SelectionManager, OffscreenCache } from "../core/index.js";
 import { TextRenderer, SparklineRenderer, HistogramRenderer, FrameBarRenderer, TimelineRenderer } from "../core/renderers/index.js";
-import { DarkTheme } from "../core/theme/index.js";
+import { DarkTheme, LightTheme } from "../core/theme/index.js";
 import { PerformanceView, FrameGraphView, TimelineView, MetricBrowserView, EventViewerView, CaptureBrowserView, SettingsView } from "../core/views/index.js";
 import { WorkspaceSnapshotStore } from "./WorkspaceSnapshotStore.js";
 
