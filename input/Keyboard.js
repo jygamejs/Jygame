@@ -59,6 +59,8 @@ export class Keyboard extends Device {
     }
   }
 
+  reset() { this._state.reset(); }
+
   isDown(keyCode) { return this._state.isDown(keyCode); }
   justPressed(keyCode) { return this._state.justPressed(keyCode); }
   justReleased(keyCode) { return this._state.justReleased(keyCode); }

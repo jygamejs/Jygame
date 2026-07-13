@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JyGame Debug Workspace</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #1e1e1e; color: #ccc; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 13px; }
+    #toolbar { display: flex; align-items: center; gap: 4px; height: 32px; padding: 0 8px; background: #252526; border-bottom: 1px solid #3c3c3c; }
+    #toolbar button { background: none; border: 1px solid transparent; color: #ccc; cursor: pointer; padding: 2px 6px; border-radius: 3px; font-size: 13px; line-height: 1; }
+    #toolbar button:hover { background: #2a2d2e; border-color: #454545; }
+    #toolbar .sep { width: 1px; height: 20px; background: #3c3c3c; margin: 0 4px; }
+    #toolbar .status { margin-left: auto; display: flex; gap: 12px; font-size: 12px; color: #888; }
+    #toolbar .status .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
+    #toolbar .status .dot.green { background: #4caf50; }
+    #toolbar .status .dot.yellow { background: #ff9800; }
+    #toolbar .status .dot.red { background: #f44336; }
+    #tabstrip { display: flex; align-items: center; height: 30px; background: #252526; border-bottom: 1px solid #3c3c3c; overflow-x: auto; }
+    #tabstrip::-webkit-scrollbar { height: 0; }
+    .tab { display: flex; align-items: center; gap: 4px; padding: 0 10px; height: 100%; cursor: pointer; white-space: nowrap; border-right: 1px solid #3c3c3c; font-size: 12px; color: #888; user-select: none; }
+    .tab:hover { background: #2a2d2e; }
+    .tab.active { color: #fff; background: #1e1e1e; border-bottom: 1px solid #1e1e1e; }
+    .tab .close { margin-left: 4px; font-size: 10px; color: #888; cursor: pointer; border-radius: 2px; padding: 0 2px; }
+    .tab .close:hover { background: #555; color: #fff; }
+    #panel-area { flex: 1; position: relative; overflow: hidden; }
+    #panel-area canvas { display: block; position: absolute; top: 0; left: 0; }
+    #command-palette { display: none; position: fixed; top: 80px; left: 50%; transform: translateX(-50%); width: 500px; background: #252526; border: 1px solid #454545; border-radius: 4px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); z-index: 1000; }
+    #command-palette.open { display: block; }
+    #command-palette input { width: 100%; padding: 8px 12px; background: #3c3c3c; border: none; color: #ccc; font-size: 14px; outline: none; border-radius: 4px 4px 0 0; }
+    #command-palette .results { max-height: 300px; overflow-y: auto; }
+    #command-palette .result { padding: 6px 12px; cursor: pointer; font-size: 13px; }
+    #command-palette .result:hover,
+    #command-palette .result.selected { background: #094771; color: #fff; }
+  </style>
+</head>
+<body>
+  <div id="toolbar"></div>
+  <div id="tabstrip"></div>
+  <div id="panel-area"></div>
+  <div id="command-palette">
+    <input type="text" id="command-input" placeholder="Type a command..." spellcheck="false" />
+    <div class="results" id="command-results"></div>
+  </div>
+  <script type="module" src="main.js"></script>
+</body>
+</html>

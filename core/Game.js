@@ -80,8 +80,14 @@ export class Game {
     this.inputSystem.devices.register(new TextInput());
 
     this._visibilityHandler = null;
+    this._focusHandler = () => {
+      const kb = this.inputSystem.devices.get(Keyboard);
+      if (kb) kb.reset();
+    };
+    window.addEventListener("focus", this._focusHandler);
     if (autoPause) {
       this._visibilityHandler = () => {
+        if (this._debugBackend) return;
         if (document.hidden) {
           if (!this._paused) {
             this._pausedByVisibility = true;
@@ -197,6 +203,31 @@ export class Game {
     this.clock.reset();
     this._lastTime = performance.now();
     this.scene?.resume?.();
+  }
+
+  stepFrame() {
+    if (!this._paused) {
+      this._paused = true;
+      this.scene?.pause?.();
+    }
+    this._doFrame();
+  }
+
+  _doFrame() {
+    const realDt = this.clock.fixedDt;
+    const diag = this._getDiag();
+    const mids = this._diagIds;
+    if (diag) diag.beginFrame(this._frameCount++, realDt * 1000);
+    if (diag && mids && mids.frameTotal >= 0) {
+      diag.scope(mids.frameTotal, () => { this._frame(diag, 1, realDt); });
+    } else {
+      this._frame(null, 1, realDt);
+    }
+    if (diag && mids) {
+      if (mids.frameDelta >= 0) diag.recordGauge(mids.frameDelta, realDt * 1000);
+      if (mids.frameFps >= 0) diag.recordGauge(mids.frameFps, realDt > 0 ? 1 / realDt : 0);
+      diag.endFrame();
+    }
   }
 
   togglePause() {
@@ -535,6 +566,10 @@ export class Game {
     if (this._visibilityHandler) {
       document.removeEventListener("visibilitychange", this._visibilityHandler);
       this._visibilityHandler = null;
+    }
+    if (this._focusHandler) {
+      window.removeEventListener("focus", this._focusHandler);
+      this._focusHandler = null;
     }
     if (this._resizeHandler) window.removeEventListener("resize", this._resizeHandler);
     if (this._resizeObserver) this._resizeObserver.disconnect();

@@ -23,6 +23,13 @@ export class KeyboardState {
     this._repeat[code] = 1;
   }
 
+  reset() {
+    this._keys.fill(0);
+    this._prevKeys.fill(0);
+    this._repeat.fill(0);
+    this._modifiers = 0;
+  }
+
   snapshot() {
     this._prevKeys.set(this._keys);
     this._repeat.fill(0);

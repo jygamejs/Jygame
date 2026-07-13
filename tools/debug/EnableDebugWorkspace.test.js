@@ -15,11 +15,23 @@ describe("enableDebugWorkspace", () => {
     assert.ok(game._snapshotBuilder);
   });
 
-  it("does not open the backend", () => {
+  it("opens the backend and sets up message handler", () => {
     const game = {};
     const backend = new TestDebugBackend();
     enableDebugWorkspace(game, backend);
-    assert.strictEqual(backend.connected, false);
+    assert.strictEqual(backend.connected, true);
+    assert.ok(typeof backend._handler === "function");
+  });
+
+  it("is idempotent", () => {
+    const game = {};
+    const backend = new TestDebugBackend();
+    enableDebugWorkspace(game, backend);
+    const b1 = game._debugBackend;
+    const builder1 = game._snapshotBuilder;
+    enableDebugWorkspace(game, backend);
+    assert.strictEqual(game._debugBackend, b1);
+    assert.strictEqual(game._snapshotBuilder, builder1);
   });
 
   it("accepts no backend argument (uses default BrowserDebugBackend)", () => {
@@ -27,6 +39,7 @@ describe("enableDebugWorkspace", () => {
     enableDebugWorkspace(game);
     assert.ok(game._debugBackend);
     assert.ok(game._snapshotBuilder);
+    game._debugBackend.close();
   });
 });
 

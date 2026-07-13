@@ -1,9 +1,17 @@
 import { OverlaySession } from "../../overlay/OverlaySession.js";
 import { WorkspaceState } from "./WorkspaceState.js";
+import { WorkspaceSnapshotStore } from "./WorkspaceSnapshotStore.js";
 
 export class WorkspaceSession {
-  constructor({ history, registry, analysis, config, theme } = {}) {
-    this._session = new OverlaySession({ history, registry, analysis, config, theme });
+  constructor({ config, theme } = {}) {
+    this._store = new WorkspaceSnapshotStore();
+    this._session = new OverlaySession({
+      history: this._store.history,
+      registry: this._store.registry,
+      analysis: this._store.analysis,
+      config,
+      theme,
+    });
     this._session.setupDefaultPanels();
     this._state = new WorkspaceState();
     this._lastSnapshot = null;
@@ -18,6 +26,7 @@ export class WorkspaceSession {
   get state() { return this._state; }
   get lastSnapshot() { return this._lastSnapshot; }
   get canvas() { return this._panelCanvas; }
+  get store() { return this._store; }
 
   activatePanel(panelId) {
     const panel = this._session.panels.get(panelId);
@@ -29,6 +38,7 @@ export class WorkspaceSession {
 
   onSnapshot(snapshot) {
     this._lastSnapshot = snapshot;
+    this._store.ingest(snapshot);
     this._session.panels.update({ snapshot });
   }
 

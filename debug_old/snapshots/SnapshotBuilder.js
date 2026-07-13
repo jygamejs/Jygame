@@ -28,11 +28,27 @@ export class SnapshotBuilder {
     this._worlds.delete(id);
   }
 
+  setupMetricDescriptors(registry) {
+    if (this._metricDescriptors) return;
+    this._metricDescriptors = [];
+    registry.forEach((desc) => {
+      this._metricDescriptors.push({
+        id: desc.id,
+        name: desc.name,
+        type: desc.type,
+        category: desc.category,
+        unit: desc.unit,
+        budget: desc.budget,
+      });
+    });
+  }
+
   build(frameNumber, timestamp, diagnosticsSnapshot) {
     const worldSnap = this._worldSnapshotPool.acquire();
     worldSnap.frameNumber = frameNumber;
     worldSnap.timestamp = timestamp;
     worldSnap.diagnostics = diagnosticsSnapshot;
+    worldSnap.metricDescriptors = this._metricDescriptors || null;
 
     for (const [worldId, world] of this._worlds) {
       const worldData = { worldId, entityCount: 0, entities: [] };
