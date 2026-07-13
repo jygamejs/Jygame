@@ -10,6 +10,10 @@ import { PointerManager } from "../input/PointerManager.js";
 import { TouchSurface } from "../input/TouchSurface.js";
 import { Stylus } from "../input/Stylus.js";
 import { TextInput } from "../input/TextInput.js";
+import { ActionMap } from "../input/actions/ActionMap.js";
+import { ChordBinding } from "../input/actions/ChordBinding.js";
+import { KeyCode } from "../input/KeyCode.js";
+import { InputContext as ActionInputContext } from "../input/actions/InputContext.js";
 import { Scene } from "./Scene.js";
 import { Diagnostics, MetricCategory, MetricUnit, MetricType, resolveMetricIds }
   from "../debug/index.js";
@@ -17,7 +21,7 @@ import { OverlayHost } from "../debug/overlay/OverlayHost.js";
 import { enableDebugWorkspace, takeDebugSnapshot } from "../debug/EnableDebugWorkspace.js";
 
 export class Game {
-  constructor({ parent, width, height, fps = 60, maxTicks = 5, autoPause = true, scaleToFit = null }) {
+  constructor({ parent, width, height, fps = 60, maxTicks = 5, autoPause = true, scaleToFit = null, debug = true }) {
     const container = typeof parent === "string"
       ? document.querySelector(parent)
       : parent;
@@ -79,6 +83,16 @@ export class Game {
     this.inputSystem.devices.register(new Stylus());
     this.inputSystem.devices.register(new TextInput());
 
+    this._debug = debug;
+    this._debugActionMap = null;
+    if (this._debug) {
+      this._debugActionMap = new ActionMap();
+      this._debugActionMap.bind("openDebugWorkspace", new ChordBinding(KeyCode.F3, { ctrl: true }));
+      const debugCtx = new ActionInputContext("jygame-debug", this._debugActionMap, { priority: -100 });
+      this.inputSystem.contextStack.push(debugCtx);
+      enableDebugWorkspace(this);
+    }
+
     this._visibilityHandler = null;
     this._focusHandler = () => {
       const kb = this.inputSystem.devices.get(Keyboard);
@@ -87,7 +101,7 @@ export class Game {
     window.addEventListener("focus", this._focusHandler);
     if (autoPause) {
       this._visibilityHandler = () => {
-        if (this._debugBackend) return;
+        if (this._debug && this._debugBackend) return;
         if (document.hidden) {
           if (!this._paused) {
             this._pausedByVisibility = true;
@@ -151,10 +165,12 @@ export class Game {
   }
 
   enableDebugWorkspace(backend) {
+    if (!this._debug) return;
     enableDebugWorkspace(this, backend);
   }
 
   get debug() {
+    if (!this._debug) return null;
     if (!this._debugOverlay) {
       this._debugOverlay = new OverlayHost(this);
     }
@@ -470,7 +486,7 @@ export class Game {
       diag.endFrame();
     }
 
-    if (this._debugOverlay) {
+    if (this._debug && this._debugOverlay) {
       this._debugOverlay.update(realDt);
     }
 
@@ -478,6 +494,7 @@ export class Game {
   }
 
   _getDiag() {
+    if (!this._debug) return null;
     if (!this._diagnostics) {
       const top = this.scene;
       if (top && top.world) {
@@ -508,6 +525,12 @@ export class Game {
     const doInput = () => {
       this.input.updateFrame();
       this.inputSystem.update();
+      if (this._debugActionMap) {
+        const ws = this._debugActionMap.getState("openDebugWorkspace");
+        if (ws && ws.justPressed) {
+          window.open("/debug/workspace/index.html", "jygame-debug-workspace");
+        }
+      }
     };
     if (diag && mids && mids.frameInput >= 0) {
       diag.scope(mids.frameInput, doInput);
@@ -535,7 +558,7 @@ export class Game {
 
     this._flushSceneOps();
 
-    if (this._snapshotBuilder) {
+    if (this._debug && this._snapshotBuilder) {
       takeDebugSnapshot(this);
     }
 
@@ -553,7 +576,7 @@ export class Game {
       diag.scope(mids.frameRender, doRender);
     } else { doRender(); }
 
-    if (this._debugOverlay) {
+    if (this._debug && this._debugOverlay) {
       this._debugOverlay.render(this.ctx, this.width, this.height);
     }
 
@@ -575,7 +598,7 @@ export class Game {
     if (this._resizeObserver) this._resizeObserver.disconnect();
     this._resetSceneStack();
     this.input.destroy();
-    if (this._debugBackend) this._debugBackend.close();
-    if (this._debugOverlay) this._debugOverlay.destroy();
+    if (this._debug && this._debugBackend) this._debugBackend.close();
+    if (this._debug && this._debugOverlay) this._debugOverlay.destroy();
   }
 }
