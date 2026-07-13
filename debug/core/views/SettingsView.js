@@ -128,8 +128,8 @@ export class SettingsView extends View {
     const btnSize = 20;
     const btnY = y + (rowH - btnSize) / 2;
     const rightEdge = x + w - pad;
-    const incX = rightEdge - btnSize;
-    const decX = incX - 56;
+    const gap = 56;
+    const decX = incX - gap;
 
     ctx.fillStyle = theme.background;
     ctx.fillRect(decX, btnY, btnSize, btnSize);
@@ -144,7 +144,8 @@ export class SettingsView extends View {
     });
 
     if (tr) {
-      tr.render(ctx, display, decX + 28, y + rowH / 2, {
+      const valCX = (decX + btnSize + incX) / 2;
+      tr.render(ctx, display, valCX, y + rowH / 2, {
         size: theme.fontSize, color: theme.textAccent, align: "center", baseline: "middle",
       });
     }
