@@ -7,7 +7,7 @@ export class ViewContext {
     this.selection = selection ?? null;
     this.renderers = renderers ?? null;
     this.cache = cache ?? null;
-    this.config = { ...config };
+    this.config = config ?? {};
   }
 
   with(overrides) {

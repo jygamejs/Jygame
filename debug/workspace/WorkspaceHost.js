@@ -79,7 +79,7 @@ export class WorkspaceHost {
       history: this._store.history,
       registry: this._store.registry,
       analysis: this._store.analysis,
-      theme: DarkTheme,
+      theme: this._userConfig.theme === "light" ? LightTheme : DarkTheme,
       selection: this._selection,
       renderers: this._renderers,
       cache: this._cache,
@@ -111,13 +111,11 @@ export class WorkspaceHost {
       return;
     }
     const view = this._getView(this._activeViewId);
-    console.log(`[WorkspaceHost] click at (${x}, ${y}) — activeView: ${this._activeViewId}, hasHandleInput: ${!!(view?.handleInput)}`);
     if (view && view.handleInput) {
-      const handled = view.handleInput(
+      view.handleInput(
         { type: "click", x, y, button: e.button },
         { x: 0, y: TAB_HEIGHT, width: this._canvas.width, height: this._canvas.height - TAB_HEIGHT }
       );
-      console.log(`[WorkspaceHost] handleInput returned ${handled}`);
     }
   }
 

@@ -37,13 +37,11 @@ export class SettingsView extends View {
   }
 
   _adjustSetting(key, delta) {
-    const old = this._getSetting(key);
-    this._setSetting(key, old + delta);
-    console.log(`[SettingsView] ${key}: ${old} -> ${this._getSetting(key)}`);
+    this._setSetting(key, this._getSetting(key) + delta);
   }
 
   _setTheme(mode) {
-    console.log(`[SettingsView] _setTheme("${mode}")`);
+
     if (!this.ctx.config) this.ctx.config = {};
     this.ctx.config.theme = mode;
     this.ctx.theme = mode === "light" ? LightTheme : DarkTheme;
