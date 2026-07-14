@@ -24,7 +24,7 @@ export class Game {
   constructor({ parent, width, height, fps = 60, maxTicks = 5, autoPause = true, scaleToFit = null, debug = true }) {
     const container = typeof parent === "string"
       ? document.querySelector(parent)
-      : parent;
+      : document.body;
 
     this.canvas = document.createElement("canvas");
     this.canvas.width = width;
@@ -528,7 +528,27 @@ export class Game {
       if (this._debugActionMap) {
         const ws = this._debugActionMap.getState("openDebugWorkspace");
         if (ws && ws.justPressed) {
-          window.open("/debug/workspace/index.html", "jygame-debug-workspace");
+          const mainUrl = new URL("../debug/workspace/main.js", import.meta.url);
+          const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JyGame Debug Workspace</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; overflow: hidden; background: #1e1e1e; }
+    canvas { display: block; width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+  <canvas id="workspace-canvas"></canvas>
+  <script type="module" src="${mainUrl.href}"><\/script>
+</body>
+</html>`;
+          const blob = new Blob([html], { type: "text/html" });
+          const url = URL.createObjectURL(blob);
+          window.open(url, "jygame-debug-workspace");
         }
       }
     };
@@ -538,19 +558,19 @@ export class Game {
 
     const doUpdate = () => {
       const updateStart = this._findBlockingIndex("blocksUpdateBelow");
+      const top = this.scene;
       this._updating = true;
       try {
         if (ticks > 0) {
           for (let i = 0; i < ticks; i++) {
             this._updateScenes(this.clock.fixedDt, updateStart);
+            if (top && top.world) {
+              top.world.update(this.clock.fixedDt);
+            }
             this.input.clearJustPressed();
           }
         }
       } finally { this._updating = false; }
-      const top = this.scene;
-      if (top && top.world) {
-        top.world.update(this.clock.fixedDt);
-      }
     };
     if (diag && mids && mids.frameUpdate >= 0) {
       diag.scope(mids.frameUpdate, doUpdate);
