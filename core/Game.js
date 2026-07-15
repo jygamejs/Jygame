@@ -451,6 +451,12 @@ export class Game {
     }
   }
 
+  _restoreSceneTransforms(start) {
+    for (let i = start; i < this._sceneStack.length; i++) {
+      this._sceneStack[i].restoreTransforms?.();
+    }
+  }
+
   _renderScenes(ctx, start) {
     for (let i = start; i < this._sceneStack.length; i++) {
       this._sceneStack[i].render(ctx);
@@ -599,6 +605,8 @@ export class Game {
     if (this._debug && this._debugOverlay) {
       this._debugOverlay.render(this.ctx, this.width, this.height);
     }
+
+    this._restoreSceneTransforms(renderStart);
 
     this.fps += ((1 / Math.max(realDt, 0.001)) - this.fps) * 0.05;
   }

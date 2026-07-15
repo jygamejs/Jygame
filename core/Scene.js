@@ -6,6 +6,7 @@ import { Camera } from "../camera/Camera.js";
 import { Sprite } from "../display/Sprite.js";
 import { InputContext } from "../input/actions/InputContext.js";
 import { ActionMap } from "../input/actions/ActionMap.js";
+import { Transform } from "../ecs/components/Transform.js";
 
 export class Scene extends EcsScene {
   constructor() {
@@ -120,7 +121,70 @@ export class Scene extends EcsScene {
   pause() {}
   resume() {}
   update(dt) {}
-  interpolate(alpha) {}
+  interpolate(alpha) {
+    const w = this._world;
+    if (!w) return;
+
+    const tid = w.registry.getId(Transform);
+    if (tid === null) return;
+
+    if (!this._interpQuery || this._interpWorld !== w) {
+      this._interpQuery = w.queryEngine.createQuery({ all: [tid] });
+      this._interpWorld = w;
+    }
+
+    if (!this._savedPositions) this._savedPositions = new Map();
+    this._savedPositions.clear();
+
+    const tables = w.queryEngine.getTables(this._interpQuery);
+    for (let i = 0; i < tables.length; i++) {
+      const table = tables[i];
+      const count = table.count;
+      if (count === 0) continue;
+
+      const xCol = table.getColumn(tid, "x");
+      const yCol = table.getColumn(tid, "y");
+      const prevXCol = table.getColumn(tid, "_prevX");
+      const prevYCol = table.getColumn(tid, "_prevY");
+      const ids = table.entityIds;
+      if (!xCol || !yCol || !prevXCol || !prevYCol || !ids) continue;
+
+      for (let r = 0; r < count; r++) {
+        const prevX = prevXCol[r];
+        const prevY = prevYCol[r];
+        const currX = xCol[r];
+        const currY = yCol[r];
+        const interpX = prevX + (currX - prevX) * alpha;
+        const interpY = prevY + (currY - prevY) * alpha;
+        if (interpX !== currX || interpY !== currY) {
+          this._savedPositions.set(ids[r], { x: currX, y: currY });
+          xCol[r] = interpX;
+          yCol[r] = interpY;
+        }
+      }
+    }
+  }
+
+  restoreTransforms() {
+    const w = this._world;
+    if (!w || !this._savedPositions || this._savedPositions.size === 0) return;
+
+    const tid = w.registry.getId(Transform);
+    if (tid === null) return;
+
+    for (const [entity, pos] of this._savedPositions) {
+      if (!w.entityManager.isAlive(entity)) continue;
+      const loc = w.entityManager.getLocation(entity);
+      if (!loc) continue;
+      const table = w.archetypeSystem.getTableById(loc.archetype);
+      if (!table) continue;
+      const xCol = table.getColumn(tid, "x");
+      const yCol = table.getColumn(tid, "y");
+      if (xCol) xCol[loc.row] = pos.x;
+      if (yCol) yCol[loc.row] = pos.y;
+    }
+  }
+
   render(ctx) {}
   renderUI() {}
 

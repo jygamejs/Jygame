@@ -308,12 +308,13 @@ describe("Scene — scheduler", () => {
 
     w.scheduler.update = origUpdate;
 
-    assert.strictEqual(order.length, 5);
-    assert.strictEqual(order[0], "MovementSystem");
-    assert.strictEqual(order[1], "AnimationSystem");
-    assert.strictEqual(order[2], "CollisionSystem");
-    assert.strictEqual(order[3], "RenderSystem");
-    assert.strictEqual(order[4], "TrailSystem");
+    assert.strictEqual(order.length, 6);
+    assert.strictEqual(order[0], "SavePrevPositionSystem");
+    assert.strictEqual(order[1], "MovementSystem");
+    assert.strictEqual(order[2], "AnimationSystem");
+    assert.strictEqual(order[3], "CollisionSystem");
+    assert.strictEqual(order[4], "RenderSystem");
+    assert.strictEqual(order[5], "TrailSystem");
   });
 
   it("systems execute without crashing on empty world", () => {

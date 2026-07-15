@@ -7,7 +7,7 @@ import {
 } from "../components/index.js";
 
 import {
-  MovementSystem, AnimationSystem, CollisionSystem, RenderSystem, TrailSystem,
+  MovementSystem, AnimationSystem, SavePrevPositionSystem, CollisionSystem, RenderSystem, TrailSystem,
 } from "../systems/index.js";
 
 import { RenderQueue } from "../render/RenderQueue.js";
@@ -26,7 +26,7 @@ const _ECS_COMPONENTS = [
 ];
 
 const _ECS_SYSTEMS = [
-  MovementSystem, AnimationSystem, CollisionSystem, RenderSystem, TrailSystem,
+  SavePrevPositionSystem, MovementSystem, AnimationSystem, CollisionSystem, RenderSystem, TrailSystem,
 ];
 
 function _registerStandardMetrics(diag) {

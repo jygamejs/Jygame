@@ -17,7 +17,7 @@ import {
 } from "../../../ecs/index.js";
 
 const ALL_COMPONENTS = [
-  { cls: Transform, schema: { x: "f32", y: "f32", rotation: "f32", scaleX: "f32", scaleY: "f32" }, hasSchema: true },
+  { cls: Transform, schema: { x: "f32", y: "f32", rotation: "f32", scaleX: "f32", scaleY: "f32", _prevX: "f32", _prevY: "f32" }, hasSchema: true },
   { cls: Velocity, schema: { x: "f32", y: "f32" }, hasSchema: true },
   { cls: Collider, schema: { width: "f32", height: "f32" }, hasSchema: true },
   { cls: Renderable, schema: { image: "u16", fillColor: "u32", shape: "u8", layer: "i16" }, hasSchema: true },
