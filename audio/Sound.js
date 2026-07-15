@@ -60,6 +60,11 @@ export class Sound {
   play(options = {}) {
     this._checkNotDestroyed();
 
+    if (this._manager && this._manager._playLock) {
+      this._manager._playQueue.push(() => this.play(options));
+      return null;
+    }
+
     if (this._activeInstances.length >= this._maxInstances) {
       if (this._overflowPolicy === "drop-new") return null;
       if (this._overflowPolicy === "replace-oldest") {

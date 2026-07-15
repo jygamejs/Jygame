@@ -44,8 +44,17 @@ export class Music {
 
   get duration() { return this._playback ? this._playback.duration : 0; }
 
+  /**
+   * @returns {Music} this — for chaining. If autoplay is gated and this is
+   * the first play() before user interaction, isPlaying will be false until
+   * the gate flushes on the next user gesture.
+   */
   play() {
     if (this._destroyed) throw new Error("Cannot use destroyed Music");
+    if (this._manager && this._manager._playLock) {
+      this._manager._playQueue.push(() => this.play());
+      return this;
+    }
     if (this._playback) {
       if (this._playback.paused) {
         this._playback.play();
@@ -80,6 +89,10 @@ export class Music {
   }
 
   fadeIn(seconds) {
+    if (this._manager && this._manager._playLock) {
+      this._manager._playQueue.push(() => this.fadeIn(seconds));
+      return;
+    }
     if (!this._playback) this.play();
     if (!this._playback) return;
     this._fadeVolume = 0;
@@ -106,6 +119,13 @@ export class Music {
 
   crossFade(other, seconds) {
     if (this._destroyed || other._destroyed) return;
+    if (this._manager && this._manager._playLock) {
+      this._manager._playQueue.push(() => {
+        if (other._destroyed) return;
+        this.crossFade(other, seconds);
+      });
+      return;
+    }
     if (!other._playback) other.play();
     if (!this._playback) this.play();
     const dur = Math.max(0.001, seconds);

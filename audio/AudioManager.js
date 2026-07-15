@@ -44,7 +44,38 @@ export class AudioManager {
     this._createGroup("ui");
     this._createGroup("ambient");
 
+    this._autoplay = options.autoplay || "gated";
+    this._playLock = this._autoplay === "gated";
+    this._playQueue = [];
+    if (this._autoplay === "gated") {
+      this._registerUnlockGate();
+    }
+
     this._backend.unlock();
+  }
+
+  _registerUnlockGate() {
+    this._unlockGate = () => this.flush();
+    document.addEventListener("pointerdown", this._unlockGate, { once: true });
+    document.addEventListener("keydown", this._unlockGate, { once: true });
+  }
+
+  _unregisterUnlockGate() {
+    if (this._unlockGate) {
+      document.removeEventListener("pointerdown", this._unlockGate);
+      document.removeEventListener("keydown", this._unlockGate);
+      this._unlockGate = null;
+    }
+  }
+
+  flush() {
+    if (!this._playLock) return;
+    this._playLock = false;
+    this._unregisterUnlockGate();
+    const queue = this._playQueue.splice(0);
+    for (const fn of queue) {
+      try { fn(); } catch (e) { console.warn("Jygame: deferred audio call failed", e); }
+    }
   }
 
   get listener() { return this._listener; }
@@ -308,6 +339,7 @@ export class AudioManager {
   }
 
   destroy() {
+    this._unregisterUnlockGate();
     this.clear();
     this._transition = null;
     this._transitionVolume = 1;

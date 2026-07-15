@@ -12,7 +12,7 @@ class HtmlPlayback {
   }
 
   play() {
-    return this._audio.play().catch(() => {});
+    return this._audio.play().catch(e => console.warn("Jygame: HtmlPlayback.play() failed", e));
   }
 
   pause() {
