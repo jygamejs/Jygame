@@ -26,6 +26,7 @@ export { Palettes } from "./color/Palettes.js";
 export { Pool } from "./memory/Pool.js";
 export { ActivePool } from "./memory/ActivePool.js";
 export { Animation } from "./ecs/components/Animation.js";
+export { AnimationPack } from "./ecs/animation/AnimationPack.js";
 export { Trail } from "./ecs/components/Trail.js";
 export { AnimationSystem } from "./ecs/systems/AnimationSystem.js";
 export { MovementSystem } from "./ecs/systems/MovementSystem.js";

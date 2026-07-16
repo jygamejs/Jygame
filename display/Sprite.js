@@ -259,6 +259,14 @@ export class Sprite {
         return this;
       },
 
+      addAll(animations) {
+        if (!self._animMap) self._animMap = new Map();
+        for (const [name, clip] of Object.entries(animations)) {
+          self._animMap.set(name, clip);
+        }
+        return this;
+      },
+
       play(name) {
         self._animCurrent = name;
         const map = self._animMap;

@@ -21,7 +21,7 @@ import { OverlayHost } from "../debug/overlay/OverlayHost.js";
 import { enableDebugWorkspace, takeDebugSnapshot } from "../debug/EnableDebugWorkspace.js";
 
 export class Game {
-  constructor({ parent, width, height, fps = 60, maxTicks = 5, autoPause = true, scaleToFit = null, debug = true }) {
+  constructor({ parent, width, height, fps = 60, maxTicks = 5, autoPause = true, scaleToFit = null, debug = true, interpolation = true }) {
     const container = typeof parent === "string"
       ? document.querySelector(parent)
       : document.body;
@@ -83,6 +83,7 @@ export class Game {
     this.inputSystem.devices.register(new Stylus());
     this.inputSystem.devices.register(new TextInput());
 
+    this._interpolation = interpolation;
     this._debug = debug;
     this._debugActionMap = null;
     if (this._debug) {
@@ -590,7 +591,9 @@ export class Game {
 
     const alpha = this.clock.alpha;
     const renderStart = this._findBlockingIndex("blocksRenderBelow");
-    this._interpolateScenes(alpha, renderStart);
+    if (this._interpolation) {
+      this._interpolateScenes(alpha, renderStart);
+    }
 
     const doCanvas = () => { this.ctx.clearRect(0, 0, this.width, this.height); };
     if (diag && mids && mids.frameCanvas >= 0) {
@@ -606,7 +609,9 @@ export class Game {
       this._debugOverlay.render(this.ctx, this.width, this.height);
     }
 
-    this._restoreSceneTransforms(renderStart);
+    if (this._interpolation) {
+      this._restoreSceneTransforms(renderStart);
+    }
 
     this.fps += ((1 / Math.max(realDt, 0.001)) - this.fps) * 0.05;
   }
