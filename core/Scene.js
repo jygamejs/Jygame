@@ -154,6 +154,10 @@ export class Scene extends EcsScene {
         const prevY = prevYCol[r];
         const currX = xCol[r];
         const currY = yCol[r];
+
+        // Skip uninitialized entities (_prevX/_prevY still at default 0)
+        if (prevX === 0 && prevY === 0 && (currX !== 0 || currY !== 0)) continue;
+
         const interpX = prevX + (currX - prevX) * alpha;
         const interpY = prevY + (currY - prevY) * alpha;
         if (interpX !== currX || interpY !== currY) {

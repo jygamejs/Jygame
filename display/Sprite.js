@@ -50,7 +50,7 @@ export class Sprite {
     this.#entity = e;
 
     wld.addMany(e, Transform, Collider, Renderable, Visible);
-    wld.set(e, Transform, { x: x + w / 2, y: y + h / 2, scaleX: 1, scaleY: 1 });
+    wld.set(e, Transform, { x: x + w / 2, y: y + h / 2, scaleX: 1, scaleY: 1, _prevX: x + w / 2, _prevY: y + h / 2 });
     wld.set(e, Collider, { width: w, height: h });
     wld.set(e, Renderable, { fillColor: 0xffffff });
     wld.set(e, Visible, { value: 1 });
