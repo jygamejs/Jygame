@@ -64,13 +64,13 @@ export function run(config) {
     const queue = new RenderQueue();
     const refs = [];
     for (let i = 0; i < count; i++) {
-      queue.push(0, 0, 0, 0, 1, 1, 32, 32, 0xffffff, 0, 0);
+      queue.push(null, 0, 0, 0, 0, 0, 0, 0, 1, 1, 32, 32, 0xffffff, 0, 0);
       refs.push(queue._commands[i]);
     }
 
     queue.clear();
     for (let i = 0; i < count; i++) {
-      queue.push(0, 0, 0, 0, 1, 1, 32, 32, 0xffffff, 0, 0);
+      queue.push(null, 0, 0, 0, 0, 0, 0, 0, 1, 1, 32, 32, 0xffffff, 0, 0);
       if (queue._commands[i] !== refs[i]) {
         console.log(`  ❌ RenderQueue: command object ${i} was reallocated after clear`);
         break;

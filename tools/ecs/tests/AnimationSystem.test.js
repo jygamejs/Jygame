@@ -539,11 +539,12 @@ describe("AnimationSystem — cross-component writes", () => {
     assert.strictEqual(r.image, 30);
   });
 
-  it("image is u16 typed", () => {
+  it("image stores asset id as u16", () => {
     const { world, e } = setup(10, [1, 2]);
     world.update(0.1);
     const r = world.getComponent(e, Renderable);
     assert.strictEqual(typeof r.image, "number");
+    assert.ok(r.image >= 0);
   });
 });
 

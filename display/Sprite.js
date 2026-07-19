@@ -6,6 +6,7 @@ import { Renderable } from "../ecs/components/Renderable.js";
 import { Animation } from "../ecs/components/Animation.js";
 import { Visible } from "../ecs/components/Visible.js";
 import { RenderBounds } from "../ecs/components/RenderBounds.js";
+import { AnimationClipRegistry } from "../ecs/animation/AnimationClipRegistry.js";
 
 const _INTERNAL = Symbol("sprite.internal.wrap");
 const _SPRITE_COMPONENTS = [Transform, Collider, Renderable, Visible, Velocity, Animation, RenderBounds];
@@ -256,13 +257,24 @@ export class Sprite {
       add(name, clip) {
         if (!self._animMap) self._animMap = new Map();
         self._animMap.set(name, clip);
+        const w = self.#world;
+        if (w && w.hasResource(AnimationClipRegistry)) {
+          const reg = w.getResource(AnimationClipRegistry);
+          if (!reg.has(name)) reg.register(name, clip);
+        }
         return this;
       },
 
       addAll(animations) {
         if (!self._animMap) self._animMap = new Map();
+        const w = self.#world;
+        let reg = null;
+        if (w && w.hasResource(AnimationClipRegistry)) {
+          reg = w.getResource(AnimationClipRegistry);
+        }
         for (const [name, clip] of Object.entries(animations)) {
           self._animMap.set(name, clip);
+          if (reg && !reg.has(name)) reg.register(name, clip);
         }
         return this;
       },
@@ -271,11 +283,17 @@ export class Sprite {
         self._animCurrent = name;
         const map = self._animMap;
         if (map && map.has(name)) {
-          comp.clipId = name;
+          const w = self.#world;
+          if (w && w.hasResource(AnimationClipRegistry)) {
+            const reg = w.getResource(AnimationClipRegistry);
+            const id = reg.getId(name);
+            if (id !== null) comp.clipId = id;
+          }
         }
         comp.frameIndex = 0;
         comp.elapsed = 0;
         comp.isPlaying = 1;
+        comp.speed = 1;
       },
 
       pause() { comp.isPlaying = 0; },

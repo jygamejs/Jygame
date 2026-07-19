@@ -6,6 +6,7 @@ import { RenderSystem } from "../../../ecs/systems/RenderSystem.js";
 import { RenderQueue } from "../../../ecs/render/RenderQueue.js";
 import { RenderCommand } from "../../../ecs/render/RenderCommand.js";
 import { CanvasContext } from "../../../ecs/render/CanvasContext.js";
+import { AssetRegistry } from "../../../ecs/render/AssetRegistry.js";
 import { Camera } from "../../../camera/Camera.js";
 import { AnimationSystem } from "../../../ecs/systems/AnimationSystem.js";
 import { CollisionSystem } from "../../../ecs/systems/CollisionSystem.js";
@@ -201,11 +202,24 @@ describe("RenderSystem (ECS)", () => {
     });
 
     it("queue commands contain correct renderable data", () => {
-      const { world, queue } = setupWorld([{ x: 0, y: 0, w: 10, h: 10, image: 5, fillColor: 0xff0000, shape: 1, layer: 3 }]);
+      const world = createWorld();
+      const queue = new RenderQueue();
+      const assetRegistry = new AssetRegistry();
+      const testImg = {};
+      const assetId = assetRegistry.register({ sourceImage: testImg });
+      world.setResource(RenderQueue, queue);
+      world.setResource(AssetRegistry, assetRegistry);
       world.setResource(CanvasContext, mockCtx());
+      world.addSystem(new RenderSystem());
+      const e = createEntity(world, [
+        [Transform, { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 }],
+        [Renderable, { image: assetId, fillColor: 0xff0000, shape: 1, layer: 3 }],
+        [RenderBounds, { width: 10, height: 10 }],
+        [Visible, { value: 1 }],
+      ]);
       world.update(16);
       const cmd = queue._commands[0];
-      assert.strictEqual(cmd.image, 5);
+      assert.strictEqual(cmd.sourceImage, testImg);
       assert.strictEqual(cmd.fillColor, 0xff0000);
       assert.strictEqual(cmd.shape, 1);
       assert.strictEqual(cmd.layer, 3);
@@ -326,7 +340,7 @@ describe("RenderSystem (ECS)", () => {
       const ctx = getCanvas();
       if (!ctx) return;
       const queue = new RenderQueue();
-      queue.push(0, 10, 20, 0, 1, 1, 30, 40, 0xff0000, 0, 0);
+      queue.push(null, 0, 0, 0, 0, 10, 20, 0, 1, 1, 30, 40, 0xff0000, 0, 0);
       queue.execute(ctx, null);
       assert.ok(true);
     });
@@ -335,7 +349,7 @@ describe("RenderSystem (ECS)", () => {
       const ctx = getCanvas();
       if (!ctx) return;
       const queue = new RenderQueue();
-      queue.push(0, 0, 0, 0, 1, 1, 10, 10, 0x00ff00, 0, 0);
+      queue.push(null, 0, 0, 0, 0, 0, 0, 0, 1, 1, 10, 10, 0x00ff00, 0, 0);
       queue.execute(ctx, null);
       assert.ok(true);
     });
@@ -344,7 +358,7 @@ describe("RenderSystem (ECS)", () => {
       const ctx = getCanvas();
       if (!ctx) return;
       const queue = new RenderQueue();
-      queue.push(0, 0, 0, 0, 1, 1, 10, 10, 0x0000ff, 1, 0);
+      queue.push(null, 0, 0, 0, 0, 0, 0, 0, 1, 1, 10, 10, 0x0000ff, 1, 0);
       queue.execute(ctx, null);
       assert.ok(true);
     });
@@ -354,8 +368,8 @@ describe("RenderSystem (ECS)", () => {
       if (!ctx) return;
       const camera = new Camera(0, 0, 100, 100);
       const queue = new RenderQueue();
-      queue.push(0, 0, 0, 0, 1, 1, 10, 10, 0xff0000, 0, 0);
-      queue.execute(ctx, camera);
+      queue.push(null, 0, 0, 0, 0, 0, 0, 0, 1, 1, 10, 10, 0xff0000, 0, 0);
+      queue.execute(ctx, null);
       assert.ok(true);
     });
 
@@ -363,8 +377,8 @@ describe("RenderSystem (ECS)", () => {
       const ctx = getCanvas();
       if (!ctx) return;
       const queue = new RenderQueue();
-      queue.push(0, 0, 0, 0, 1, 1, 10, 10, 0xff0000, 0, 0);
-      queue.push(0, 20, 20, 0, 1, 1, 10, 10, 0x00ff00, 0, 0);
+      queue.push(null, 0, 0, 0, 0, 0, 0, 0, 1, 1, 10, 10, 0xff0000, 0, 0);
+      queue.push(null, 0, 0, 0, 0, 20, 20, 0, 1, 1, 10, 10, 0x00ff00, 0, 0);
       queue.execute(ctx, null);
       assert.ok(true);
     });
@@ -566,7 +580,11 @@ describe("RenderSystem (ECS)", () => {
   describe("RenderCommand", () => {
     it("create returns a command object with defaults", () => {
       const cmd = RenderCommand.create();
-      assert.strictEqual(cmd.image, 0);
+      assert.strictEqual(cmd.sourceImage, null);
+      assert.strictEqual(cmd.sx, 0);
+      assert.strictEqual(cmd.sy, 0);
+      assert.strictEqual(cmd.sw, 0);
+      assert.strictEqual(cmd.sh, 0);
       assert.strictEqual(cmd.x, 0);
       assert.strictEqual(cmd.y, 0);
       assert.strictEqual(cmd.rotation, 0);
@@ -595,7 +613,7 @@ describe("RenderSystem (ECS)", () => {
 
     it("clear resets count to zero", () => {
       const q = new RenderQueue();
-      q.push(0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0);
+      q.push(null, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0);
       assert.strictEqual(q.count, 1);
       q.clear();
       assert.strictEqual(q.count, 0);
@@ -603,17 +621,17 @@ describe("RenderSystem (ECS)", () => {
 
     it("push increases count", () => {
       const q = new RenderQueue();
-      q.push(0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0);
-      q.push(0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0);
+      q.push(null, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0);
+      q.push(null, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0);
       assert.strictEqual(q.count, 2);
     });
 
     it("reuses command objects after clear", () => {
       const q = new RenderQueue();
-      q.push(0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0);
+      q.push(null, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0);
       const first = q._commands[0];
       q.clear();
-      q.push(0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0);
+      q.push(null, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0);
       assert.strictEqual(q._commands[0], first);
     });
   });

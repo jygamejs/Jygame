@@ -59,7 +59,14 @@ export function run(config) {
         const visible = table.getColumn(vid, "value");
         for (let r = 0; r < c; r++) {
           if (!visible[r]) continue;
-          queue.push(img[r], tx[r], ty[r], trot[r], tsx[r], tsy[r], rw[r], rh[r], fillCol[r], shape[r], layer[r]);
+          const id = img[r];
+          let srcImg = null, sx = 0, sy = 0, sw = 0, sh = 0;
+          if (id) {
+            srcImg = id;
+            sw = 16;
+            sh = 16;
+          }
+          queue.push(srcImg, sx, sy, sw, sh, tx[r], ty[r], trot[r], tsx[r], tsy[r], rw[r], rh[r], fillCol[r], shape[r], layer[r]);
         }
       }
     }, { iterations: Math.min(config.iterations, 500), warmup: config.warmup });

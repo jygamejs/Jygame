@@ -6,6 +6,7 @@ import { Visible } from "../components/Visible.js";
 import { Camera } from "../../camera/Camera.js";
 import { RenderQueue } from "../render/RenderQueue.js";
 import { CanvasContext } from "../render/CanvasContext.js";
+import { AssetRegistry } from "../render/AssetRegistry.js";
 import { Diagnostics, resolveMetricIds } from "../../debug/index.js";
 
 export class RenderSystem extends System {
@@ -94,6 +95,8 @@ export class RenderSystem extends System {
     const rbid = this._compiled.componentIds.get(RenderBounds);
     const vid = this._compiled.componentIds.get(Visible);
 
+    const assetRegistry = ctx.resources.get(AssetRegistry);
+
     for (const table of ctx) {
       const count = table.count;
       if (count === 0) continue;
@@ -114,8 +117,23 @@ export class RenderSystem extends System {
 
       for (let r = 0; r < count; r++) {
         if (!visible[r]) continue;
+
+        let sourceImage = null, sx = 0, sy = 0, sw = 0, sh = 0;
+        const assetId = img[r];
+        if (assetId && assetRegistry) {
+          const asset = assetRegistry.get(assetId);
+          if (asset) {
+            sourceImage = asset.sourceImage;
+            sx = asset.sx;
+            sy = asset.sy;
+            sw = asset.sw;
+            sh = asset.sh;
+          }
+        }
+
         queue.push(
-          img[r], tx[r], ty[r], trot[r], tsx[r], tsy[r],
+          sourceImage, sx, sy, sw, sh,
+          tx[r], ty[r], trot[r], tsx[r], tsy[r],
           rw[r], rh[r], fillCol[r], shape[r], layer[r]
         );
       }

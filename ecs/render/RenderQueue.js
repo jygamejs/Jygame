@@ -12,19 +12,29 @@ export class RenderQueue {
 
   clear() {
     const cmds = this._commands;
-    for (let i = this._count - 1; i >= 0; i--) cmds[i].image = 0;
+    for (let i = this._count - 1; i >= 0; i--) {
+      cmds[i].sourceImage = null;
+      cmds[i].sx = 0;
+      cmds[i].sy = 0;
+      cmds[i].sw = 0;
+      cmds[i].sh = 0;
+    }
     this._count = 0;
     this.imagesDrawn = 0;
     this.primitivesDrawn = 0;
   }
 
-  push(image, x, y, rotation, scaleX, scaleY, width, height, fillColor, shape, layer) {
+  push(sourceImage, sx, sy, sw, sh, x, y, rotation, scaleX, scaleY, width, height, fillColor, shape, layer) {
     let cmd = this._commands[this._count];
     if (!cmd) {
-      cmd = { image: 0, x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, width: 0, height: 0, fillColor: 0, shape: 0, layer: 0 };
+      cmd = { sourceImage: null, sx: 0, sy: 0, sw: 0, sh: 0, x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, width: 0, height: 0, fillColor: 0, shape: 0, layer: 0 };
       this._commands[this._count] = cmd;
     }
-    cmd.image = image;
+    cmd.sourceImage = sourceImage;
+    cmd.sx = sx;
+    cmd.sy = sy;
+    cmd.sw = sw;
+    cmd.sh = sh;
     cmd.x = x;
     cmd.y = y;
     cmd.rotation = rotation;
@@ -70,8 +80,8 @@ export class RenderQueue {
           mat.b * cmd.x + mat.d * cmd.y + mat.f
         );
       }
-      if (cmd.image) {
-        ctx.drawImage(cmd.image, -cmd.width / 2, -cmd.height / 2, cmd.width, cmd.height);
+      if (cmd.sourceImage) {
+        ctx.drawImage(cmd.sourceImage, cmd.sx, cmd.sy, cmd.sw, cmd.sh, -cmd.width / 2, -cmd.height / 2, cmd.width, cmd.height);
         images++;
       } else {
         const hw = cmd.width * 0.5;

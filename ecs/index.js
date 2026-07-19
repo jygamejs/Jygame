@@ -36,7 +36,7 @@ export { AnimationClip, AnimationClipRegistry } from "./animation/index.js";
 
 export { CollisionQuery } from "./collision/index.js";
 
-export { RenderCommand, RenderQueue, CanvasContext } from "./render/index.js";
+export { RenderCommand, RenderQueue, CanvasContext, AssetRegistry } from "./render/index.js";
 
 export { TrailBuffer, TrailManager } from "./trails/index.js";
 
