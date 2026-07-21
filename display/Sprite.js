@@ -7,6 +7,8 @@ import { Animation } from "../ecs/components/Animation.js";
 import { Visible } from "../ecs/components/Visible.js";
 import { RenderBounds } from "../ecs/components/RenderBounds.js";
 import { AnimationClipRegistry } from "../ecs/animation/AnimationClipRegistry.js";
+import { AnimationClip } from "../ecs/animation/AnimationClip.js";
+import { AssetRegistry } from "../ecs/render/AssetRegistry.js";
 
 const _INTERNAL = Symbol("sprite.internal.wrap");
 const _SPRITE_COMPONENTS = [Transform, Collider, Renderable, Visible, Velocity, Animation, RenderBounds];
@@ -50,11 +52,12 @@ export class Sprite {
     const e = wld.createEntity();
     this.#entity = e;
 
-    wld.addMany(e, Transform, Collider, Renderable, Visible);
+    wld.addMany(e, Transform, Collider, Renderable, Visible, RenderBounds);
     wld.set(e, Transform, { x: x + w / 2, y: y + h / 2, scaleX: 1, scaleY: 1, _prevX: x + w / 2, _prevY: y + h / 2 });
     wld.set(e, Collider, { width: w, height: h });
-    wld.set(e, Renderable, { fillColor: 0xffffff });
+    wld.set(e, Renderable, { fillColor: 0xffffff, imageSmoothing: 1 });
     wld.set(e, Visible, { value: 1 });
+    wld.set(e, RenderBounds, { width: w, height: h });
   }
 
   get world() {
@@ -154,6 +157,17 @@ export class Sprite {
     if (v.fillColor != null) r.fillColor = v.fillColor;
     if (v.shape != null) r.shape = v.shape;
     if (v.layer != null) r.layer = v.layer;
+    if (v.imageSmoothing != null) r.imageSmoothing = v.imageSmoothing ? 1 : 0;
+  }
+
+  get imageSmoothing() {
+    this._assertAlive();
+    return !!this.#world.get(this.#entity, Renderable).imageSmoothing;
+  }
+
+  set imageSmoothing(v) {
+    this._assertAlive();
+    this.#world.get(this.#entity, Renderable).imageSmoothing = v ? 1 : 0;
   }
 
   get x() { this._assertAlive(); return this._getT().x - this._getC().width / 2; }
@@ -254,13 +268,29 @@ export class Sprite {
       get playing() { return !!comp.isPlaying; },
       set playing(v) { comp.isPlaying = v ? 1 : 0; },
 
+      _registerFrame(f) {
+        const w = self.#world;
+        if (!w || !w.hasResource(AssetRegistry) || !f || !f.sourceImage) return f;
+        const reg = w.getResource(AssetRegistry);
+        const id = reg.register(f);
+        return id;
+      },
+
+      _toAssetClip(clip) {
+        if (!clip || clip.frames.length === 0) return clip;
+        if (typeof clip.frames[0] === "number") return clip;
+        const ids = clip.frames.map((f) => this._registerFrame(f));
+        return new AnimationClip({ frames: ids, fps: clip.fps, loop: clip.loop });
+      },
+
       add(name, clip) {
         if (!self._animMap) self._animMap = new Map();
-        self._animMap.set(name, clip);
         const w = self.#world;
+        const assetClip = this._toAssetClip(clip);
+        self._animMap.set(name, assetClip);
         if (w && w.hasResource(AnimationClipRegistry)) {
           const reg = w.getResource(AnimationClipRegistry);
-          if (!reg.has(name)) reg.register(name, clip);
+          if (!reg.has(name)) reg.register(name, assetClip);
         }
         return this;
       },
@@ -273,8 +303,9 @@ export class Sprite {
           reg = w.getResource(AnimationClipRegistry);
         }
         for (const [name, clip] of Object.entries(animations)) {
-          self._animMap.set(name, clip);
-          if (reg && !reg.has(name)) reg.register(name, clip);
+          const assetClip = this._toAssetClip(clip);
+          self._animMap.set(name, assetClip);
+          if (reg && !reg.has(name)) reg.register(name, assetClip);
         }
         return this;
       },

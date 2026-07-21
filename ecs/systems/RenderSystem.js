@@ -3,9 +3,7 @@ import { Transform } from "../components/Transform.js";
 import { Renderable } from "../components/Renderable.js";
 import { RenderBounds } from "../components/RenderBounds.js";
 import { Visible } from "../components/Visible.js";
-import { Camera } from "../../camera/Camera.js";
 import { RenderQueue } from "../render/RenderQueue.js";
-import { CanvasContext } from "../render/CanvasContext.js";
 import { AssetRegistry } from "../render/AssetRegistry.js";
 import { Diagnostics, resolveMetricIds } from "../../debug/index.js";
 
@@ -16,12 +14,8 @@ export class RenderSystem extends System {
   _initDiag(diag) {
     if (this._diagIds) return;
     this._diagIds = resolveMetricIds(diag, {
-      draw:       "render.draw",
-      commands:   "render.commands",
       populate:   "render.populate",
-      batch:      "render.batch",
-      images:     "render.images",
-      primitives: "render.primitives",
+      commands:   "render.commands",
     });
   }
 
@@ -43,33 +37,9 @@ export class RenderSystem extends System {
       );
     }
 
-    const canvas = ctx.resources.get(CanvasContext);
-    if (!canvas) {
-      throw new Error(
-        "RenderSystem.update failed: CanvasContext resource is not set. " +
-        "Use world.setResource(CanvasContext, ctx) before updating."
-      );
-    }
-
-    const camera = ctx.resources.get(Camera);
-
     queue.clear();
 
     const ids = this._diagIds;
-    if (diag && ids && ids.draw >= 0) {
-      diag.scope(ids.draw, () => {
-        this._renderAll(ids, diag, queue, canvas, camera, ctx);
-      });
-    } else {
-      this._renderAll(ids, null, queue, canvas, camera, ctx);
-    }
-
-    if (diag && ids && ids.commands >= 0) {
-      diag.recordCounter(ids.commands, queue.count);
-    }
-  }
-
-  _renderAll(ids, diag, queue, canvas, camera, ctx) {
     if (diag && ids && ids.populate >= 0) {
       diag.scope(ids.populate, () => {
         this._populateQueue(queue, ctx);
@@ -78,14 +48,8 @@ export class RenderSystem extends System {
       this._populateQueue(queue, ctx);
     }
 
-    if (diag && ids && ids.batch >= 0) {
-      diag.scope(ids.batch, () => {
-        queue.execute(canvas, camera);
-      });
-      if (ids.images >= 0) diag.recordCounter(ids.images, queue.imagesDrawn);
-      if (ids.primitives >= 0) diag.recordCounter(ids.primitives, queue.primitivesDrawn);
-    } else {
-      queue.execute(canvas, camera);
+    if (diag && ids && ids.commands >= 0) {
+      diag.recordCounter(ids.commands, queue.count);
     }
   }
 
@@ -110,10 +74,11 @@ export class RenderSystem extends System {
       const fillCol = table.getColumn(rid, "fillColor");
       const shape = table.getColumn(rid, "shape");
       const layer = table.getColumn(rid, "layer");
+      const smoothing = table.getColumn(rid, "imageSmoothing");
       const rw = table.getColumn(rbid, "width");
       const rh = table.getColumn(rbid, "height");
       const visible = table.getColumn(vid, "value");
-      if (!tx || !ty || !trot || !tsx || !tsy || !img || !fillCol || !shape || !layer || !rw || !rh || !visible) continue;
+      if (!tx || !ty || !trot || !tsx || !tsy || !img || !fillCol || !shape || !layer || !smoothing || !rw || !rh || !visible) continue;
 
       for (let r = 0; r < count; r++) {
         if (!visible[r]) continue;
@@ -134,7 +99,8 @@ export class RenderSystem extends System {
         queue.push(
           sourceImage, sx, sy, sw, sh,
           tx[r], ty[r], trot[r], tsx[r], tsy[r],
-          rw[r], rh[r], fillCol[r], shape[r], layer[r]
+          rw[r], rh[r], fillCol[r], shape[r], layer[r],
+          !!smoothing[r]
         );
       }
     }

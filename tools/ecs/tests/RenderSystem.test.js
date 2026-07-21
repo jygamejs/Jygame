@@ -121,12 +121,14 @@ describe("RenderSystem (ECS)", () => {
       assert.throws(() => world.update(16), /RenderQueue resource is not set/);
     });
 
-    it("missing CanvasContext throws descriptive error", () => {
+    it("missing CanvasContext does not throw (queue population only)", () => {
       const world = createWorld();
-      world.setResource(RenderQueue, new RenderQueue());
+      const queue = new RenderQueue();
+      world.setResource(RenderQueue, queue);
       world.addSystem(new RenderSystem());
       createEntity(world, [[Transform], [Renderable], [RenderBounds], [Visible, { value: 1 }]]);
-      assert.throws(() => world.update(16), /CanvasContext resource is not set/);
+      world.update(16);
+      assert.strictEqual(queue.count, 1);
     });
 
     it("camera is optional (no error when absent)", () => {

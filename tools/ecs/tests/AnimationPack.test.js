@@ -3,7 +3,6 @@ import * as assert from "node:assert";
 import { AnimationPack } from "../../../ecs/animation/AnimationPack.js";
 import { AnimationClip } from "../../../ecs/animation/AnimationClip.js";
 import { ImageLoader } from "../../../loaders/ImageLoader.js";
-import { AssetRegistry } from "../../../ecs/render/AssetRegistry.js";
 
 // ---------------------------------------------------------------------------
 // helpers
@@ -44,7 +43,7 @@ describe("AnimationPack.load", () => {
     loadCalls = null;
     const result = await AnimationPack.load({
       path: "assets/char",
-      assetRegistry: new AssetRegistry(),
+
       idle: 3,
       run: 4,
     });
@@ -59,7 +58,7 @@ describe("AnimationPack.load", () => {
     loadCalls = null;
     await AnimationPack.load({
       path: "assets/char",
-      assetRegistry: new AssetRegistry(),
+
       walk: 2,
     });
 
@@ -74,7 +73,7 @@ describe("AnimationPack.load", () => {
     loadCalls = null;
     const result = await AnimationPack.load({
       path: "assets/char",
-      assetRegistry: new AssetRegistry(),
+
       defaults: { fps: 12, loop: false },
       idle: 2,
     });
@@ -87,7 +86,7 @@ describe("AnimationPack.load", () => {
     loadCalls = null;
     await AnimationPack.load({
       path: "assets/char",
-      assetRegistry: new AssetRegistry(),
+
       anim: { from: 3, to: 6 },
     });
 
@@ -100,7 +99,7 @@ describe("AnimationPack.load", () => {
     loadCalls = null;
     const result = await AnimationPack.load({
       path: "assets/char",
-      assetRegistry: new AssetRegistry(),
+
       anim: { frames: 3, pingPong: true },
     });
 
@@ -111,7 +110,7 @@ describe("AnimationPack.load", () => {
     loadCalls = null;
     await AnimationPack.load({
       path: "assets/char",
-      assetRegistry: new AssetRegistry(),
+
       anim: { frames: 2, padding: 3 },
     });
 
@@ -120,22 +119,22 @@ describe("AnimationPack.load", () => {
   });
 
   it("throws if path is missing", async () => {
-    await assert.rejects(() => AnimationPack.load({ idle: 3, assetRegistry: new AssetRegistry() }));
+    await assert.rejects(() => AnimationPack.load({ idle: 3 }));
   });
 
   it("throws if path is not a string", async () => {
-    await assert.rejects(() => AnimationPack.load({ path: 42, idle: 3, assetRegistry: new AssetRegistry() }));
+    await assert.rejects(() => AnimationPack.load({ path: 42, idle: 3 }));
   });
 
   it("throws if no animation entries", async () => {
     await assert.rejects(() =>
-      AnimationPack.load({ path: "assets", assetRegistry: new AssetRegistry() })
+      AnimationPack.load({ path: "assets" })
     );
   });
 
   it("throws on invalid frame count", async () => {
     await assert.rejects(() =>
-      AnimationPack.load({ path: "assets", idle: 0, assetRegistry: new AssetRegistry() })
+      AnimationPack.load({ path: "assets", idle: 0 })
     );
   });
 });
@@ -370,17 +369,15 @@ describe("_extractFrames", () => {
     image.width = 32;
     image.height = 16;
 
-    const registry = new AssetRegistry();
-    const ids = AnimationPack._extractFrames(image, [
+    const frames = AnimationPack._extractFrames(image, [
       { x: 0, y: 0, w: 16, h: 16 },
       { x: 16, y: 0, w: 16, h: 16 },
-    ], null, registry);
-    assert.strictEqual(ids.length, 2);
-    const a0 = registry.get(ids[0]);
-    const a1 = registry.get(ids[1]);
-    assert.strictEqual(a0.sw, 16);
-    assert.strictEqual(a0.sh, 16);
-    assert.strictEqual(a1.sx, 16);
+    ], null);
+    assert.strictEqual(frames.length, 2);
+    assert.strictEqual(frames[0].sourceImage, image);
+    assert.strictEqual(frames[0].sw, 16);
+    assert.strictEqual(frames[0].sh, 16);
+    assert.strictEqual(frames[1].sx, 16);
   });
 
   it("applies crop", { skip: !hasDOM }, () => {
@@ -388,13 +385,11 @@ describe("_extractFrames", () => {
     image.width = 20;
     image.height = 20;
 
-    const registry = new AssetRegistry();
-    const ids = AnimationPack._extractFrames(image, [
+    const frames = AnimationPack._extractFrames(image, [
       { x: 0, y: 0, w: 20, h: 20 },
-    ], { left: 2, top: 2, right: 2, bottom: 2 }, registry);
-    const a = registry.get(ids[0]);
-    assert.strictEqual(a.sw, 16);
-    assert.strictEqual(a.sh, 16);
+    ], { left: 2, top: 2, right: 2, bottom: 2 });
+    assert.strictEqual(frames[0].sw, 16);
+    assert.strictEqual(frames[0].sh, 16);
   });
 
   it("throws on invalid dimensions after crop", { skip: !hasDOM }, () => {
@@ -402,7 +397,7 @@ describe("_extractFrames", () => {
     image.width = 10;
     image.height = 10;
     assert.throws(() =>
-      AnimationPack._extractFrames(image, [{ x: 0, y: 0, w: 10, h: 10 }], { left: 6, right: 6 }, new AssetRegistry())
+      AnimationPack._extractFrames(image, [{ x: 0, y: 0, w: 10, h: 10 }], { left: 6, right: 6 })
     );
   });
 });
@@ -425,7 +420,7 @@ describe("fromSpriteSheet (mocked _resolveImage)", () => {
   it("extracts frames from a sprite sheet", async () => {
     const result = await AnimationPack.fromSpriteSheet({
       image: "sheet.png",
-      assetRegistry: new AssetRegistry(),
+
       frameWidth: 16,
       frameHeight: 16,
       idle: 4,
@@ -437,7 +432,7 @@ describe("fromSpriteSheet (mocked _resolveImage)", () => {
   it("respects row offset", async () => {
     const result = await AnimationPack.fromSpriteSheet({
       image: "sheet.png",
-      assetRegistry: new AssetRegistry(),
+
       frameWidth: 16,
       frameHeight: 16,
       walk: { frames: 3, row: 1 },
@@ -448,7 +443,7 @@ describe("fromSpriteSheet (mocked _resolveImage)", () => {
   it("respects margin and spacing", async () => {
     const result = await AnimationPack.fromSpriteSheet({
       image: "sheet.png",
-      assetRegistry: new AssetRegistry(),
+
       frameWidth: 16,
       frameHeight: 16,
       margin: 4,
@@ -461,7 +456,7 @@ describe("fromSpriteSheet (mocked _resolveImage)", () => {
   it("applies crop", async () => {
     const result = await AnimationPack.fromSpriteSheet({
       image: "sheet.png",
-      assetRegistry: new AssetRegistry(),
+
       frameWidth: 20,
       frameHeight: 20,
       idle: { frames: 1, crop: { left: 2, top: 2, right: 2, bottom: 2 } },
@@ -472,7 +467,7 @@ describe("fromSpriteSheet (mocked _resolveImage)", () => {
   it("supports ping-pong", async () => {
     const result = await AnimationPack.fromSpriteSheet({
       image: "sheet.png",
-      assetRegistry: new AssetRegistry(),
+
       frameWidth: 16,
       frameHeight: 16,
       anim: { frames: 3, pingPong: true },
@@ -482,19 +477,19 @@ describe("fromSpriteSheet (mocked _resolveImage)", () => {
 
   it("throws if image is missing", async () => {
     await assert.rejects(() =>
-      AnimationPack.fromSpriteSheet({ frameWidth: 16, frameHeight: 16, idle: 1, assetRegistry: new AssetRegistry() })
+      AnimationPack.fromSpriteSheet({ frameWidth: 16, frameHeight: 16, idle: 1 })
     );
   });
 
   it("throws if frameWidth/Height missing", async () => {
     await assert.rejects(() =>
-      AnimationPack.fromSpriteSheet({ image: "sheet.png", idle: 1, assetRegistry: new AssetRegistry() })
+      AnimationPack.fromSpriteSheet({ image: "sheet.png", idle: 1 })
     );
   });
 
   it("throws if no animation entries", async () => {
     await assert.rejects(() =>
-      AnimationPack.fromSpriteSheet({ image: "sheet.png", frameWidth: 16, frameHeight: 16, assetRegistry: new AssetRegistry() })
+      AnimationPack.fromSpriteSheet({ image: "sheet.png", frameWidth: 16, frameHeight: 16 })
     );
   });
 });
@@ -517,7 +512,7 @@ describe("fromAtlas (mocked _resolveImage)", () => {
   it("extracts region as evenly divided frames", async () => {
     const result = await AnimationPack.fromAtlas({
       image: "atlas.png",
-      assetRegistry: new AssetRegistry(),
+
       walk: { x: 0, y: 0, width: 64, height: 16, frames: 4 },
     });
     assert.strictEqual(result.walk.frameCount, 4);
@@ -526,7 +521,7 @@ describe("fromAtlas (mocked _resolveImage)", () => {
   it("extracts grid within a region", async () => {
     const result = await AnimationPack.fromAtlas({
       image: "atlas.png",
-      assetRegistry: new AssetRegistry(),
+
       anim: { x: 0, y: 0, width: 48, height: 32, frames: 4, frameWidth: 24, frameHeight: 16 },
     });
     assert.strictEqual(result.anim.frameCount, 4);
@@ -535,7 +530,7 @@ describe("fromAtlas (mocked _resolveImage)", () => {
   it("accepts explicit frame array", async () => {
     const result = await AnimationPack.fromAtlas({
       image: "atlas.png",
-      assetRegistry: new AssetRegistry(),
+
       anim: { frames: [[0, 0, 10, 10], [10, 0, 10, 10]] },
     });
     assert.strictEqual(result.anim.frameCount, 2);
@@ -544,7 +539,7 @@ describe("fromAtlas (mocked _resolveImage)", () => {
   it("supports ping-pong", async () => {
     const result = await AnimationPack.fromAtlas({
       image: "atlas.png",
-      assetRegistry: new AssetRegistry(),
+
       anim: { x: 0, y: 0, width: 32, height: 16, frames: 3, pingPong: true },
     });
     assert.strictEqual(result.anim.frameCount, 4);
@@ -553,7 +548,7 @@ describe("fromAtlas (mocked _resolveImage)", () => {
   it("applies crop", async () => {
     const result = await AnimationPack.fromAtlas({
       image: "atlas.png",
-      assetRegistry: new AssetRegistry(),
+
       anim: { x: 0, y: 0, width: 20, height: 20, frames: 1, crop: { left: 2, top: 2, right: 2, bottom: 2 } },
     });
     assert.strictEqual(result.anim.frameCount, 1);
@@ -561,13 +556,13 @@ describe("fromAtlas (mocked _resolveImage)", () => {
 
   it("throws if image missing", async () => {
     await assert.rejects(() =>
-      AnimationPack.fromAtlas({ anim: { x: 0, y: 0, width: 32, height: 16, frames: 2 }, assetRegistry: new AssetRegistry() })
+      AnimationPack.fromAtlas({ anim: { x: 0, y: 0, width: 32, height: 16, frames: 2 } })
     );
   });
 
   it("throws if region info missing", async () => {
     await assert.rejects(() =>
-      AnimationPack.fromAtlas({ image: "atlas.png", anim: { frames: 2 }, assetRegistry: new AssetRegistry() })
+      AnimationPack.fromAtlas({ image: "atlas.png", anim: { frames: 2 } })
     );
   });
 });
@@ -603,7 +598,7 @@ describe("fromJSONAtlas (mocked _resolveImage/_loadJSON)", () => {
 
     const result = await AnimationPack.fromJSONAtlas({
       image: "atlas.png",
-      assetRegistry: new AssetRegistry(),
+
       json: "ignored.json",
       idle: { prefix: "char_idle" },
     });
@@ -623,7 +618,7 @@ describe("fromJSONAtlas (mocked _resolveImage/_loadJSON)", () => {
 
     const result = await AnimationPack.fromJSONAtlas({
       image: "atlas.png",
-      assetRegistry: new AssetRegistry(),
+
       json: "ignored.json",
       anim: { prefix: "frame" },
     });
@@ -641,7 +636,7 @@ describe("fromJSONAtlas (mocked _resolveImage/_loadJSON)", () => {
 
     const result = await AnimationPack.fromJSONAtlas({
       image: "atlas.png",
-      assetRegistry: new AssetRegistry(),
+
       json: "ignored.json",
       walk: {},
     });
@@ -660,7 +655,7 @@ describe("fromJSONAtlas (mocked _resolveImage/_loadJSON)", () => {
 
     const result = await AnimationPack.fromJSONAtlas({
       image: "atlas.png",
-      assetRegistry: new AssetRegistry(),
+
       json: "ignored.json",
       sprite: { prefix: "sprite" },
     });
@@ -674,20 +669,20 @@ describe("fromJSONAtlas (mocked _resolveImage/_loadJSON)", () => {
     };
 
     await assert.rejects(() =>
-      AnimationPack.fromJSONAtlas({ image: "atlas.png", assetRegistry: new AssetRegistry(), json: "ignored.json", bar: {} }),
+      AnimationPack.fromJSONAtlas({ image: "atlas.png", json: "ignored.json", bar: {} }),
       /no frames matched prefix/
     );
   });
 
   it("throws if image missing", async () => {
     await assert.rejects(() =>
-      AnimationPack.fromJSONAtlas({ assetRegistry: new AssetRegistry(), json: "ignored.json", anim: {} })
+      AnimationPack.fromJSONAtlas({ json: "ignored.json", anim: {} })
     );
   });
 
   it("throws if json missing", async () => {
     await assert.rejects(() =>
-      AnimationPack.fromJSONAtlas({ image: "atlas.png", assetRegistry: new AssetRegistry(), anim: {} })
+      AnimationPack.fromJSONAtlas({ image: "atlas.png", anim: {} })
     );
   });
 });

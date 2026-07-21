@@ -199,6 +199,7 @@ describe("Scene — sprite default world", () => {
     origWorld.register(Collider);
     origWorld.register(Renderable);
     origWorld.register(Visible);
+    origWorld.register(RenderBounds);
 
     Sprite._defaultWorld = origWorld;
 

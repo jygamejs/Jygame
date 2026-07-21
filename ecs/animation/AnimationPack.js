@@ -1,13 +1,13 @@
 import { ImageLoader } from "../../loaders/ImageLoader.js";
 import { AnimationClip } from "./AnimationClip.js";
 
-const _RESERVED = new Set(["path", "defaults", "assetRegistry"]);
+const _RESERVED = new Set(["path", "defaults"]);
 
 const _SHEET_RESERVED = new Set([
-  "image", "defaults", "frameWidth", "frameHeight", "margin", "spacing", "columns", "assetRegistry",
+  "image", "defaults", "frameWidth", "frameHeight", "margin", "spacing", "columns",
 ]);
 
-const _ATLAS_RESERVED = new Set(["image", "defaults", "assetRegistry"]);
+const _ATLAS_RESERVED = new Set(["image", "defaults"]);
 
 export class AnimationPack {
   // ── Phase I: individual file convention ──
@@ -51,20 +51,18 @@ export class AnimationPack {
       frameKeysByAnim[anim.name] = keys;
     }
 
-    const assetRegistry = config.assetRegistry;
-    if (!assetRegistry) {
-      throw new TypeError(
-        'AnimationPack.load failed: "assetRegistry" is required. Provide an AssetRegistry instance.'
-      );
-    }
-
     const images = await ImageLoader.loadAll(loadMap);
 
     const result = {};
     for (const anim of entries) {
       const keys = frameKeysByAnim[anim.name];
-      const frameAssetIds = keys.map(k => assetRegistry.register({ sourceImage: images[k] }));
-      result[anim.name] = this._buildClip(anim, frameAssetIds);
+      const frameAssets = keys.map(k => ({
+        sourceImage: images[k],
+        sx: 0, sy: 0,
+        sw: images[k].width ?? images[k].naturalWidth ?? 0,
+        sh: images[k].height ?? images[k].naturalHeight ?? 0,
+      }));
+      result[anim.name] = this._buildClip(anim, frameAssets);
     }
 
     return result;
@@ -106,18 +104,11 @@ export class AnimationPack {
       );
     }
 
-    const assetRegistry = config.assetRegistry;
-    if (!assetRegistry) {
-      throw new TypeError(
-        'AnimationPack.fromSpriteSheet failed: "assetRegistry" is required. Provide an AssetRegistry instance.'
-      );
-    }
-
     const columns = config.columns;
     const result = {};
     for (const anim of entries) {
       const rects = this._generateGridRects(anim, frameWidth, frameHeight, margin, spacing, columns);
-      let frames = this._extractFrames(image, rects, anim.crop, assetRegistry);
+      let frames = this._extractFrames(image, rects, anim.crop);
       result[anim.name] = this._buildClip(anim, frames);
     }
 
@@ -133,13 +124,6 @@ export class AnimationPack {
       );
     }
     const image = await this._resolveImage(config.image);
-
-    const assetRegistry = config.assetRegistry;
-    if (!assetRegistry) {
-      throw new TypeError(
-        'AnimationPack.fromAtlas failed: "assetRegistry" is required. Provide an AssetRegistry instance.'
-      );
-    }
 
     const defaults = config.defaults || {};
 
@@ -158,7 +142,7 @@ export class AnimationPack {
     const result = {};
     for (const anim of entries) {
       const rects = anim._rects;
-      let frames = this._extractFrames(image, rects, anim.crop, assetRegistry);
+      let frames = this._extractFrames(image, rects, anim.crop);
       result[anim.name] = this._buildClip(anim, frames);
     }
 
@@ -184,13 +168,6 @@ export class AnimationPack {
       this._loadJSON(config.json),
     ]);
 
-    const assetRegistry = config.assetRegistry;
-    if (!assetRegistry) {
-      throw new TypeError(
-        'AnimationPack.fromJSONAtlas failed: "assetRegistry" is required. Provide an AssetRegistry instance.'
-      );
-    }
-
     const defaults = config.defaults || {};
     const frameMap = this._parseAtlasFrames(atlasData);
 
@@ -209,7 +186,7 @@ export class AnimationPack {
     const result = {};
     for (const anim of entries) {
       const rects = anim._rects;
-      let frames = this._extractFrames(image, rects, anim.crop, assetRegistry);
+      let frames = this._extractFrames(image, rects, anim.crop);
       result[anim.name] = this._buildClip(anim, frames);
     }
 
@@ -274,7 +251,7 @@ export class AnimationPack {
     );
   }
 
-  static _extractFrames(image, rects, crop, registry) {
+  static _extractFrames(image, rects, crop) {
     return rects.map((rect) => {
       let { x, y, w, h } = rect;
 
@@ -291,7 +268,7 @@ export class AnimationPack {
         );
       }
 
-      return registry.register({ sourceImage: image, sx: x, sy: y, sw: w, sh: h });
+      return { sourceImage: image, sx: x, sy: y, sw: w, sh: h };
     });
   }
 

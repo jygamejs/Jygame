@@ -8,13 +8,14 @@ import { Collider } from "../../../ecs/components/Collider.js";
 import { Renderable } from "../../../ecs/components/Renderable.js";
 import { Visible } from "../../../ecs/components/Visible.js";
 import { Velocity } from "../../../ecs/components/Velocity.js";
+import { RenderBounds } from "../../../ecs/components/RenderBounds.js";
 import { EnemyTag } from "../../../ecs/components/tags/EnemyTag.js";
 import { PlayerTag } from "../../../ecs/components/tags/PlayerTag.js";
 import { SpatialHash } from "../../../collision/SpatialHash.js";
 
 function makeWorld() {
   const w = new World();
-  [Transform, Collider, Renderable, Visible, Velocity, EnemyTag, PlayerTag].forEach(c => w.register(c));
+  [Transform, Collider, Renderable, RenderBounds, Visible, Velocity, EnemyTag, PlayerTag].forEach(c => w.register(c));
   return w;
 }
 

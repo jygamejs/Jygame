@@ -7,6 +7,7 @@ import { Sprite } from "../display/Sprite.js";
 import { InputContext } from "../input/actions/InputContext.js";
 import { ActionMap } from "../input/actions/ActionMap.js";
 import { Transform } from "../ecs/components/Transform.js";
+import { RenderQueue } from "../ecs/render/RenderQueue.js";
 
 export class Scene extends EcsScene {
   constructor() {
@@ -25,6 +26,11 @@ export class Scene extends EcsScene {
     this._inputContext = null;
     this._actionMap = new ActionMap();
     this._inputPriority = 0;
+    this._ready = false;
+  }
+
+  get ready() {
+    return this._ready;
   }
 
   _createWorld() {
@@ -48,14 +54,7 @@ export class Scene extends EcsScene {
     this._cleanups.push(fn);
   }
 
-  enter() {
-    if (this._entered) {
-      throw new Error("Scene.enter() called more than once");
-    }
-    this._entered = true;
-
-    this.world;
-
+  async _initScene() {
     if (!this._created) {
       this.onCreate();
       this._created = true;
@@ -84,7 +83,22 @@ export class Scene extends EcsScene {
     this._prevDefaultWorld = Sprite._defaultWorld;
     Sprite._defaultWorld = this._world;
 
-    this.onEnter();
+    const result = this.onEnter();
+    if (result && typeof result.then === "function") {
+      await result;
+    }
+    this._ready = true;
+  }
+
+  enter() {
+    if (this._entered) {
+      throw new Error("Scene.enter() called more than once");
+    }
+    this._entered = true;
+
+    this.world;
+
+    this._initScene();
   }
 
   exit() {
@@ -189,7 +203,16 @@ export class Scene extends EcsScene {
     }
   }
 
-  render(ctx) {}
+  render(ctx) {
+    const w = this._world;
+    if (!w) return;
+    const queue = w.getResource(RenderQueue);
+    if (queue && queue.count > 0) {
+      const camera = w.getResource(Camera);
+      queue.execute(ctx, camera);
+    }
+  }
+
   renderUI() {}
 
   pushScene(scene) {

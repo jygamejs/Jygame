@@ -21,7 +21,7 @@ import { OverlayHost } from "../debug/overlay/OverlayHost.js";
 import { enableDebugWorkspace, takeDebugSnapshot } from "../debug/EnableDebugWorkspace.js";
 
 export class Game {
-  constructor({ parent, width, height, fps = 60, maxTicks = 5, autoPause = true, scaleToFit = null, debug = true, interpolation = true }) {
+  constructor({ parent, width, height, fps = 60, maxTicks = 5, autoPause = true, scaleToFit = null, debug = true, interpolation = true, imageSmoothing = true }) {
     const container = typeof parent === "string"
       ? document.querySelector(parent)
       : document.body;
@@ -46,6 +46,7 @@ export class Game {
     }
 
     this.ctx = this.canvas.getContext("2d");
+    this.ctx.imageSmoothingEnabled = imageSmoothing;
     this.width = width;
     this.height = height;
     this.clock = new Clock(fps, maxTicks);
@@ -566,6 +567,7 @@ export class Game {
     const doUpdate = () => {
       const updateStart = this._findBlockingIndex("blocksUpdateBelow");
       const top = this.scene;
+      if (top && !top.ready) return;
       this._updating = true;
       try {
         if (ticks > 0) {
@@ -588,6 +590,9 @@ export class Game {
     if (this._debug && this._snapshotBuilder) {
       takeDebugSnapshot(this);
     }
+
+    const top = this.scene;
+    if (top && !top.ready) return;
 
     const alpha = this.clock.alpha;
     const renderStart = this._findBlockingIndex("blocksRenderBelow");
