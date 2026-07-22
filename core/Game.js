@@ -47,6 +47,7 @@ export class Game {
 
     this.ctx = this.canvas.getContext("2d");
     this.ctx.imageSmoothingEnabled = imageSmoothing;
+    this._imageSmoothing = imageSmoothing;
     this.width = width;
     this.height = height;
     this.clock = new Clock(fps, maxTicks);

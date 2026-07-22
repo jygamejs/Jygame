@@ -63,6 +63,10 @@ export class Scene extends EcsScene {
     if (this._game) {
       this._world.setResource(CanvasContext, this._game.ctx);
 
+      if (this._game._imageSmoothing !== undefined) {
+        this._world.setResource("imageSmoothing.default", this._game._imageSmoothing ? 1 : 0);
+      }
+
       if (this._game.inputSystem && this._game.inputSystem.contextStack) {
         this._inputContext = new InputContext(
           this.constructor.name,

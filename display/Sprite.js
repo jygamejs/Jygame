@@ -52,10 +52,12 @@ export class Sprite {
     const e = wld.createEntity();
     this.#entity = e;
 
+    const defaultSmoothing = wld.hasResource("imageSmoothing.default") ? wld.getResource("imageSmoothing.default") : 1;
+
     wld.addMany(e, Transform, Collider, Renderable, Visible, RenderBounds);
     wld.set(e, Transform, { x: x + w / 2, y: y + h / 2, scaleX: 1, scaleY: 1, _prevX: x + w / 2, _prevY: y + h / 2 });
     wld.set(e, Collider, { width: w, height: h });
-    wld.set(e, Renderable, { fillColor: 0xffffff });
+    wld.set(e, Renderable, { fillColor: 0xffffff, imageSmoothing: defaultSmoothing });
     wld.set(e, Visible, { value: 1 });
     wld.set(e, RenderBounds, { width: w, height: h });
   }
@@ -157,6 +159,16 @@ export class Sprite {
     if (v.fillColor != null) r.fillColor = v.fillColor;
     if (v.shape != null) r.shape = v.shape;
     if (v.layer != null) r.layer = v.layer;
+  }
+
+  get imageSmoothing() {
+    this._assertAlive();
+    return !!this.#world.get(this.#entity, Renderable).imageSmoothing;
+  }
+
+  set imageSmoothing(v) {
+    this._assertAlive();
+    this.#world.get(this.#entity, Renderable).imageSmoothing = v ? 1 : 0;
   }
 
   get x() { this._assertAlive(); return this._getT().x - this._getC().width / 2; }
