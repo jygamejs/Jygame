@@ -119,16 +119,12 @@ describe("Scene — resources", () => {
     assert.strictEqual(scene.world.getResource(Camera), undefined);
   });
 
-  it("registers CanvasContext and Camera when game is available", () => {
+  it("registers CanvasContext when game is available", () => {
     const scene = new Scene();
     const mockCtx = { save() {}, restore() {}, getTransform() { return { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }; }, setTransform() {} };
     scene._game = { ctx: mockCtx, width: 800, height: 600 };
     scene.enter();
     assert.strictEqual(scene.world.getResource(CanvasContext), mockCtx);
-    const cam = scene.world.getResource(Camera);
-    assert.ok(cam instanceof Camera);
-    assert.strictEqual(cam.width, 800);
-    assert.strictEqual(cam.height, 600);
   });
 });
 

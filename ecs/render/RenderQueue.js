@@ -18,17 +18,16 @@ export class RenderQueue {
       cmds[i].sy = 0;
       cmds[i].sw = 0;
       cmds[i].sh = 0;
-      cmds[i].imageSmoothing = true;
     }
     this._count = 0;
     this.imagesDrawn = 0;
     this.primitivesDrawn = 0;
   }
 
-  push(sourceImage, sx, sy, sw, sh, x, y, rotation, scaleX, scaleY, width, height, fillColor, shape, layer, imageSmoothing) {
+  push(sourceImage, sx, sy, sw, sh, x, y, rotation, scaleX, scaleY, width, height, fillColor, shape, layer) {
     let cmd = this._commands[this._count];
     if (!cmd) {
-      cmd = { sourceImage: null, sx: 0, sy: 0, sw: 0, sh: 0, x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, width: 0, height: 0, fillColor: 0, shape: 0, layer: 0, imageSmoothing: true };
+      cmd = { sourceImage: null, sx: 0, sy: 0, sw: 0, sh: 0, x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, width: 0, height: 0, fillColor: 0, shape: 0, layer: 0 };
       this._commands[this._count] = cmd;
     }
     cmd.sourceImage = sourceImage;
@@ -46,7 +45,6 @@ export class RenderQueue {
     cmd.fillColor = fillColor;
     cmd.shape = shape;
     cmd.layer = layer;
-    cmd.imageSmoothing = imageSmoothing !== undefined ? imageSmoothing : true;
     this._count++;
   }
 
@@ -83,7 +81,6 @@ export class RenderQueue {
         );
       }
       if (cmd.sourceImage) {
-        ctx.imageSmoothingEnabled = cmd.imageSmoothing;
         ctx.drawImage(cmd.sourceImage, cmd.sx, cmd.sy, cmd.sw, cmd.sh, -cmd.width / 2, -cmd.height / 2, cmd.width, cmd.height);
         images++;
       } else {

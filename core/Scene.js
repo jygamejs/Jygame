@@ -63,13 +63,6 @@ export class Scene extends EcsScene {
     if (this._game) {
       this._world.setResource(CanvasContext, this._game.ctx);
 
-      const cam = new Camera(0, 0, this._game.width, this._game.height);
-      this._world.setResource(Camera, cam);
-
-      if (this._game.inputSystem && this._game.inputSystem.coordinateSystem) {
-        this._game.inputSystem.coordinateSystem.camera = cam;
-      }
-
       if (this._game.inputSystem && this._game.inputSystem.contextStack) {
         this._inputContext = new InputContext(
           this.constructor.name,
