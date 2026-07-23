@@ -209,16 +209,28 @@ export class Sprite {
 
   get style() {
     this._assertAlive();
-    const r = this.#world.get(this.#entity, Renderable);
-    if (!this._styleWrapper) {
-      this._styleWrapper = {
-        get fill() { return "#" + r.fillColor.toString(16).padStart(6, "0"); },
-        set fill(v) { r.fillColor = parseInt(v.slice(1), 16); },
-        get shape() { return r.shape === 1 ? "circle" : "rect"; },
-        set shape(v) { r.shape = v === "circle" ? 1 : 0; },
+    if (!this._styleApi) {
+      const self = this;
+      this._styleApi = {
+        get fill() {
+          const r = self.#world.get(self.#entity, Renderable);
+          return "#" + r.fillColor.toString(16).padStart(6, "0");
+        },
+        set fill(v) {
+          const r = self.#world.get(self.#entity, Renderable);
+          r.fillColor = parseInt(v.slice(1), 16);
+        },
+        get shape() {
+          const r = self.#world.get(self.#entity, Renderable);
+          return r.shape === 1 ? "circle" : "rect";
+        },
+        set shape(v) {
+          const r = self.#world.get(self.#entity, Renderable);
+          r.shape = v === "circle" ? 1 : 0;
+        },
       };
     }
-    return this._styleWrapper;
+    return this._styleApi;
   }
 
   set style(v) {
