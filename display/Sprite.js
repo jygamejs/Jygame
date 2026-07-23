@@ -329,6 +329,25 @@ export class Sprite {
       },
 
       play(name) {
+        if (self._animCurrent === name) return this;
+        self._animCurrent = name;
+        const comp = self.#world.get(self.#entity, Animation);
+        const map = self._animMap;
+        if (map && map.has(name)) {
+          const w = self.#world;
+          if (w && w.hasResource(AnimationClipRegistry)) {
+            const reg = w.getResource(AnimationClipRegistry);
+            const id = reg.getId(name);
+            if (id !== null) comp.clipId = id;
+          }
+        }
+        comp.frameIndex = 0;
+        comp.elapsed = 0;
+        comp.isPlaying = 1;
+        comp.speed = 1;
+      },
+
+      restart(name) {
         self._animCurrent = name;
         const comp = self.#world.get(self.#entity, Animation);
         const map = self._animMap;

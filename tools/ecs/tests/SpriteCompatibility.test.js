@@ -396,6 +396,38 @@ describe("Animation", () => {
     // trigger via internal callback mechanism (if applicable)
     assert.strictEqual(typeof s._animCallback, "function");
   });
+
+  it("play() with same name is no-op (elapsed unchanged)", () => {
+    const s = new Sprite();
+    s.animation.play("walk");
+    const comp = s.world.get(s.entity, Animation);
+    comp.elapsed = 0.5;
+    s.animation.play("walk");
+    assert.strictEqual(comp.elapsed, 0.5);
+  });
+
+  it("play() switches animation when name differs", () => {
+    const s = new Sprite();
+    s.animation.play("walk");
+    s.animation.play("run");
+    assert.strictEqual(s.animation.current, "run");
+  });
+
+  it("restart() always resets elapsed to 0", () => {
+    const s = new Sprite();
+    s.animation.play("walk");
+    const comp = s.world.get(s.entity, Animation);
+    comp.elapsed = 0.5;
+    s.animation.restart("walk");
+    assert.strictEqual(comp.elapsed, 0);
+  });
+
+  it("restart() switches to a different animation", () => {
+    const s = new Sprite();
+    s.animation.play("walk");
+    s.animation.restart("run");
+    assert.strictEqual(s.animation.current, "run");
+  });
 });
 
 // ─────────────────────────────────────────────────────────
