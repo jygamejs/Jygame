@@ -26,6 +26,7 @@ export class Scene extends EcsScene {
     this._inputContext = null;
     this._actionMap = new ActionMap();
     this._inputPriority = 0;
+    this._cameras = [];
     this._ready = false;
   }
 
@@ -52,6 +53,38 @@ export class Scene extends EcsScene {
 
   cleanup(fn) {
     this._cleanups.push(fn);
+  }
+
+  addCamera(camera) {
+    this._cameras.push(camera);
+    if (this._world) {
+      this._world.setResource(Camera, camera);
+    }
+  }
+
+  removeCamera(camera) {
+    const idx = this._cameras.indexOf(camera);
+    if (idx !== -1) {
+      this._cameras.splice(idx, 1);
+      if (this._world) {
+        if (this._cameras.length > 0) {
+          this._world.setResource(Camera, this._cameras[0]);
+        } else {
+          this._world.removeResource(Camera);
+        }
+      }
+    }
+  }
+
+  setMainCamera(camera) {
+    this._cameras = [camera];
+    if (this._world) {
+      this._world.setResource(Camera, camera);
+    }
+  }
+
+  get cameras() {
+    return this._cameras;
   }
 
   async _initScene() {
@@ -204,9 +237,14 @@ export class Scene extends EcsScene {
     const w = this._world;
     if (!w) return;
     const queue = w.getResource(RenderQueue);
-    if (queue && queue.count > 0) {
-      const camera = w.getResource(Camera);
-      queue.execute(ctx, camera);
+    if (!queue || queue.count === 0) return;
+
+    if (this._cameras.length === 0) {
+      queue.execute(ctx, null);
+    } else {
+      for (let i = 0; i < this._cameras.length; i++) {
+        this._cameras[i].render(ctx, queue);
+      }
     }
   }
 

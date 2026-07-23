@@ -85,9 +85,10 @@ export class AudioSystem extends System {
       }
     }
 
-    if (Camera.main) {
-      audio.listener.x = Camera.main.x;
-      audio.listener.y = Camera.main.y;
+    const camera = ctx.resources.get(Camera);
+    if (camera) {
+      audio.listener.x = camera.x;
+      audio.listener.y = camera.y;
     }
 
     for (const entity of this._instances.keys()) {

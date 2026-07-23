@@ -155,19 +155,18 @@ describe("AudioSystem — entity destruction cleanup", () => {
 });
 
 describe("AudioSystem — listener synchronization", () => {
-  it("update syncs Camera.main to listener", () => {
+  it("update syncs camera to listener via world resource", () => {
     const { w, audio } = createSetup();
     const cam = new Camera(50, 60);
-    Camera.setMain(cam);
+    w.setResource(Camera, cam);
     assert.strictEqual(audio.listener.x, 0);
     w.update(0);
     assert.strictEqual(audio.listener.x, 50);
     assert.strictEqual(audio.listener.y, 60);
   });
 
-  it("no Camera.main does not crash", () => {
+  it("no camera resource does not crash", () => {
     const { w } = createSetup();
-    Camera.main = null;
     assert.doesNotThrow(() => w.update(0));
   });
 });

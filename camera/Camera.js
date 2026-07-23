@@ -1,10 +1,4 @@
 export class Camera {
-  static main = null;
-
-  static setMain(camera) {
-    Camera.main = camera;
-  }
-
   constructor(x = 0, y = 0, width = 0, height = 0) {
     this.x = x;
     this.y = y;
@@ -14,10 +8,7 @@ export class Camera {
     this._rotation = 0;
     this._cos = 1;
     this._sin = 0;
-
-    if (!Camera.main) {
-      Camera.main = this;
-    }
+    this._viewport = null;
   }
 
   get rotation() {
@@ -30,6 +21,22 @@ export class Camera {
     this._sin = Math.sin(v);
   }
 
+  get viewport() {
+    return this._viewport;
+  }
+
+  set viewport(v) {
+    this._viewport = v;
+  }
+
+  setViewport(x, y, w, h) {
+    this._viewport = { x, y, w, h };
+  }
+
+  clearViewport() {
+    this._viewport = null;
+  }
+
   apply(ctx) {
     const cx = this.width * 0.5;
     const cy = this.height * 0.5;
@@ -37,6 +44,17 @@ export class Camera {
     ctx.scale(this.zoom, this.zoom);
     ctx.rotate(-this._rotation);
     ctx.translate(-this.x, -this.y);
+  }
+
+  render(ctx, queue) {
+    ctx.save();
+    if (this._viewport) {
+      ctx.beginPath();
+      ctx.rect(this._viewport.x, this._viewport.y, this._viewport.w, this._viewport.h);
+      ctx.clip();
+    }
+    queue.execute(ctx, this);
+    ctx.restore();
   }
 
   worldToScreen(wx, wy, out) {
