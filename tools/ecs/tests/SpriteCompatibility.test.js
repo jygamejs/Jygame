@@ -649,6 +649,123 @@ describe("Performance", () => {
 });
 
 // ─────────────────────────────────────────────────────────
+// API Stability (survives engine mutations)
+// ─────────────────────────────────────────────────────────
+describe("API Stability", () => {
+  it("animation API survives component add (migration)", () => {
+    const s = new Sprite();
+    s.animation.playing = true;
+    assert.strictEqual(s.animation.playing, true);
+
+    s.world.add(s.entity, Velocity);
+
+    assert.strictEqual(s.animation.playing, true);
+    s.animation.playing = false;
+    assert.strictEqual(s.animation.playing, false);
+  });
+
+  it("animation.play() survives migration", () => {
+    const s = new Sprite();
+    const clip = { frames: [1, 2, 3], fps: 10, loop: true };
+    s.animation.add("walk", clip);
+    s.animation.play("walk");
+    assert.strictEqual(s.animation.playing, true);
+    assert.strictEqual(s.animation.current, "walk");
+
+    s.world.add(s.entity, Velocity);
+
+    assert.strictEqual(s.animation.playing, true);
+    assert.strictEqual(s.animation.current, "walk");
+    s.animation.pause();
+    assert.strictEqual(s.animation.playing, false);
+    s.animation.resume();
+    assert.strictEqual(s.animation.playing, true);
+    s.animation.stop();
+    assert.strictEqual(s.animation.playing, false);
+  });
+
+  it("animation API survives multiple migrations", () => {
+    const s = new Sprite();
+    s.animation.playing = true;
+
+    s.world.add(s.entity, Velocity);
+    assert.strictEqual(s.animation.playing, true);
+
+    s.world.add(s.entity, RenderBounds);
+    assert.strictEqual(s.animation.playing, true);
+
+    s.animation.pause();
+    assert.strictEqual(s.animation.playing, false);
+  });
+
+  it("style API survives migration", () => {
+    const s = new Sprite();
+    s.style.fill = "#ff0000";
+    assert.strictEqual(s.style.fill, "#ff0000");
+    assert.strictEqual(s.style.shape, "rect");
+
+    s.world.add(s.entity, Velocity);
+
+    assert.strictEqual(s.style.fill, "#ff0000");
+    assert.strictEqual(s.style.shape, "rect");
+    s.style.shape = "circle";
+    assert.strictEqual(s.style.shape, "circle");
+    assert.strictEqual(s.renderable.shape, 1);
+  });
+
+  it("style API survives multiple migrations", () => {
+    const s = new Sprite();
+    s.style.fill = "#00ff00";
+
+    s.world.add(s.entity, Velocity);
+    assert.strictEqual(s.style.fill, "#00ff00");
+
+    s.world.add(s.entity, RenderBounds);
+    assert.strictEqual(s.style.fill, "#00ff00");
+
+    s.style.fill = "#0000ff";
+    assert.strictEqual(s.style.fill, "#0000ff");
+  });
+
+  it("simple APIs survive migration", () => {
+    const s = new Sprite(100, 200, 50, 60);
+    s.visible = false;
+    s.image = 42;
+    s.angle = 1.5;
+
+    s.world.add(s.entity, Velocity);
+
+    assert.strictEqual(s.x, 100);
+    assert.strictEqual(s.y, 200);
+    assert.strictEqual(s.width, 50);
+    assert.strictEqual(s.height, 60);
+    assert.strictEqual(s.visible, false);
+    assert.strictEqual(s.image, 42);
+    assert.strictEqual(s.angle, 1.5);
+    assert.strictEqual(s.scale.x, 1);
+    assert.strictEqual(s.scale.y, 1);
+
+    s.x = 150;
+    assert.strictEqual(s.transform.x, 175);
+  });
+
+  it("destroyed sprite still throws after API use", () => {
+    const s = new Sprite();
+    s.animation.playing = true;
+    s.style.fill = "#ff0000";
+    s.world.add(s.entity, Velocity);
+    s.animation.pause();
+    s.style.shape = "circle";
+    s.destroy();
+
+    assert.throws(() => s.animation, /destroyed/);
+    assert.throws(() => s.style, /destroyed/);
+    assert.throws(() => s.x, /destroyed/);
+    assert.throws(() => s.transform, /destroyed/);
+  });
+});
+
+// ─────────────────────────────────────────────────────────
 // Legacy API Compatibility
 // ─────────────────────────────────────────────────────────
 describe("Legacy API compatibility", () => {
