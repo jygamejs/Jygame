@@ -247,11 +247,10 @@ export class Sprite {
     if (!w.has(e, Animation)) {
       w.add(e, Animation);
     }
-    const comp = w.get(e, Animation);
-    if (!this._animWrapper) {
-      this._animWrapper = this._createAnimWrapper(comp);
+    if (!this._animApi) {
+      this._animApi = this._createAnimationApi();
     }
-    return this._animWrapper;
+    return this._animApi;
   }
 
   set animation(v) {
@@ -269,7 +268,7 @@ export class Sprite {
     if (v.speed != null) comp.speed = v.speed;
   }
 
-  _createAnimWrapper(comp) {
+  _createAnimationApi() {
     const self = this;
     return {
       get animations() { return self._animMap; },
@@ -278,8 +277,14 @@ export class Sprite {
       get current() { return self._animCurrent; },
       set current(v) { self._animCurrent = v; },
 
-      get playing() { return !!comp.isPlaying; },
-      set playing(v) { comp.isPlaying = v ? 1 : 0; },
+      get playing() {
+        const comp = self.#world.get(self.#entity, Animation);
+        return !!comp.isPlaying;
+      },
+      set playing(v) {
+        const comp = self.#world.get(self.#entity, Animation);
+        comp.isPlaying = v ? 1 : 0;
+      },
 
       _registerFrame(f) {
         const w = self.#world;
@@ -325,6 +330,7 @@ export class Sprite {
 
       play(name) {
         self._animCurrent = name;
+        const comp = self.#world.get(self.#entity, Animation);
         const map = self._animMap;
         if (map && map.has(name)) {
           const w = self.#world;
@@ -340,13 +346,20 @@ export class Sprite {
         comp.speed = 1;
       },
 
-      pause() { comp.isPlaying = 0; },
+      pause() {
+        const comp = self.#world.get(self.#entity, Animation);
+        comp.isPlaying = 0;
+      },
 
       resume() {
-        if (self._animCurrent) comp.isPlaying = 1;
+        if (self._animCurrent) {
+          const comp = self.#world.get(self.#entity, Animation);
+          comp.isPlaying = 1;
+        }
       },
 
       stop() {
+        const comp = self.#world.get(self.#entity, Animation);
         comp.isPlaying = 0;
         comp.frameIndex = 0;
         comp.elapsed = 0;
