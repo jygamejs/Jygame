@@ -2,6 +2,7 @@ import { Input } from "../input/Input.js";
 import { Scene as EcsScene } from "../ecs/scene/Scene.js";
 import { DefaultWorldBuilder } from "../ecs/bootstrap/DefaultWorldBuilder.js";
 import { CanvasContext } from "../ecs/render/CanvasContext.js";
+import { Camera } from "../view/Camera.js";
 import { View } from "../view/View.js";
 import { Viewport } from "../view/Viewport.js";
 import { RenderConfig } from "../view/RenderConfig.js";
@@ -95,7 +96,11 @@ export class Scene extends EcsScene {
 
   _ensureDefaultView() {
     if (this[_VIEW_COMPONENTS].length === 0) {
-      this[_VIEW_COMPONENTS].push(new View());
+      const vp = this._game
+        ? new Viewport(0, 0, this._game.width, this._game.height)
+        : new Viewport(0, 0, 800, 600);
+      const cam = new Camera(vp.width * 0.5, vp.height * 0.5);
+      this[_VIEW_COMPONENTS].push(new View({ camera: cam, viewport: vp }));
     }
   }
 
