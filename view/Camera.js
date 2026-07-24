@@ -51,15 +51,6 @@ export class Camera {
     this.target = other.target;
   }
 
-  apply(ctx, vx, vy, vw, vh) {
-    const cx = (vw || 0) * 0.5;
-    const cy = (vh || 0) * 0.5;
-    ctx.translate(cx, cy);
-    ctx.scale(this.zoom, this.zoom);
-    ctx.rotate(-this._rotation);
-    ctx.translate(-this.x, -this.y);
-  }
-
   _syncTarget() {
     if (this.target) {
       this.x = this.target.x;

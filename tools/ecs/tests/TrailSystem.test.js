@@ -732,7 +732,7 @@ describe("TrailSystem", () => {
     moveEntity(world, e, 10, 0);
     world.update(16);
     assert.strictEqual(ctx.save.mock.calls.length, 1);
-    assert.strictEqual(ctx.translate.mock.calls.length, 2);
+    assert.strictEqual(ctx.translate.mock.calls.length, 1);
     assert.strictEqual(ctx.restore.mock.calls.length, 1);
   });
 

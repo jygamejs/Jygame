@@ -70,7 +70,11 @@ export class TrailSystem extends System {
 
     const doRender = () => {
       canvas.save();
-      if (camera) camera.apply(canvas);
+      if (camera) {
+        canvas.scale(camera.zoom, camera.zoom);
+        canvas.rotate(-camera.rotation);
+        canvas.translate(-camera.x, -camera.y);
+      }
 
       for (const table of ctx) {
         const count = table.count;

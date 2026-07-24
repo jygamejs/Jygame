@@ -131,6 +131,9 @@ export class Scene extends EcsScene {
       }
 
       this._ensureDefaultView();
+      if (this.view && this.view.camera) {
+        this._world.setResource(Camera, this.view.camera);
+      }
       if (!this._world.getResource(AudioListener)) {
         this._world.setResource(AudioListener, this._listener);
       }
