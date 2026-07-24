@@ -2,12 +2,18 @@ import { Input } from "../input/Input.js";
 import { Scene as EcsScene } from "../ecs/scene/Scene.js";
 import { DefaultWorldBuilder } from "../ecs/bootstrap/DefaultWorldBuilder.js";
 import { CanvasContext } from "../ecs/render/CanvasContext.js";
-import { Camera } from "../camera/Camera.js";
+import { Camera } from "../view/Camera.js";
+import { View } from "../view/View.js";
+import { Viewport } from "../view/Viewport.js";
+import { RenderConfig } from "../view/RenderConfig.js";
 import { Sprite } from "../display/Sprite.js";
 import { InputContext } from "../input/actions/InputContext.js";
 import { ActionMap } from "../input/actions/ActionMap.js";
 import { Transform } from "../ecs/components/Transform.js";
 import { RenderQueue } from "../ecs/render/RenderQueue.js";
+import { AudioListener } from "../audio/AudioListener.js";
+
+const _VIEW_COMPONENTS = Symbol("scene.views");
 
 export class Scene extends EcsScene {
   constructor() {
@@ -26,7 +32,7 @@ export class Scene extends EcsScene {
     this._inputContext = null;
     this._actionMap = new ActionMap();
     this._inputPriority = 0;
-    this._cameras = [];
+    this[_VIEW_COMPONENTS] = [];
     this._ready = false;
   }
 
@@ -55,36 +61,42 @@ export class Scene extends EcsScene {
     this._cleanups.push(fn);
   }
 
-  addCamera(camera) {
-    this._cameras.push(camera);
-    if (this._world) {
-      this._world.setResource(Camera, camera);
-    }
+  get views() {
+    return this[_VIEW_COMPONENTS];
   }
 
-  removeCamera(camera) {
-    const idx = this._cameras.indexOf(camera);
+  get view() {
+    return this[_VIEW_COMPONENTS][0] || null;
+  }
+
+  addView(view) {
+    this[_VIEW_COMPONENTS].push(view);
+  }
+
+  removeView(view) {
+    const idx = this[_VIEW_COMPONENTS].indexOf(view);
+    if (idx !== -1) this[_VIEW_COMPONENTS].splice(idx, 1);
+  }
+
+  clearViews() {
+    this[_VIEW_COMPONENTS].length = 0;
+  }
+
+  replaceView(oldView, newView) {
+    const idx = this[_VIEW_COMPONENTS].indexOf(oldView);
     if (idx !== -1) {
-      this._cameras.splice(idx, 1);
-      if (this._world) {
-        if (this._cameras.length > 0) {
-          this._world.setResource(Camera, this._cameras[0]);
-        } else {
-          this._world.removeResource(Camera);
-        }
-      }
+      this[_VIEW_COMPONENTS][idx] = newView;
     }
   }
 
-  setMainCamera(camera) {
-    this._cameras = [camera];
-    if (this._world) {
-      this._world.setResource(Camera, camera);
+  _ensureDefaultView() {
+    if (this[_VIEW_COMPONENTS].length === 0) {
+      this[_VIEW_COMPONENTS].push(new View());
     }
   }
 
-  get cameras() {
-    return this._cameras;
+  _getSortedViews() {
+    return [...this[_VIEW_COMPONENTS]].sort((a, b) => a.order - b.order);
   }
 
   async _initScene() {
@@ -108,6 +120,14 @@ export class Scene extends EcsScene {
         );
         this._game.inputSystem.contextStack.push(this._inputContext);
       }
+
+      this._ensureDefaultView();
+      if (this.view && this.view.camera) {
+        this._world.setResource(Camera, this.view.camera);
+      }
+      if (!this._world.getResource(AudioListener)) {
+        this._world.setResource(AudioListener, new AudioListener());
+      }
     }
 
     this._prevDefaultWorld = Sprite._defaultWorld;
@@ -117,6 +137,7 @@ export class Scene extends EcsScene {
     if (result && typeof result.then === "function") {
       await result;
     }
+
     this._ready = true;
   }
 
@@ -160,11 +181,14 @@ export class Scene extends EcsScene {
       this._world.clearResources();
       this._world = null;
     }
+
+    this[_VIEW_COMPONENTS] = [];
   }
 
   pause() {}
   resume() {}
   update(dt) {}
+
   interpolate(alpha) {
     const w = this._world;
     if (!w) return;
@@ -199,7 +223,6 @@ export class Scene extends EcsScene {
         const currX = xCol[r];
         const currY = yCol[r];
 
-        // Skip uninitialized entities (_prevX/_prevY still at default 0)
         if (prevX === 0 && prevY === 0 && (currX !== 0 || currY !== 0)) continue;
 
         const interpX = prevX + (currX - prevX) * alpha;
@@ -239,12 +262,12 @@ export class Scene extends EcsScene {
     const queue = w.getResource(RenderQueue);
     if (!queue || queue.count === 0) return;
 
-    if (this._cameras.length === 0) {
-      queue.execute(ctx, null);
-    } else {
-      for (let i = 0; i < this._cameras.length; i++) {
-        this._cameras[i].render(ctx, queue);
-      }
+    const sorted = this._getSortedViews();
+    for (const view of sorted) {
+      if (!view.active) continue;
+      view.prepare(ctx);
+      queue.execute(ctx, view.config.layers);
+      view.cleanup(ctx);
     }
   }
 

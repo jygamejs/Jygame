@@ -4,7 +4,7 @@ import { Transform, Renderable, RenderBounds, Visible } from "../../ecs/index.js
 import { RenderSystem } from "../../ecs/systems/RenderSystem.js";
 import { RenderQueue } from "../../ecs/render/RenderQueue.js";
 import { CanvasContext } from "../../ecs/render/CanvasContext.js";
-import { Camera } from "../../camera/Camera.js";
+import { Camera } from "../../view/Camera.js";
 
 export function run(config) {
   divider("Render Benchmark");

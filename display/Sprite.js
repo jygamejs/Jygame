@@ -9,6 +9,7 @@ import { RenderBounds } from "../ecs/components/RenderBounds.js";
 import { AnimationClipRegistry } from "../ecs/animation/AnimationClipRegistry.js";
 import { AnimationClip } from "../ecs/animation/AnimationClip.js";
 import { AssetRegistry } from "../ecs/render/AssetRegistry.js";
+import { Layer } from "../view/Layer.js";
 
 const _INTERNAL = Symbol("sprite.internal.wrap");
 const _SPRITE_COMPONENTS = [Transform, Collider, Renderable, Visible, Velocity, Animation, RenderBounds];
@@ -57,7 +58,7 @@ export class Sprite {
     wld.addMany(e, Transform, Collider, Renderable, Visible, RenderBounds);
     wld.set(e, Transform, { x: x + w / 2, y: y + h / 2, scaleX: 1, scaleY: 1, _prevX: x + w / 2, _prevY: y + h / 2 });
     wld.set(e, Collider, { width: w, height: h });
-    wld.set(e, Renderable, { fillColor: 0xffffff, imageSmoothing: defaultSmoothing });
+    wld.set(e, Renderable, { fillColor: 0xffffff, imageSmoothing: defaultSmoothing, layer: Layer.WORLD });
     wld.set(e, Visible, { value: 1 });
     wld.set(e, RenderBounds, { width: w, height: h });
   }

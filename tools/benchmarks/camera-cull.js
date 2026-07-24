@@ -5,7 +5,7 @@ import { RenderSystem } from "../../ecs/systems/RenderSystem.js";
 import { Transform, Velocity, Renderable, RenderBounds, Visible } from "../../ecs/index.js";
 import { RenderQueue } from "../../ecs/render/RenderQueue.js";
 import { CanvasContext } from "../../ecs/render/CanvasContext.js";
-import { Camera } from "../../camera/Camera.js";
+import { Camera } from "../../view/Camera.js";
 
 const VISIBILITY_RATIOS = [1.0, 0.5, 0.25, 0.10, 0.01];
 

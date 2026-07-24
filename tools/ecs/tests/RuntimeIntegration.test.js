@@ -30,7 +30,7 @@ import { CanvasContext } from "../../../ecs/render/CanvasContext.js";
 import { AnimationClipRegistry } from "../../../ecs/animation/AnimationClipRegistry.js";
 import { TrailManager } from "../../../ecs/trails/TrailManager.js";
 import { SpatialHash } from "../../../collision/SpatialHash.js";
-import { Camera } from "../../../camera/Camera.js";
+import { Camera } from "../../../view/Camera.js";
 import { MovementSystem } from "../../../ecs/systems/MovementSystem.js";
 import { AnimationSystem } from "../../../ecs/systems/AnimationSystem.js";
 import { CollisionSystem } from "../../../ecs/systems/CollisionSystem.js";

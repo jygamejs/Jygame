@@ -9,7 +9,7 @@ import { SpatialHash } from "../../collision/SpatialHash.js";
 import { RenderQueue } from "../../ecs/render/RenderQueue.js";
 import { CanvasContext } from "../../ecs/render/CanvasContext.js";
 import { TrailManager } from "../../ecs/trails/TrailManager.js";
-import { Camera } from "../../camera/Camera.js";
+import { Camera } from "../../view/Camera.js";
 import { performance } from "node:perf_hooks";
 
 const FRAME_COUNTS = [10000, 50000, 100000];

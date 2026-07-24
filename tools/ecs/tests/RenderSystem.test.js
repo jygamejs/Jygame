@@ -7,7 +7,7 @@ import { RenderQueue } from "../../../ecs/render/RenderQueue.js";
 import { RenderCommand } from "../../../ecs/render/RenderCommand.js";
 import { CanvasContext } from "../../../ecs/render/CanvasContext.js";
 import { AssetRegistry } from "../../../ecs/render/AssetRegistry.js";
-import { Camera } from "../../../camera/Camera.js";
+import { Camera } from "../../../view/Camera.js";
 import { AnimationSystem } from "../../../ecs/systems/AnimationSystem.js";
 import { CollisionSystem } from "../../../ecs/systems/CollisionSystem.js";
 import { SpatialHash } from "../../../collision/SpatialHash.js";

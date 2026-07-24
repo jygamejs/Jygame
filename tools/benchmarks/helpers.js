@@ -19,7 +19,7 @@ import { TrailSystem } from "../../ecs/systems/TrailSystem.js";
 import { RenderQueue } from "../../ecs/render/RenderQueue.js";
 import { CanvasContext } from "../../ecs/render/CanvasContext.js";
 import { TrailManager } from "../../ecs/trails/TrailManager.js";
-import { Camera } from "../../camera/Camera.js";
+import { Camera } from "../../view/Camera.js";
 
 export const ALL_COMPONENTS = [
   Transform, Velocity, Collider, Renderable, RenderBounds, Visible, Animation, Trail,

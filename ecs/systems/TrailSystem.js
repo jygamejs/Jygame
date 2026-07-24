@@ -4,7 +4,7 @@ import { Trail } from "../components/Trail.js";
 import { Visible } from "../components/Visible.js";
 import { TrailManager } from "../trails/TrailManager.js";
 import { CanvasContext } from "../render/CanvasContext.js";
-import { Camera } from "../../camera/Camera.js";
+import { Camera } from "../../view/Camera.js";
 import { Diagnostics, resolveMetricIds } from "../../debug/index.js";
 
 export class TrailSystem extends System {

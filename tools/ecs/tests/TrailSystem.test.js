@@ -4,7 +4,7 @@ import {
   World, Trail, TrailBuffer, TrailManager, TrailSystem,
   Transform, Visible,
 } from "../../../ecs/index.js";
-import { Camera } from "../../../camera/Camera.js";
+import { Camera } from "../../../view/Camera.js";
 import { CanvasContext } from "../../../ecs/render/CanvasContext.js";
 
 function cleanMockCtx() {

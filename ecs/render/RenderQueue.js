@@ -49,15 +49,15 @@ export class RenderQueue {
     this._count++;
   }
 
-  execute(ctx, camera) {
+  execute(ctx, layerMask = 0xFFFFFFFF) {
     ctx.save();
-    if (camera) camera.apply(ctx);
     const mat = ctx.getTransform();
     const cache = this._fillStyleCache || (this._fillStyleCache = new Map());
     let lastColor = -1;
     let images = 0, primitives = 0;
     for (let i = 0; i < this._count; i++) {
       const cmd = this._commands[i];
+      if (!(cmd.layer & layerMask)) continue;
       const rot = cmd.rotation;
       const sx = cmd.scaleX;
       const sy = cmd.scaleY;

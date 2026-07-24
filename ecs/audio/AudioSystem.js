@@ -2,7 +2,7 @@ import { System } from "../core/System.js";
 import { AudioSource } from "./AudioSource.js";
 import { WorldTransform } from "../components/WorldTransform.js";
 import { AudioManager } from "../../audio/AudioManager.js";
-import { Camera } from "../../camera/Camera.js";
+import { AudioListener } from "../../audio/AudioListener.js";
 
 export class AudioSystem extends System {
   static query = { all: [AudioSource, WorldTransform] };
@@ -85,10 +85,10 @@ export class AudioSystem extends System {
       }
     }
 
-    const camera = ctx.resources.get(Camera);
-    if (camera) {
-      audio.listener.x = camera.x;
-      audio.listener.y = camera.y;
+    const listener = ctx.resources.get(AudioListener);
+    if (listener) {
+      audio.listener.x = listener.x;
+      audio.listener.y = listener.y;
     }
 
     for (const entity of this._instances.keys()) {

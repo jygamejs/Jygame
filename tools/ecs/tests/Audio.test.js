@@ -10,7 +10,7 @@ import {
   AudioSystem,
 } from "../../../ecs/index.js";
 import { AudioManager } from "../../../audio/AudioManager.js";
-import { Camera } from "../../../camera/Camera.js";
+import { Camera } from "../../../view/Camera.js";
 
 class MockInstance {
   constructor() {
