@@ -162,6 +162,16 @@ export class Sprite {
     if (v.layer != null) r.layer = v.layer;
   }
 
+  get layer() {
+    this._assertAlive();
+    return this.#world.get(this.#entity, Renderable).layer;
+  }
+
+  set layer(v) {
+    this._assertAlive();
+    this.#world.get(this.#entity, Renderable).layer = v;
+  }
+
   get imageSmoothing() {
     this._assertAlive();
     return !!this.#world.get(this.#entity, Renderable).imageSmoothing;

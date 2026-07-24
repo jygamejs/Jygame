@@ -87,6 +87,7 @@ export class AudioSystem extends System {
 
     const listener = ctx.resources.get(AudioListener);
     if (listener) {
+      listener._syncTarget();
       audio.listener.x = listener.x;
       audio.listener.y = listener.y;
     }

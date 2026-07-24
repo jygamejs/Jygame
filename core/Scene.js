@@ -2,7 +2,6 @@ import { Input } from "../input/Input.js";
 import { Scene as EcsScene } from "../ecs/scene/Scene.js";
 import { DefaultWorldBuilder } from "../ecs/bootstrap/DefaultWorldBuilder.js";
 import { CanvasContext } from "../ecs/render/CanvasContext.js";
-import { Camera } from "../view/Camera.js";
 import { View } from "../view/View.js";
 import { Viewport } from "../view/Viewport.js";
 import { RenderConfig } from "../view/RenderConfig.js";
@@ -33,6 +32,7 @@ export class Scene extends EcsScene {
     this._actionMap = new ActionMap();
     this._inputPriority = 0;
     this[_VIEW_COMPONENTS] = [];
+    this._listener = new AudioListener();
     this._ready = false;
   }
 
@@ -67,6 +67,10 @@ export class Scene extends EcsScene {
 
   get view() {
     return this[_VIEW_COMPONENTS][0] || null;
+  }
+
+  get listener() {
+    return this._listener;
   }
 
   addView(view) {
@@ -122,11 +126,8 @@ export class Scene extends EcsScene {
       }
 
       this._ensureDefaultView();
-      if (this.view && this.view.camera) {
-        this._world.setResource(Camera, this.view.camera);
-      }
       if (!this._world.getResource(AudioListener)) {
-        this._world.setResource(AudioListener, new AudioListener());
+        this._world.setResource(AudioListener, this._listener);
       }
     }
 
