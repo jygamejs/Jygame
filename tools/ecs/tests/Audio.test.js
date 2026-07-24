@@ -10,7 +10,7 @@ import {
   AudioSystem,
 } from "../../../ecs/index.js";
 import { AudioManager } from "../../../audio/AudioManager.js";
-import { Camera } from "../../../view/Camera.js";
+import { AudioListener } from "../../../audio/AudioListener.js";
 
 class MockInstance {
   constructor() {
@@ -155,17 +155,19 @@ describe("AudioSystem — entity destruction cleanup", () => {
 });
 
 describe("AudioSystem — listener synchronization", () => {
-  it("update syncs camera to listener via world resource", () => {
+  it("update syncs listener via world resource", () => {
     const { w, audio } = createSetup();
-    const cam = new Camera(50, 60);
-    w.setResource(Camera, cam);
+    const listener = new AudioListener();
+    listener.x = 50;
+    listener.y = 60;
+    w.setResource(AudioListener, listener);
     assert.strictEqual(audio.listener.x, 0);
     w.update(0);
     assert.strictEqual(audio.listener.x, 50);
     assert.strictEqual(audio.listener.y, 60);
   });
 
-  it("no camera resource does not crash", () => {
+  it("no listener resource does not crash", () => {
     const { w } = createSetup();
     assert.doesNotThrow(() => w.update(0));
   });
