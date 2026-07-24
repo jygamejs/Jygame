@@ -343,6 +343,7 @@ export class ArchetypeSystem {
 
   _initComponentDefaults(componentId, targetTable, targetRow) {
     const schema = this._registry.getSchemaById(componentId);
+    const defaults = this._registry.getDefaultsById(componentId);
     if (!schema) return;
 
     const fieldNames = Object.keys(schema);
@@ -350,7 +351,7 @@ export class ArchetypeSystem {
       const fieldName = fieldNames[fi];
       const col = targetTable.getColumn(componentId, fieldName);
       if (col) {
-        col[targetRow] = 0;
+        col[targetRow] = defaults ? defaults[fieldName] : 0;
       }
     }
   }

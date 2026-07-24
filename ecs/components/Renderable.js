@@ -1,4 +1,10 @@
 export class Renderable {
-  static schema = { image: "u16", fillColor: "u32", shape: "u8", layer: "i16", imageSmoothing: "u8" };
+  static schema = {
+    image:           { type: "u16", default: 0 },
+    fillColor:       { type: "u32", default: 0xffffff },
+    shape:           { type: "u8",  default: 0 },
+    layer:           { type: "i16", default: 1 },
+    imageSmoothing:  { type: "u8",  default: 1 },
+  };
 }
 

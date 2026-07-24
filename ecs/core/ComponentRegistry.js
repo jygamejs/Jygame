@@ -129,6 +129,7 @@ export class ComponentRegistry {
     }
 
     const processedSchema = {};
+    const defaults = {};
     const fieldNames = Object.keys(schema);
 
     for (const fieldName of fieldNames) {
@@ -139,12 +140,21 @@ export class ComponentRegistry {
         );
       }
 
-      let fieldType = schema[fieldName];
+      const raw = schema[fieldName];
+      let fieldType;
+      let fieldDefault = 0;
 
-      if (typeof fieldType !== 'string') {
+      if (typeof raw === 'string') {
+        fieldType = raw;
+      } else if (typeof raw === 'object' && raw !== null && typeof raw.type === 'string') {
+        fieldType = raw.type;
+        if (raw.default !== undefined) {
+          fieldDefault = raw.default;
+        }
+      } else {
         throw new TypeError(
           `ComponentRegistry.register failed: invalid field type for field "${fieldName}" in component "${name}". ` +
-          `Field type must be a string, got ${typeof fieldType}.`
+          `Field must be a type string or { type, default? } object, got ${typeof raw}.`
         );
       }
 
@@ -155,7 +165,7 @@ export class ComponentRegistry {
 
       if (!CANONICAL_TYPES.has(fieldType)) {
         throw new TypeError(
-          `ComponentRegistry.register failed: invalid field type "${schema[fieldName]}" for field "${fieldName}" ` +
+          `ComponentRegistry.register failed: invalid field type "${fieldType}" for field "${fieldName}" ` +
           `in component "${name}". Allowed types: ${[...CANONICAL_TYPES].join(', ')}.`
         );
       }
@@ -167,15 +177,18 @@ export class ComponentRegistry {
       }
 
       processedSchema[fieldName] = fieldType;
+      defaults[fieldName] = fieldDefault;
     }
 
     Object.freeze(processedSchema);
+    Object.freeze(defaults);
 
     const metadata = Object.freeze({
       id,
       name,
       component: componentClass,
       schema: processedSchema,
+      defaults,
     });
 
     this._idToMetadata.set(id, metadata);
@@ -210,6 +223,11 @@ export class ComponentRegistry {
   getSchemaById(componentId) {
     const meta = this._idToMetadata.get(componentId);
     return meta ? meta.schema : null;
+  }
+
+  getDefaultsById(componentId) {
+    const meta = this._idToMetadata.get(componentId);
+    return meta ? meta.defaults : null;
   }
 
   getMetadata(Component) {

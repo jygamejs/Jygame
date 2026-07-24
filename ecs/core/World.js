@@ -274,13 +274,14 @@ export class World {
     const table = this._archetypeSystem.entityTable(entity);
     const row = this._entityManager.getRow(entity);
     const schema = this._registry.getSchemaById(componentId);
+    const defaults = this._registry.getDefaultsById(componentId);
     if (schema) {
       const fieldNames = Object.keys(schema);
       for (let fi = 0; fi < fieldNames.length; fi++) {
         const fieldName = fieldNames[fi];
         const col = table.getColumn(componentId, fieldName);
         if (col) {
-          col[row] = 0;
+          col[row] = defaults ? defaults[fieldName] : 0;
         }
       }
     }
