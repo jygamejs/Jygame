@@ -85,6 +85,13 @@ export class Sprite {
     return this.#world.get(this.#entity, Collider);
   }
 
+  _getRB() {
+    if (this.#world.has(this.#entity, RenderBounds)) {
+      return this.#world.get(this.#entity, RenderBounds);
+    }
+    return this._getC();
+  }
+
   get transform() {
     this._assertAlive();
     return this._getT();
@@ -190,22 +197,22 @@ export class Sprite {
 
   get width() {
     this._assertAlive();
-    return this._getC().width * Math.abs(this._getT().scaleX);
+    return this._getRB().width * Math.abs(this._getT().scaleX);
   }
   set width(v) {
     this._assertAlive();
     const scale = Math.abs(this._getT().scaleX) || 1;
-    this._getC().width = v / scale;
+    this._getRB().width = v / scale;
   }
 
   get height() {
     this._assertAlive();
-    return this._getC().height * Math.abs(this._getT().scaleY);
+    return this._getRB().height * Math.abs(this._getT().scaleY);
   }
   set height(v) {
     this._assertAlive();
     const scale = Math.abs(this._getT().scaleY) || 1;
-    this._getC().height = v / scale;
+    this._getRB().height = v / scale;
   }
 
   get nativeWidth() {

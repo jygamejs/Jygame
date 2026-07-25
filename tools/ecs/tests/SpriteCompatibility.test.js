@@ -123,7 +123,7 @@ describe("Accessors", () => {
     const s = new Sprite(0, 0, 40, 50);
     s.width = 80;
     assert.strictEqual(s.width, 80);
-    assert.strictEqual(s.collider.width, 80);
+    assert.strictEqual(s.collider.width, 40);
   });
 
   it("height getter", () => {
@@ -135,7 +135,7 @@ describe("Accessors", () => {
     const s = new Sprite(0, 0, 40, 50);
     s.height = 100;
     assert.strictEqual(s.height, 100);
-    assert.strictEqual(s.collider.height, 100);
+    assert.strictEqual(s.collider.height, 50);
   });
 
   it("image getter defaults to 0", () => {
@@ -496,10 +496,16 @@ describe("ECS synchronization", () => {
     assert.strictEqual(s.transform.x, 110);
   });
 
-  it("mutating ECS collider updates sprite.width", () => {
+  it("mutating ECS collider does NOT affect sprite.width", () => {
     const s = new Sprite(0, 0, 20, 20);
     s.collider.width = 40;
-    assert.strictEqual(s.width, 40);
+    assert.strictEqual(s.width, 20);
+  });
+
+  it("setting sprite.width does not affect collider", () => {
+    const s = new Sprite(0, 0, 20, 20);
+    s.width = 40;
+    assert.strictEqual(s.collider.width, 20);
   });
 
   it("mutating sprite.visible updates ECS", () => {
