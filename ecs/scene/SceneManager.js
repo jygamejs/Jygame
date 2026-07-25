@@ -226,7 +226,7 @@ export class SceneManager {
     if (this._stack.length === 0) return;
 
     for (let i = 0; i < this._stack.length; i++) {
-      this._stack[i].render(ctx);
+      this._stack[i]._renderFrame(ctx);
     }
   }
 }

@@ -462,7 +462,7 @@ export class Game {
 
   _renderScenes(ctx, start) {
     for (let i = start; i < this._sceneStack.length; i++) {
-      this._sceneStack[i].render(ctx);
+      this._sceneStack[i]._renderFrame(ctx);
     }
   }
 

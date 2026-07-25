@@ -265,7 +265,7 @@ export class Scene extends EcsScene {
     }
   }
 
-  render(ctx) {
+  _renderWorld(ctx) {
     const w = this._world;
     if (!w) return;
     const queue = w.getResource(RenderQueue);
@@ -278,6 +278,10 @@ export class Scene extends EcsScene {
       queue.execute(ctx, view.config.layers);
       view.cleanup(ctx);
     }
+  }
+
+  render(ctx) {
+    // user-overridable overlay hook — runs after _renderWorld
   }
 
   renderUI() {}

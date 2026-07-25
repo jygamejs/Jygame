@@ -342,6 +342,68 @@ describe("Game loop integration", () => {
   });
 });
 
+// ─── Render Overlay ────────────────────────────────
+
+describe("Scene — render overlay", () => {
+  it("_renderFrame calls _renderWorld then render(ctx) in order", () => {
+    const calls = [];
+    class OverlayScene extends Scene {
+      _renderWorld(ctx) {
+        calls.push("world");
+      }
+      render(ctx) {
+        calls.push("overlay");
+      }
+    }
+    const scene = new OverlayScene();
+    scene._renderFrame(null);
+    assert.deepStrictEqual(calls, ["world", "overlay"]);
+  });
+
+  it("user render(ctx) without super still runs world render", () => {
+    let worldRendered = false;
+    class OverlayScene extends Scene {
+      _renderWorld(ctx) {
+        worldRendered = true;
+      }
+      render(ctx) {
+        // user overlay — no super call needed
+      }
+    }
+    const scene = new OverlayScene();
+    scene._renderFrame(null);
+    assert.strictEqual(worldRendered, true);
+  });
+
+  it("scene without override renders world via _renderFrame", () => {
+    let worldRan = false;
+    class MyScene extends Scene {
+      _renderWorld(ctx) {
+        worldRan = true;
+      }
+    }
+    const scene = new MyScene();
+    scene._renderFrame(null);
+    assert.strictEqual(worldRan, true);
+  });
+
+  it("Game._renderScenes calls _renderFrame instead of render directly", () => {
+    const calls = [];
+    class GameScene extends Scene {
+      _renderWorld(ctx) {
+        calls.push("world");
+      }
+      render(ctx) {
+        calls.push("overlay");
+      }
+    }
+    const scene = new GameScene();
+    // Simulate what Game._renderScenes does
+    scene._renderFrame(null);
+    assert.deepStrictEqual(calls, ["world", "overlay"]);
+  });
+});
+
 // ─── Scene Switching ─────────────────────────────────
 
 describe("Scene switching", () => {

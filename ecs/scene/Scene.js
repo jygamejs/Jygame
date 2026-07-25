@@ -35,5 +35,13 @@ export class Scene {
   onDestroy() {}
 
   update(dt) {}
+
+  _renderWorld(ctx) {}
+
   render(ctx) {}
+
+  _renderFrame(ctx) {
+    this._renderWorld(ctx);
+    this.render(ctx);
+  }
 }
