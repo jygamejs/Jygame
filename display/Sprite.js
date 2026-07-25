@@ -53,12 +53,13 @@ export class Sprite {
     const e = wld.createEntity();
     this.#entity = e;
 
+    const explicitSize = arguments.length >= 3;
     const defaultSmoothing = wld.hasResource("imageSmoothing.default") ? wld.getResource("imageSmoothing.default") : 1;
 
     wld.addMany(e, Transform, Collider, Renderable, Visible, RenderBounds);
     wld.set(e, Transform, { x: x + w / 2, y: y + h / 2, scaleX: 1, scaleY: 1, _prevX: x + w / 2, _prevY: y + h / 2 });
     wld.set(e, Collider, { width: w, height: h });
-    wld.set(e, Renderable, { fillColor: 0xffffff, imageSmoothing: defaultSmoothing, layer: Layer.WORLD, nativeWidth: w, nativeHeight: h });
+    wld.set(e, Renderable, { fillColor: 0xffffff, imageSmoothing: defaultSmoothing, layer: Layer.WORLD, nativeWidth: explicitSize ? w : 0, nativeHeight: explicitSize ? h : 0 });
     wld.set(e, Visible, { value: 1 });
     wld.set(e, RenderBounds, { width: w, height: h });
   }
@@ -273,11 +274,38 @@ export class Sprite {
     if (r.nativeWidth === 0 && r.nativeHeight === 0) {
       r.nativeWidth = w;
       r.nativeHeight = h;
+      if (this.#world.has(this.#entity, RenderBounds)) {
+        const rb = this.#world.get(this.#entity, RenderBounds);
+        rb.width = w;
+        rb.height = h;
+      }
+    }
+  }
+
+  _resolveFromClip(name, clip) {
+    if (!clip || !clip.frames || clip.frames.length === 0) return;
+    const frame = clip.frames[0];
+    if (typeof frame !== "number") return;
+    if (!this.#world.hasResource(AssetRegistry)) return;
+    const reg = this.#world.getResource(AssetRegistry);
+    const asset = reg.get(frame);
+    if (asset) {
+      this._resolveNativeSize(asset.sw, asset.sh);
     }
   }
 
   get image() { this._assertAlive(); return this.#world.get(this.#entity, Renderable).image; }
-  set image(v) { this._assertAlive(); this.#world.get(this.#entity, Renderable).image = v; }
+  set image(v) {
+    this._assertAlive();
+    this.#world.get(this.#entity, Renderable).image = v;
+    if (this.#world.hasResource(AssetRegistry)) {
+      const reg = this.#world.getResource(AssetRegistry);
+      const asset = reg.get(v);
+      if (asset) {
+        this._resolveNativeSize(asset.sw, asset.sh);
+      }
+    }
+  }
 
   get angle() { this._assertAlive(); return this._getT().rotation; }
   set angle(v) { this._assertAlive(); this._getT().rotation = v; }
@@ -432,6 +460,7 @@ export class Sprite {
             const id = reg.getId(name);
             if (id !== null) comp.clipId = id;
           }
+          self._resolveFromClip(name, map.get(name));
         }
         comp.frameIndex = 0;
         comp.elapsed = 0;
@@ -450,6 +479,7 @@ export class Sprite {
             const id = reg.getId(name);
             if (id !== null) comp.clipId = id;
           }
+          self._resolveFromClip(name, map.get(name));
         }
         comp.frameIndex = 0;
         comp.elapsed = 0;

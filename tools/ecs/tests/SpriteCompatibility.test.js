@@ -9,6 +9,9 @@ import { Renderable } from "../../../ecs/components/Renderable.js";
 import { Animation } from "../../../ecs/components/Animation.js";
 import { Visible } from "../../../ecs/components/Visible.js";
 import { RenderBounds } from "../../../ecs/components/RenderBounds.js";
+import { AssetRegistry } from "../../../ecs/render/AssetRegistry.js";
+import { AnimationClip } from "../../../ecs/animation/AnimationClip.js";
+import { AnimationClipRegistry } from "../../../ecs/animation/AnimationClipRegistry.js";
 
 const ALL_COMPONENTS = [Transform, Velocity, Collider, Renderable, Animation, Visible, RenderBounds];
 
@@ -358,6 +361,131 @@ describe("Geometry Accessors", () => {
     assert.strictEqual(s.height, 120);
     assert.strictEqual(s.right, s.x + s.width);
     assert.strictEqual(s.bottom, s.y + s.height);
+  });
+});
+
+// ─────────────────────────────────────────────────────────
+// Lazy Size Resolution
+// ─────────────────────────────────────────────────────────
+describe("Lazy Size Resolution", () => {
+  it("nativeWidth is 0 for bare new Sprite()", () => {
+    const s = new Sprite();
+    assert.strictEqual(s.nativeWidth, 0);
+    assert.strictEqual(s.nativeHeight, 0);
+  });
+
+  it("nativeWidth is 0 for new Sprite(x, y) with no size", () => {
+    const s = new Sprite(100, 200);
+    assert.strictEqual(s.nativeWidth, 0);
+    assert.strictEqual(s.nativeHeight, 0);
+  });
+
+  it("nativeWidth equals explicit constructor width/height", () => {
+    const s = new Sprite(100, 200, 50, 60);
+    assert.strictEqual(s.nativeWidth, 50);
+    assert.strictEqual(s.nativeHeight, 60);
+  });
+
+  it("image setter resolves native size from AssetRegistry", () => {
+    const s = new Sprite();
+    const reg = new AssetRegistry();
+    const img = { sourceImage: {}, sw: 64, sh: 48 };
+    const assetId = reg.register(img);
+    s.world.setResource(AssetRegistry, reg);
+
+    s.image = assetId;
+    assert.strictEqual(s.nativeWidth, 64);
+    assert.strictEqual(s.nativeHeight, 48);
+  });
+
+  it("image setter does not overwrite already-resolved native size", () => {
+    const s = new Sprite(0, 0, 100, 100);
+    const reg = new AssetRegistry();
+    const img = { sourceImage: {}, sw: 64, sh: 48 };
+    const assetId = reg.register(img);
+    s.world.setResource(AssetRegistry, reg);
+
+    s.image = assetId;
+    assert.strictEqual(s.nativeWidth, 100);
+    assert.strictEqual(s.nativeHeight, 100);
+  });
+
+  it("animation.play() resolves native size from first frame", () => {
+    const s = new Sprite();
+    const w = s.world;
+
+    const reg = new AssetRegistry();
+    const assetId = reg.register({ sourceImage: {}, sw: 80, sh: 60 });
+    w.setResource(AssetRegistry, reg);
+
+    const clipReg = new AnimationClipRegistry();
+    w.setResource(AnimationClipRegistry, clipReg);
+
+    const clip = new AnimationClip({ frames: [assetId], fps: 10, loop: true });
+    s.animation.add("idle", clip);
+    s.animation.play("idle");
+
+    assert.strictEqual(s.nativeWidth, 80);
+    assert.strictEqual(s.nativeHeight, 60);
+  });
+
+  it("animation.play() does not overwrite explicit native size", () => {
+    const s = new Sprite(0, 0, 200, 200);
+    const w = s.world;
+
+    const reg = new AssetRegistry();
+    const assetId = reg.register({ sourceImage: {}, sw: 80, sh: 60 });
+    w.setResource(AssetRegistry, reg);
+
+    const clipReg = new AnimationClipRegistry();
+    w.setResource(AnimationClipRegistry, clipReg);
+
+    const clip = new AnimationClip({ frames: [assetId], fps: 10, loop: true });
+    s.animation.add("idle", clip);
+    s.animation.play("idle");
+
+    assert.strictEqual(s.nativeWidth, 200);
+    assert.strictEqual(s.nativeHeight, 200);
+  });
+
+  it("play() resolves RenderBounds from first frame when native was 0", () => {
+    const s = new Sprite();
+    const w = s.world;
+
+    const reg = new AssetRegistry();
+    const assetId = reg.register({ sourceImage: {}, sw: 80, sh: 60 });
+    w.setResource(AssetRegistry, reg);
+
+    const clipReg = new AnimationClipRegistry();
+    w.setResource(AnimationClipRegistry, clipReg);
+
+    const clip = new AnimationClip({ frames: [assetId], fps: 10, loop: true });
+    s.animation.add("idle", clip);
+    s.animation.play("idle");
+
+    assert.strictEqual(s.width, 80);
+    assert.strictEqual(s.height, 60);
+  });
+
+  it("subsequent play() does not change already-resolved size", () => {
+    const s = new Sprite();
+    const w = s.world;
+
+    const reg = new AssetRegistry();
+    const id1 = reg.register({ sourceImage: {}, sw: 80, sh: 60 });
+    const id2 = reg.register({ sourceImage: {}, sw: 100, sh: 75 });
+    w.setResource(AssetRegistry, reg);
+
+    const clipReg = new AnimationClipRegistry();
+    w.setResource(AnimationClipRegistry, clipReg);
+
+    s.animation.add("idle", new AnimationClip({ frames: [id1], fps: 10, loop: true }));
+    s.animation.add("walk", new AnimationClip({ frames: [id2], fps: 10, loop: true }));
+    s.animation.play("idle");
+    assert.strictEqual(s.nativeWidth, 80);
+
+    s.animation.play("walk");
+    assert.strictEqual(s.nativeWidth, 80);
   });
 });
 
