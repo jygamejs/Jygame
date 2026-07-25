@@ -58,7 +58,7 @@ export class Sprite {
     wld.addMany(e, Transform, Collider, Renderable, Visible, RenderBounds);
     wld.set(e, Transform, { x: x + w / 2, y: y + h / 2, scaleX: 1, scaleY: 1, _prevX: x + w / 2, _prevY: y + h / 2 });
     wld.set(e, Collider, { width: w, height: h });
-    wld.set(e, Renderable, { fillColor: 0xffffff, imageSmoothing: defaultSmoothing, layer: Layer.WORLD });
+    wld.set(e, Renderable, { fillColor: 0xffffff, imageSmoothing: defaultSmoothing, layer: Layer.WORLD, nativeWidth: w, nativeHeight: h });
     wld.set(e, Visible, { value: 1 });
     wld.set(e, RenderBounds, { width: w, height: h });
   }
@@ -193,6 +193,36 @@ export class Sprite {
 
   get height() { this._assertAlive(); return this._getC().height; }
   set height(v) { this._assertAlive(); this._getC().height = v; }
+
+  get nativeWidth() {
+    this._assertAlive();
+    return this.#world.get(this.#entity, Renderable).nativeWidth;
+  }
+
+  get nativeHeight() {
+    this._assertAlive();
+    return this.#world.get(this.#entity, Renderable).nativeHeight;
+  }
+
+  get scaledWidth() {
+    this._assertAlive();
+    const t = this._getT();
+    return Math.round(this.width * Math.abs(t.scaleX));
+  }
+
+  get scaledHeight() {
+    this._assertAlive();
+    const t = this._getT();
+    return Math.round(this.height * Math.abs(t.scaleY));
+  }
+
+  _resolveNativeSize(w, h) {
+    const r = this.#world.get(this.#entity, Renderable);
+    if (r.nativeWidth === 0 && r.nativeHeight === 0) {
+      r.nativeWidth = w;
+      r.nativeHeight = h;
+    }
+  }
 
   get image() { this._assertAlive(); return this.#world.get(this.#entity, Renderable).image; }
   set image(v) { this._assertAlive(); this.#world.get(this.#entity, Renderable).image = v; }
