@@ -334,17 +334,31 @@ describe("Geometry Accessors", () => {
     assert.strictEqual(s.y, 370);
   });
 
-  it("midbottom getter returns {x, bottom}", () => {
+  it("midtop getter returns {centerx, top}", () => {
+    const s = new Sprite(100, 200, 50, 60);
+    const mt = s.midtop;
+    assert.strictEqual(mt.x, 125);
+    assert.strictEqual(mt.y, 200);
+  });
+
+  it("midtop setter adjusts centerx and top", () => {
+    const s = new Sprite(100, 200, 50, 60);
+    s.midtop = { x: 200, y: 150 };
+    assert.strictEqual(s.x, 175);
+    assert.strictEqual(s.y, 150);
+  });
+
+  it("midbottom getter returns {centerx, bottom}", () => {
     const s = new Sprite(100, 200, 50, 60);
     const mb = s.midbottom;
-    assert.strictEqual(mb.x, 100);
+    assert.strictEqual(mb.x, 125);
     assert.strictEqual(mb.y, 260);
   });
 
-  it("midbottom setter adjusts x and bottom", () => {
+  it("midbottom setter adjusts centerx and bottom", () => {
     const s = new Sprite(100, 200, 50, 60);
     s.midbottom = { x: 200, y: 400 };
-    assert.strictEqual(s.x, 200);
+    assert.strictEqual(s.x, 175);
     assert.strictEqual(s.y, 340);
   });
 
