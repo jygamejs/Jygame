@@ -12,6 +12,9 @@ import { RenderBounds } from "../../../ecs/components/RenderBounds.js";
 import { AssetRegistry } from "../../../ecs/render/AssetRegistry.js";
 import { AnimationClip } from "../../../ecs/animation/AnimationClip.js";
 import { AnimationClipRegistry } from "../../../ecs/animation/AnimationClipRegistry.js";
+import { RenderSystem } from "../../../ecs/systems/RenderSystem.js";
+import { RenderQueue } from "../../../ecs/render/RenderQueue.js";
+import { CanvasContext } from "../../../ecs/render/CanvasContext.js";
 
 const ALL_COMPONENTS = [Transform, Velocity, Collider, Renderable, Animation, Visible, RenderBounds];
 
@@ -1171,5 +1174,91 @@ describe("Legacy API compatibility", () => {
     const s = new Sprite();
     assert.strictEqual(s.world, w);
     Sprite._defaultWorld = null; // reset
+  });
+});
+
+// ─────────────────────────────────────────────────────────
+// Render Integration
+// ─────────────────────────────────────────────────────────
+describe("Render Integration", () => {
+  function mockCtx() {
+    let mat = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+    return {
+      save() {}, restore() {}, translate() {}, rotate() {}, scale() {},
+      fillRect() {}, beginPath() {}, arc() {}, fill() {}, drawImage() {},
+      getTransform() { return mat; },
+      setTransform(a, b, c, d, e, f) { mat = { a, b, c, d, e, f }; },
+    };
+  }
+
+  function setupSpriteWorld() {
+    const world = new World();
+    for (const c of ALL_COMPONENTS) world.register(c);
+    const queue = new RenderQueue();
+    world.setResource(RenderQueue, queue);
+    world.setResource(CanvasContext, mockCtx());
+    world.addSystem(new RenderSystem());
+    Sprite.setDefaultWorld(world);
+    return { world, queue };
+  }
+
+  it("sprite.width is reflected in render command", () => {
+    const { queue } = setupSpriteWorld();
+    const s = new Sprite(100, 200, 40, 50);
+    s.world.update(16);
+    assert.strictEqual(queue._commands[0].width, 40);
+    assert.strictEqual(queue._commands[0].height, 50);
+  });
+
+  it("sprite.width = 200 updates render command width", () => {
+    const { queue } = setupSpriteWorld();
+    const s = new Sprite(100, 200, 40, 50);
+    s.width = 200;
+    s.world.update(16);
+    assert.strictEqual(queue._commands[0].width, 200);
+  });
+
+  it("sprite.scale = 2 changes scaleX/scaleY but not base width in render command", () => {
+    const { queue } = setupSpriteWorld();
+    const s = new Sprite(100, 200, 40, 50);
+    s.scale = 2;
+    s.world.update(16);
+    assert.strictEqual(queue._commands[0].width, 40);
+    assert.strictEqual(queue._commands[0].scaleX, 2);
+    assert.strictEqual(queue._commands[0].scaleY, 2);
+  });
+
+  it("lazy resolution from animation updates render command width", () => {
+    const { world, queue } = setupSpriteWorld();
+    const s = new Sprite();
+
+    const reg = new AssetRegistry();
+    const assetId = reg.register({ sourceImage: {}, sw: 80, sh: 60 });
+    world.setResource(AssetRegistry, reg);
+
+    const clipReg = new AnimationClipRegistry();
+    world.setResource(AnimationClipRegistry, clipReg);
+
+    s.animation.add("idle", new AnimationClip({ frames: [assetId], fps: 10, loop: true }));
+    s.animation.play("idle");
+    s.world.update(16);
+
+    assert.strictEqual(queue._commands[0].width, 80);
+    assert.strictEqual(queue._commands[0].height, 60);
+  });
+
+  it("image setter resolves native size and updates render command", () => {
+    const { world, queue } = setupSpriteWorld();
+    const s = new Sprite();
+
+    const reg = new AssetRegistry();
+    const assetId = reg.register({ sourceImage: {}, sw: 64, sh: 48 });
+    world.setResource(AssetRegistry, reg);
+
+    s.image = assetId;
+    s.world.update(16);
+
+    assert.strictEqual(queue._commands[0].width, 64);
+    assert.strictEqual(queue._commands[0].height, 48);
   });
 });
