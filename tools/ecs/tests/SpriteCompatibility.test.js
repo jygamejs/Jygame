@@ -68,10 +68,9 @@ describe("Construction", () => {
     assert.strictEqual(s.visible, true);
   });
 
-  it("scale defaults to 1, 1", () => {
+  it("scale defaults to 1", () => {
     const s = new Sprite();
-    assert.strictEqual(s.scale.x, 1);
-    assert.strictEqual(s.scale.y, 1);
+    assert.strictEqual(s.scale, 1);
   });
 
   it("angle defaults to 0", () => {
@@ -164,12 +163,11 @@ describe("Accessors", () => {
     assert.strictEqual(s.transform.rotation, 2.0);
   });
 
-  it("scale getter with uniform scale", () => {
+  it("scale getter with non-uniform scale", () => {
     const s = new Sprite();
     s.transform.scaleX = 2;
     s.transform.scaleY = 3;
-    assert.strictEqual(s.scale.x, 2);
-    assert.strictEqual(s.scale.y, 3);
+    assert.strictEqual(s.scale, 2);
   });
 
   it("scale setter with object", () => {
@@ -774,8 +772,7 @@ describe("API Stability", () => {
     assert.strictEqual(s.visible, false);
     assert.strictEqual(s.image, 42);
     assert.strictEqual(s.angle, 1.5);
-    assert.strictEqual(s.scale.x, 1);
-    assert.strictEqual(s.scale.y, 1);
+    assert.strictEqual(s.scale, 1);
 
     s.x = 150;
     assert.strictEqual(s.transform.x, 175);

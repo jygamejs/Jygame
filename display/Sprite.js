@@ -182,17 +182,31 @@ export class Sprite {
     this.#world.get(this.#entity, Renderable).imageSmoothing = v ? 1 : 0;
   }
 
-  get x() { this._assertAlive(); return this._getT().x - this._getC().width / 2; }
-  set x(v) { this._assertAlive(); this._getT().x = v + this._getC().width / 2; }
+  get x() { this._assertAlive(); return this._getT().x - this.width / 2; }
+  set x(v) { this._assertAlive(); this._getT().x = v + this.width / 2; }
 
-  get y() { this._assertAlive(); return this._getT().y - this._getC().height / 2; }
-  set y(v) { this._assertAlive(); this._getT().y = v + this._getC().height / 2; }
+  get y() { this._assertAlive(); return this._getT().y - this.height / 2; }
+  set y(v) { this._assertAlive(); this._getT().y = v + this.height / 2; }
 
-  get width() { this._assertAlive(); return this._getC().width; }
-  set width(v) { this._assertAlive(); this._getC().width = v; }
+  get width() {
+    this._assertAlive();
+    return this._getC().width * Math.abs(this._getT().scaleX);
+  }
+  set width(v) {
+    this._assertAlive();
+    const scale = Math.abs(this._getT().scaleX) || 1;
+    this._getC().width = v / scale;
+  }
 
-  get height() { this._assertAlive(); return this._getC().height; }
-  set height(v) { this._assertAlive(); this._getC().height = v; }
+  get height() {
+    this._assertAlive();
+    return this._getC().height * Math.abs(this._getT().scaleY);
+  }
+  set height(v) {
+    this._assertAlive();
+    const scale = Math.abs(this._getT().scaleY) || 1;
+    this._getC().height = v / scale;
+  }
 
   get nativeWidth() {
     this._assertAlive();
@@ -206,14 +220,12 @@ export class Sprite {
 
   get scaledWidth() {
     this._assertAlive();
-    const t = this._getT();
-    return Math.round(this.width * Math.abs(t.scaleX));
+    return this.width;
   }
 
   get scaledHeight() {
     this._assertAlive();
-    const t = this._getT();
-    return Math.round(this.height * Math.abs(t.scaleY));
+    return this.height;
   }
 
   _resolveNativeSize(w, h) {
@@ -232,8 +244,7 @@ export class Sprite {
 
   get scale() {
     this._assertAlive();
-    const t = this._getT();
-    return { x: t.scaleX, y: t.scaleY };
+    return this._getT().scaleX;
   }
 
   set scale(v) {
