@@ -490,6 +490,77 @@ describe("Lazy Size Resolution", () => {
 });
 
 // ─────────────────────────────────────────────────────────
+// Constructor Overloading
+// ─────────────────────────────────────────────────────────
+describe("Constructor Overloading", () => {
+  it("new Sprite() — zero args", () => {
+    const s = new Sprite();
+    assert.strictEqual(s.x, 0);
+    assert.strictEqual(s.y, 0);
+    assert.strictEqual(s.width, 32);
+    assert.strictEqual(s.height, 32);
+    assert.strictEqual(s.nativeWidth, 0);
+  });
+
+  it("new Sprite(x, y) — position only", () => {
+    const s = new Sprite(100, 200);
+    assert.strictEqual(s.x, 100);
+    assert.strictEqual(s.y, 200);
+    assert.strictEqual(s.width, 32);
+    assert.strictEqual(s.height, 32);
+    assert.strictEqual(s.nativeWidth, 0);
+  });
+
+  it("new Sprite(x, y, w, h) — full rect", () => {
+    const s = new Sprite(100, 200, 50, 60);
+    assert.strictEqual(s.x, 100);
+    assert.strictEqual(s.y, 200);
+    assert.strictEqual(s.width, 50);
+    assert.strictEqual(s.height, 60);
+    assert.strictEqual(s.nativeWidth, 50);
+  });
+
+  it("new Sprite(x, y, w, h, assetId) — with image", () => {
+    const s = new Sprite(100, 200, 50, 60, 42);
+    assert.strictEqual(s.x, 100);
+    assert.strictEqual(s.y, 200);
+    assert.strictEqual(s.width, 50);
+    assert.strictEqual(s.height, 60);
+    assert.strictEqual(s.image, 42);
+  });
+
+  it("new Sprite(imageAssetId) — image only, default size", () => {
+    const s = new Sprite(99);
+    assert.strictEqual(s.x, 99);
+    assert.strictEqual(s.y, 0);
+    assert.strictEqual(s.width, 32);
+    assert.strictEqual(s.height, 32);
+  });
+
+  it("new Sprite(x, y, w, h, world) — backward compat with world arg", () => {
+    const w = new World();
+    for (const c of ALL_COMPONENTS) w.register(c);
+    const s = new Sprite(100, 200, 50, 60, w);
+    assert.strictEqual(s.world, w);
+    assert.strictEqual(s.x, 100);
+    assert.strictEqual(s.y, 200);
+    assert.strictEqual(s.width, 50);
+    assert.strictEqual(s.height, 60);
+  });
+
+  it("new Sprite(x, y, w, h, world) — backward compat with world arg", () => {
+    const w = new World();
+    for (const c of ALL_COMPONENTS) w.register(c);
+    const s = new Sprite(100, 200, 50, 60, w);
+    assert.strictEqual(s.world, w);
+    assert.strictEqual(s.x, 100);
+    assert.strictEqual(s.y, 200);
+    assert.strictEqual(s.width, 50);
+    assert.strictEqual(s.height, 60);
+  });
+});
+
+// ─────────────────────────────────────────────────────────
 // Velocity (lazy creation)
 // ─────────────────────────────────────────────────────────
 describe("Velocity (lazy)", () => {

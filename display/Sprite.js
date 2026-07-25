@@ -40,28 +40,74 @@ export class Sprite {
   #entity;
   #dead = false;
 
-  constructor(x = 0, y = 0, w = 32, h = 32, world) {
-    if (x && typeof x === "object" && _INTERNAL in x) {
-      this.#world = x.world;
-      this.#entity = x.entity;
+  constructor(a, b, c, d, e) {
+    if (a && typeof a === "object" && _INTERNAL in a) {
+      this.#world = a.world;
+      this.#entity = a.entity;
       this.#dead = false;
       return;
     }
+
+    let x = 0, y = 0, w = 32, h = 32, image = null, world = undefined;
+    let explicitSize = false;
+
+    if (a === undefined) {
+      // new Sprite()
+    } else if (typeof a === "string" || (a && a.nodeType === 1)) {
+      // new Sprite(image)
+      image = a;
+    } else if (typeof a === "number") {
+      x = a;
+      if (typeof b === "number") {
+        y = b;
+        if (c === undefined) {
+          // new Sprite(x, y)
+        } else if (typeof c === "number") {
+          w = c;
+          if (typeof d === "number") {
+            h = d;
+            explicitSize = true;
+            // new Sprite(x, y, w, h) or new Sprite(x, y, w, h, image/world)
+            if (e !== undefined) {
+              if (e instanceof World) {
+                world = e;
+              } else {
+                image = e;
+              }
+            }
+          } else if (d !== undefined) {
+            // new Sprite(x, y, w, image) — 4th arg is image
+            image = d;
+          }
+        } else {
+          // new Sprite(x, y, image)
+          image = c;
+        }
+      } else if (b !== undefined) {
+        throw new TypeError(
+          "Sprite constructor: use new Sprite(x, y), new Sprite(x, y, image), or new Sprite(x, y, w, h)."
+        );
+      }
+    }
+
     this.#world = world || Sprite._ensureDefaultWorld();
     const wld = this.#world;
 
-    const e = wld.createEntity();
-    this.#entity = e;
+    const eid = wld.createEntity();
+    this.#entity = eid;
 
-    const explicitSize = arguments.length >= 3;
     const defaultSmoothing = wld.hasResource("imageSmoothing.default") ? wld.getResource("imageSmoothing.default") : 1;
 
-    wld.addMany(e, Transform, Collider, Renderable, Visible, RenderBounds);
-    wld.set(e, Transform, { x: x + w / 2, y: y + h / 2, scaleX: 1, scaleY: 1, _prevX: x + w / 2, _prevY: y + h / 2 });
-    wld.set(e, Collider, { width: w, height: h });
-    wld.set(e, Renderable, { fillColor: 0xffffff, imageSmoothing: defaultSmoothing, layer: Layer.WORLD, nativeWidth: explicitSize ? w : 0, nativeHeight: explicitSize ? h : 0 });
-    wld.set(e, Visible, { value: 1 });
-    wld.set(e, RenderBounds, { width: w, height: h });
+    wld.addMany(eid, Transform, Collider, Renderable, Visible, RenderBounds);
+    wld.set(eid, Transform, { x: x + w / 2, y: y + h / 2, scaleX: 1, scaleY: 1, _prevX: x + w / 2, _prevY: y + h / 2 });
+    wld.set(eid, Collider, { width: w, height: h });
+    wld.set(eid, Renderable, { fillColor: 0xffffff, imageSmoothing: defaultSmoothing, layer: Layer.WORLD, nativeWidth: explicitSize ? w : 0, nativeHeight: explicitSize ? h : 0 });
+    wld.set(eid, Visible, { value: 1 });
+    wld.set(eid, RenderBounds, { width: w, height: h });
+
+    if (image !== null) {
+      this.image = image;
+    }
   }
 
   get world() {
