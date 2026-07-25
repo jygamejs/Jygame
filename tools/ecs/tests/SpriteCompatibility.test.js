@@ -233,6 +233,135 @@ describe("Accessors", () => {
 });
 
 // ─────────────────────────────────────────────────────────
+// Geometry Accessors
+// ─────────────────────────────────────────────────────────
+describe("Geometry Accessors", () => {
+  it("left getter equals x", () => {
+    const s = new Sprite(100, 200, 50, 60);
+    assert.strictEqual(s.left, 100);
+  });
+
+  it("left setter updates x", () => {
+    const s = new Sprite(100, 200, 50, 60);
+    s.left = 150;
+    assert.strictEqual(s.x, 150);
+  });
+
+  it("right getter returns x + width", () => {
+    const s = new Sprite(100, 200, 50, 60);
+    assert.strictEqual(s.right, 150);
+  });
+
+  it("right setter adjusts x", () => {
+    const s = new Sprite(100, 200, 50, 60);
+    s.right = 200;
+    assert.strictEqual(s.x, 150);
+  });
+
+  it("top getter equals y", () => {
+    const s = new Sprite(100, 200, 50, 60);
+    assert.strictEqual(s.top, 200);
+  });
+
+  it("top setter updates y", () => {
+    const s = new Sprite(100, 200, 50, 60);
+    s.top = 300;
+    assert.strictEqual(s.y, 300);
+  });
+
+  it("bottom getter returns y + height", () => {
+    const s = new Sprite(100, 200, 50, 60);
+    assert.strictEqual(s.bottom, 260);
+  });
+
+  it("bottom setter adjusts y", () => {
+    const s = new Sprite(100, 200, 50, 60);
+    s.bottom = 300;
+    assert.strictEqual(s.y, 240);
+  });
+
+  it("centerx getter returns x + width/2", () => {
+    const s = new Sprite(100, 200, 50, 60);
+    assert.strictEqual(s.centerx, 125);
+  });
+
+  it("centerx setter adjusts x", () => {
+    const s = new Sprite(100, 200, 50, 60);
+    s.centerx = 200;
+    assert.strictEqual(s.x, 175);
+  });
+
+  it("centery getter returns y + height/2", () => {
+    const s = new Sprite(100, 200, 50, 60);
+    assert.strictEqual(s.centery, 230);
+  });
+
+  it("centery setter adjusts y", () => {
+    const s = new Sprite(100, 200, 50, 60);
+    s.centery = 300;
+    assert.strictEqual(s.y, 270);
+  });
+
+  it("center getter returns {x, y}", () => {
+    const s = new Sprite(100, 200, 50, 60);
+    const c = s.center;
+    assert.strictEqual(c.x, 125);
+    assert.strictEqual(c.y, 230);
+  });
+
+  it("center setter adjusts x and y", () => {
+    const s = new Sprite(100, 200, 50, 60);
+    s.center = { x: 300, y: 400 };
+    assert.strictEqual(s.x, 275);
+    assert.strictEqual(s.y, 370);
+  });
+
+  it("midbottom getter returns {x, bottom}", () => {
+    const s = new Sprite(100, 200, 50, 60);
+    const mb = s.midbottom;
+    assert.strictEqual(mb.x, 100);
+    assert.strictEqual(mb.y, 260);
+  });
+
+  it("midbottom setter adjusts x and bottom", () => {
+    const s = new Sprite(100, 200, 50, 60);
+    s.midbottom = { x: 200, y: 400 };
+    assert.strictEqual(s.x, 200);
+    assert.strictEqual(s.y, 340);
+  });
+
+  it("midright getter returns {right, centery}", () => {
+    const s = new Sprite(100, 200, 50, 60);
+    const mr = s.midright;
+    assert.strictEqual(mr.x, 150);
+    assert.strictEqual(mr.y, 230);
+  });
+
+  it("all accessors stay consistent after x/y/width/height changes", () => {
+    const s = new Sprite(0, 0, 20, 20);
+    s.width = 40;
+    s.height = 50;
+    s.x = 10;
+    s.y = 10;
+    assert.strictEqual(s.left, 10);
+    assert.strictEqual(s.right, 50);
+    assert.strictEqual(s.top, 10);
+    assert.strictEqual(s.bottom, 60);
+    assert.strictEqual(s.centerx, 30);
+    assert.strictEqual(s.centery, 35);
+  });
+
+  it("geometry accessors with uniform scale", () => {
+    const s = new Sprite(100, 200, 50, 60);
+    s.scale = 2;
+    assert.strictEqual(s.width, 100);
+    assert.strictEqual(s.height, 120);
+    assert.strictEqual(s.right, s.x + s.width);
+    assert.strictEqual(s.bottom, s.y + s.height);
+  });
+});
+
+// ─────────────────────────────────────────────────────────
 // Velocity (lazy creation)
 // ─────────────────────────────────────────────────────────
 describe("Velocity (lazy)", () => {

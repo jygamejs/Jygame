@@ -235,6 +235,39 @@ export class Sprite {
     return this.height;
   }
 
+  get left()   { this._assertAlive(); return this.x; }
+  set left(v)  { this._assertAlive(); this.x = v; }
+
+  get right()   { this._assertAlive(); return this.x + this.width; }
+  set right(v)  { this._assertAlive(); this.x = v - this.width; }
+
+  get top()    { this._assertAlive(); return this.y; }
+  set top(v)   { this._assertAlive(); this.y = v; }
+
+  get bottom()   { this._assertAlive(); return this.y + this.height; }
+  set bottom(v)  { this._assertAlive(); this.y = v - this.height; }
+
+  get centerx()  { this._assertAlive(); return this.x + this.width / 2; }
+  set centerx(v) { this._assertAlive(); this.x = v - this.width / 2; }
+
+  get centery()  { this._assertAlive(); return this.y + this.height / 2; }
+  set centery(v) { this._assertAlive(); this.y = v - this.height / 2; }
+
+  get center()  { this._assertAlive(); return { x: this.centerx, y: this.centery }; }
+  set center(v) { this._assertAlive(); this.centerx = v.x; this.centery = v.y; }
+
+  get midtop()    { this._assertAlive(); return { x: this.x, y: this.y }; }
+  set midtop(v)   { this._assertAlive(); this.x = v.x; this.y = v.y; }
+
+  get midleft()   { this._assertAlive(); return { x: this.x, y: this.centery }; }
+  set midleft(v)  { this._assertAlive(); this.x = v.x; this.centery = v.y; }
+
+  get midbottom()    { this._assertAlive(); return { x: this.x, y: this.bottom }; }
+  set midbottom(v)   { this._assertAlive(); this.x = v.x; this.bottom = v.y; }
+
+  get midright()     { this._assertAlive(); return { x: this.right, y: this.centery }; }
+  set midright(v)    { this._assertAlive(); this.right = v.x; this.centery = v.y; }
+
   _resolveNativeSize(w, h) {
     const r = this.#world.get(this.#entity, Renderable);
     if (r.nativeWidth === 0 && r.nativeHeight === 0) {
