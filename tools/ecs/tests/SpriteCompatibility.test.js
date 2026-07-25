@@ -380,6 +380,132 @@ describe("Geometry Accessors", () => {
 });
 
 // ─────────────────────────────────────────────────────────
+// Bounds
+// ─────────────────────────────────────────────────────────
+describe("Bounds", () => {
+  it("bounds matches sprite geometry after construction", () => {
+    const s = new Sprite(100, 200, 50, 60);
+    const b = s.bounds;
+    assert.strictEqual(b.x, s.x);
+    assert.strictEqual(b.y, s.y);
+    assert.strictEqual(b.width, s.width);
+    assert.strictEqual(b.height, s.height);
+  });
+
+  it("bounds center matches sprite center", () => {
+    const s = new Sprite(100, 200, 50, 60);
+    assert.strictEqual(s.bounds.centerx, s.centerx);
+    assert.strictEqual(s.bounds.centery, s.centery);
+    assert.deepStrictEqual(s.bounds.center, s.center);
+  });
+
+  it("bounds left/right/top/bottom match sprite accessors", () => {
+    const s = new Sprite(100, 200, 50, 60);
+    assert.strictEqual(s.bounds.left, s.left);
+    assert.strictEqual(s.bounds.right, s.right);
+    assert.strictEqual(s.bounds.top, s.top);
+    assert.strictEqual(s.bounds.bottom, s.bottom);
+  });
+
+  it("bounds stays live after position change", () => {
+    const s = new Sprite(100, 200, 50, 60);
+    s.x = 300;
+    s.y = 400;
+    assert.strictEqual(s.bounds.x, 300);
+    assert.strictEqual(s.bounds.y, 400);
+  });
+
+  it("bounds stays live after scale change", () => {
+    const s = new Sprite(100, 200, 50, 60);
+    s.scale = 2;
+    assert.strictEqual(s.bounds.width, 100);
+    assert.strictEqual(s.bounds.height, 120);
+    // center stays fixed, so top-left shifts
+    assert.strictEqual(s.bounds.x, s.x);
+    assert.strictEqual(s.bounds.y, s.y);
+  });
+
+  it("bounds stays live after width/height change", () => {
+    const s = new Sprite(100, 200, 50, 60);
+    s.width = 80;
+    s.height = 90;
+    assert.strictEqual(s.bounds.width, 80);
+    assert.strictEqual(s.bounds.height, 90);
+    assert.strictEqual(s.bounds.x, s.x);
+    assert.strictEqual(s.bounds.y, s.y);
+  });
+
+  it("bounds.collides returns true for overlapping sprites", () => {
+    const a = new Sprite(0, 0, 100, 100);
+    const b = new Sprite(50, 50, 100, 100);
+    assert.strictEqual(a.bounds.collides(b.bounds), true);
+  });
+
+  it("bounds.collides returns false for separated sprites", () => {
+    const a = new Sprite(0, 0, 100, 100);
+    const b = new Sprite(200, 200, 100, 100);
+    assert.strictEqual(a.bounds.collides(b.bounds), false);
+  });
+
+  it("bounds.collides accepts bare Rect-style objects", () => {
+    const s = new Sprite(50, 50, 100, 100);
+    assert.strictEqual(s.bounds.collides({ x: 0, y: 0, width: 200, height: 200 }), true);
+    assert.strictEqual(s.bounds.collides({ x: 200, y: 200, width: 50, height: 50 }), false);
+  });
+
+  it("bounds.collides accepts Rect with w/h naming", () => {
+    const s = new Sprite(50, 50, 100, 100);
+    assert.strictEqual(s.bounds.collides({ x: 0, y: 0, w: 200, h: 200 }), true);
+    assert.strictEqual(s.bounds.collides({ x: 200, y: 200, w: 50, h: 50 }), false);
+  });
+
+  it("bounds.overlap returns intersection rect for overlapping sprites", () => {
+    const a = new Sprite(0, 0, 100, 100);
+    const b = new Sprite(50, 50, 100, 100);
+    const r = a.bounds.overlap(b.bounds);
+    assert.ok(r);
+    assert.strictEqual(r.x, 50);
+    assert.strictEqual(r.y, 50);
+    assert.strictEqual(r.width, 50);
+    assert.strictEqual(r.height, 50);
+  });
+
+  it("bounds.overlap returns null for separated sprites", () => {
+    const a = new Sprite(0, 0, 100, 100);
+    const b = new Sprite(200, 200, 100, 100);
+    assert.strictEqual(a.bounds.overlap(b.bounds), null);
+  });
+
+  it("bounds.contains returns true for point inside", () => {
+    const s = new Sprite(50, 50, 100, 100);
+    assert.strictEqual(s.bounds.contains({ x: 75, y: 75 }), true);
+  });
+
+  it("bounds.contains returns false for point outside", () => {
+    const s = new Sprite(50, 50, 100, 100);
+    assert.strictEqual(s.bounds.contains({ x: 0, y: 0 }), false);
+  });
+
+  it("bounds has no setter", () => {
+    const s = new Sprite(0, 0, 32, 32);
+    assert.strictEqual(Object.getOwnPropertyDescriptor(
+      Object.getPrototypeOf(s), "bounds"
+    ).set, undefined);
+  });
+
+  it("same bounds object instance on repeated access", () => {
+    const s = new Sprite(0, 0, 32, 32);
+    assert.strictEqual(s.bounds, s.bounds);
+  });
+
+  it("bounds throws after destroy", () => {
+    const s = new Sprite(0, 0, 32, 32);
+    s.destroy();
+    assert.throws(() => s.bounds, /destroyed/);
+  });
+});
+
+// ─────────────────────────────────────────────────────────
 // Lazy Size Resolution
 // ─────────────────────────────────────────────────────────
 describe("Lazy Size Resolution", () => {

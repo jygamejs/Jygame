@@ -303,17 +303,71 @@ export class Sprite {
   get center()  { this._assertAlive(); return { x: this.centerx, y: this.centery }; }
   set center(v) { this._assertAlive(); this.centerx = v.x; this.centery = v.y; }
 
-  get midtop()    { this._assertAlive(); return { x: this.x, y: this.y }; }
-  set midtop(v)   { this._assertAlive(); this.x = v.x; this.y = v.y; }
+  get midtop()    { this._assertAlive(); return { x: this.centerx, y: this.y }; }
+  set midtop(v)   { this._assertAlive(); this.centerx = v.x; this.y = v.y; }
 
   get midleft()   { this._assertAlive(); return { x: this.x, y: this.centery }; }
   set midleft(v)  { this._assertAlive(); this.x = v.x; this.centery = v.y; }
 
-  get midbottom()    { this._assertAlive(); return { x: this.x, y: this.bottom }; }
-  set midbottom(v)   { this._assertAlive(); this.x = v.x; this.bottom = v.y; }
+  get midbottom()    { this._assertAlive(); return { x: this.centerx, y: this.bottom }; }
+  set midbottom(v)   { this._assertAlive(); this.centerx = v.x; this.bottom = v.y; }
 
   get midright()     { this._assertAlive(); return { x: this.right, y: this.centery }; }
   set midright(v)    { this._assertAlive(); this.right = v.x; this.centery = v.y; }
+
+  get bounds() {
+    this._assertAlive();
+    if (!this._boundsApi) {
+      const self = this;
+      this._boundsApi = {
+        get x()       { return self.x; },
+        get y()       { return self.y; },
+        get width()   { return self.width; },
+        get height()  { return self.height; },
+        get left()    { return self.left; },
+        get right()   { return self.right; },
+        get top()     { return self.top; },
+        get bottom()  { return self.bottom; },
+        get centerx() { return self.centerx; },
+        get centery() { return self.centery; },
+        get center()  { return { x: self.centerx, y: self.centery }; },
+
+        _r(other) {
+          const l = other.left ?? other.x;
+          const t = other.top ?? other.y;
+          return {
+            left: l,
+            right: other.right ?? (l + (other.width ?? other.w ?? 0)),
+            top: t,
+            bottom: other.bottom ?? (t + (other.height ?? other.h ?? 0)),
+          };
+        },
+
+        collides(other) {
+          const r = this._r(other);
+          return this.left < r.right && this.right > r.left
+            && this.top < r.bottom && this.bottom > r.top;
+        },
+
+        overlap(other) {
+          const r = this._r(other);
+          const ix = Math.max(this.left, r.left);
+          const iy = Math.max(this.top, r.top);
+          const iw = Math.min(this.right, r.right) - ix;
+          const ih = Math.min(this.bottom, r.bottom) - iy;
+          if (iw <= 0 || ih <= 0) return null;
+          return { x: ix, y: iy, width: iw, height: ih };
+        },
+
+        contains(point) {
+          const l = this.left, r = this.right;
+          const t = this.top, b = this.bottom;
+          return point.x >= l && point.x <= r && point.y >= t && point.y <= b;
+        },
+      };
+    }
+    return this._boundsApi;
+  }
 
   _resolveNativeSize(w, h) {
     const r = this.#world.get(this.#entity, Renderable);
