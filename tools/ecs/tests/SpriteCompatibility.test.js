@@ -15,6 +15,8 @@ import { AnimationClipRegistry } from "../../../ecs/animation/AnimationClipRegis
 import { RenderSystem } from "../../../ecs/systems/RenderSystem.js";
 import { RenderQueue } from "../../../ecs/render/RenderQueue.js";
 import { CanvasContext } from "../../../ecs/render/CanvasContext.js";
+import { SpatialHash } from "../../../collision/SpatialHash.js";
+import { CollisionSystem } from "../../../ecs/systems/CollisionSystem.js";
 
 const ALL_COMPONENTS = [Transform, Velocity, Collider, Renderable, Animation, Visible, RenderBounds];
 
@@ -22,6 +24,16 @@ function createWorld() {
   const world = new World();
   for (const c of ALL_COMPONENTS) world.register(c);
   return world;
+}
+
+function mockCtx() {
+  let mat = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+  return {
+    save() {}, restore() {}, translate() {}, rotate() {}, scale() {},
+    fillRect() {}, beginPath() {}, arc() {}, fill() {}, drawImage() {},
+    getTransform() { return mat; },
+    setTransform(a, b, c, d, e, f) { mat = { a, b, c, d, e, f }; },
+  };
 }
 
 // ─────────────────────────────────────────────────────────
@@ -1181,16 +1193,6 @@ describe("Legacy API compatibility", () => {
 // Render Integration
 // ─────────────────────────────────────────────────────────
 describe("Render Integration", () => {
-  function mockCtx() {
-    let mat = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
-    return {
-      save() {}, restore() {}, translate() {}, rotate() {}, scale() {},
-      fillRect() {}, beginPath() {}, arc() {}, fill() {}, drawImage() {},
-      getTransform() { return mat; },
-      setTransform(a, b, c, d, e, f) { mat = { a, b, c, d, e, f }; },
-    };
-  }
-
   function setupSpriteWorld() {
     const world = new World();
     for (const c of ALL_COMPONENTS) world.register(c);
@@ -1260,5 +1262,71 @@ describe("Render Integration", () => {
 
     assert.strictEqual(queue._commands[0].width, 64);
     assert.strictEqual(queue._commands[0].height, 48);
+  });
+});
+
+// ─────────────────────────────────────────────────────────
+// Geometry + Animation + Spatial Hash
+// ─────────────────────────────────────────────────────────
+describe("Geometry Integration", () => {
+  it("explicit sprite.width override after animation resolves", () => {
+    const s = new Sprite();
+    const w = s.world;
+
+    const reg = new AssetRegistry();
+    const assetId = reg.register({ sourceImage: {}, sw: 80, sh: 60 });
+    w.setResource(AssetRegistry, reg);
+
+    const clipReg = new AnimationClipRegistry();
+    w.setResource(AnimationClipRegistry, clipReg);
+
+    s.animation.add("idle", new AnimationClip({ frames: [assetId], fps: 10, loop: true }));
+    s.animation.play("idle");
+    assert.strictEqual(s.nativeWidth, 80);
+
+    s.width = 200;
+    assert.strictEqual(s.width, 200);
+    assert.strictEqual(s.nativeWidth, 80);
+  });
+
+  it("scale then size: width set after scale is rendered size", () => {
+    const s = new Sprite(0, 0, 50, 60);
+    s.scale = 2;
+    s.width = 100;
+    assert.strictEqual(s.width, 100);
+    assert.strictEqual(s.scale, 2);
+  });
+
+  it("size then scale: width set before scale changes rendered size", () => {
+    const s = new Sprite(0, 0, 50, 60);
+    s.width = 100;
+    s.scale = 2;
+    assert.strictEqual(s.width, 200);
+    assert.strictEqual(s.scale, 2);
+  });
+
+  it("spatial hash picks up collider size after geometry changes", () => {
+    const world = new World();
+    for (const c of ALL_COMPONENTS) world.register(c);
+    const queue = new RenderQueue();
+    world.setResource(RenderQueue, queue);
+    world.setResource(CanvasContext, mockCtx());
+    world.addSystem(new RenderSystem());
+
+    const hash = new SpatialHash(64);
+    world.setResource(SpatialHash, hash);
+    world.addSystem(new CollisionSystem());
+
+    Sprite.setDefaultWorld(world);
+    const s = new Sprite(0, 0, 32, 32);
+
+    world.update(16);
+    const hits1 = hash.queryRect({ left: 0, right: 10, top: 0, bottom: 10 });
+    assert.strictEqual(hits1.length, 1);
+
+    s.collider = { width: 4, height: 4 };
+    world.update(16);
+    const hits2 = hash.queryRect({ left: 0, right: 10, top: 0, bottom: 10 });
+    assert.strictEqual(hits2.length, 0);
   });
 });
