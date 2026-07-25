@@ -53,8 +53,8 @@ export class Sprite {
 
     if (a === undefined) {
       // new Sprite()
-    } else if (typeof a === "string" || (a && a.nodeType === 1)) {
-      // new Sprite(image)
+    } else if (typeof a === "string" || (a && (a.nodeType === 1 || a.sourceImage || typeof a.width === "number"))) {
+      // new Sprite(image) — string URL, HTMLImageElement, canvas, or asset descriptor
       image = a;
     } else if (typeof a === "number") {
       x = a;
@@ -343,9 +343,30 @@ export class Sprite {
   get image() { this._assertAlive(); return this.#world.get(this.#entity, Renderable).image; }
   set image(v) {
     this._assertAlive();
-    this.#world.get(this.#entity, Renderable).image = v;
-    if (this.#world.hasResource(AssetRegistry)) {
-      const reg = this.#world.getResource(AssetRegistry);
+    const w = this.#world;
+    if (v && typeof v === "object" && w.hasResource(AssetRegistry)) {
+      const reg = w.getResource(AssetRegistry);
+      let desc = null;
+      if (v.sourceImage) {
+        desc = v;
+      } else if (typeof v.width === "number" || v.nodeType === 1) {
+        desc = {
+          sourceImage: v,
+          sx: 0, sy: 0,
+          sw: v.width ?? v.naturalWidth ?? 0,
+          sh: v.height ?? v.naturalHeight ?? 0,
+        };
+      }
+      if (desc) {
+        const id = reg.register(desc);
+        w.get(this.#entity, Renderable).image = id;
+        this._resolveNativeSize(desc.sw, desc.sh);
+        return;
+      }
+    }
+    w.get(this.#entity, Renderable).image = v;
+    if (w.hasResource(AssetRegistry)) {
+      const reg = w.getResource(AssetRegistry);
       const asset = reg.get(v);
       if (asset) {
         this._resolveNativeSize(asset.sw, asset.sh);

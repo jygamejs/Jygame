@@ -558,6 +558,19 @@ describe("Constructor Overloading", () => {
     assert.strictEqual(s.width, 50);
     assert.strictEqual(s.height, 60);
   });
+
+  it("new Sprite(imgObject) auto-registers image-like objects", () => {
+    const s = new Sprite();
+    const reg = new AssetRegistry();
+    s.world.setResource(AssetRegistry, reg);
+    const fakeImg = { width: 64, height: 48 };
+
+    s.image = fakeImg;
+    assert.strictEqual(s.image, 1);
+    assert.strictEqual(s.nativeWidth, 64);
+    assert.strictEqual(s.nativeHeight, 48);
+    assert.strictEqual(s.width, 64);
+  });
 });
 
 // ─────────────────────────────────────────────────────────
