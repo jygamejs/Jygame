@@ -610,12 +610,11 @@ describe("CollisionSystem (ECS)", () => {
       assert.strictEqual(hash.queryRect({ left: -10005, right: -9995, top: -10005, bottom: -9995 }).length, 1);
     });
 
-    it("entity with zero-sized collider is inserted", () => {
-      const { world, hash, ids } = setupWorld([{ x: 0, y: 0, w: 0, h: 0 }]);
+    it("entity with zero-sized collider is skipped", () => {
+      const { world, hash } = setupWorld([{ x: 0, y: 0, w: 0, h: 0 }]);
       world.update(16);
       const hits = hash.queryPoint({ x: 0, y: 0 });
-      assert.strictEqual(hits.length, 1);
-      assert.strictEqual(hits[0], ids[0]);
+      assert.strictEqual(hits.length, 0);
     });
   });
 

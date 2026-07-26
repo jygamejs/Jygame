@@ -56,6 +56,7 @@ export class CollisionSystem extends System {
 
         for (let r = 0; r < count; r++) {
           if (!visible[r]) continue;
+          if (cw[r] === 0 || ch[r] === 0) continue;
           spatialHash.insert(table.getEntity(r), tx[r] + (ox?.[r] ?? 0), ty[r] + (oy?.[r] ?? 0), cw[r], ch[r]);
           insertCount++;
         }

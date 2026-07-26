@@ -40,6 +40,7 @@ export class Sprite {
   #world;
   #entity;
   #dead = false;
+  #_hasExplicitCollider = false;
 
   constructor(a, b, c, d, e) {
     if (a && typeof a === "object" && _INTERNAL in a) {
@@ -49,7 +50,7 @@ export class Sprite {
       return;
     }
 
-    let x = 0, y = 0, w = 32, h = 32, image = null, world = undefined;
+    let x = 0, y = 0, w = 0, h = 0, image = null, world = undefined;
     let explicitSize = false;
 
     if (a === undefined) {
@@ -96,6 +97,7 @@ export class Sprite {
 
     const eid = wld.createEntity();
     this.#entity = eid;
+    this.#_hasExplicitCollider = explicitSize;
 
     const defaultSmoothing = wld.hasResource("imageSmoothing.default") ? wld.getResource("imageSmoothing.default") : 1;
 
@@ -162,6 +164,7 @@ export class Sprite {
 
   set collider(v) {
     this._assertAlive();
+    this.#_hasExplicitCollider = true;
     const c = this._getC();
     if (v.width != null) c.width = v.width;
     if (v.height != null) c.height = v.height;
@@ -557,7 +560,29 @@ export class Sprite {
         rb.width = w;
         rb.height = h;
       }
+      this._syncCollider();
     }
+  }
+
+  _syncCollider() {
+    if (this.#_hasExplicitCollider) return;
+    const r = this.#world.get(this.#entity, Renderable);
+    if (r.nativeWidth > 0 && r.nativeHeight > 0) {
+      const c = this._getC();
+      c.width = r.nativeWidth;
+      c.height = r.nativeHeight;
+    }
+  }
+
+  resetCollider() {
+    this._assertAlive();
+    this.#_hasExplicitCollider = false;
+    const c = this._getC();
+    c.width = 0;
+    c.height = 0;
+    c.offsetX = 0;
+    c.offsetY = 0;
+    this._syncCollider();
   }
 
   _resolveFromClip(name, clip) {

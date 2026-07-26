@@ -46,8 +46,8 @@ describe("Construction", () => {
     assert.ok(s instanceof Sprite);
     assert.strictEqual(s.x, 0);
     assert.strictEqual(s.y, 0);
-    assert.strictEqual(s.width, 32);
-    assert.strictEqual(s.height, 32);
+    assert.strictEqual(s.width, 0);
+    assert.strictEqual(s.height, 0);
   });
 
   it("creates a sprite with specified values", () => {
@@ -986,8 +986,8 @@ describe("Constructor Overloading", () => {
     const s = new Sprite();
     assert.strictEqual(s.x, 0);
     assert.strictEqual(s.y, 0);
-    assert.strictEqual(s.width, 32);
-    assert.strictEqual(s.height, 32);
+    assert.strictEqual(s.width, 0);
+    assert.strictEqual(s.height, 0);
     assert.strictEqual(s.nativeWidth, 0);
   });
 
@@ -995,8 +995,8 @@ describe("Constructor Overloading", () => {
     const s = new Sprite(100, 200);
     assert.strictEqual(s.x, 100);
     assert.strictEqual(s.y, 200);
-    assert.strictEqual(s.width, 32);
-    assert.strictEqual(s.height, 32);
+    assert.strictEqual(s.width, 0);
+    assert.strictEqual(s.height, 0);
     assert.strictEqual(s.nativeWidth, 0);
   });
 
@@ -1018,12 +1018,12 @@ describe("Constructor Overloading", () => {
     assert.strictEqual(s.image, 42);
   });
 
-  it("new Sprite(imageAssetId) — image only, default size", () => {
+  it("new Sprite(num) — single numeric arg as x position", () => {
     const s = new Sprite(99);
     assert.strictEqual(s.x, 99);
     assert.strictEqual(s.y, 0);
-    assert.strictEqual(s.width, 32);
-    assert.strictEqual(s.height, 32);
+    assert.strictEqual(s.width, 0);
+    assert.strictEqual(s.height, 0);
   });
 
   it("new Sprite(x, y, w, h, world) — backward compat with world arg", () => {
