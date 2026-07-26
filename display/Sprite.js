@@ -155,6 +155,7 @@ export class Sprite {
     if (v.rotation != null) t.rotation = v.rotation;
     if (v.scaleX != null) t.scaleX = v.scaleX;
     if (v.scaleY != null) t.scaleY = v.scaleY;
+    if (v.scaleX != null || v.scaleY != null) this._syncCollider();
   }
 
   get collider() {
@@ -256,6 +257,7 @@ export class Sprite {
     this._assertAlive();
     const scale = Math.abs(this._getT().scaleX) || 1;
     this._getRB().width = v / scale;
+    this._syncCollider();
   }
 
   get height() {
@@ -266,6 +268,7 @@ export class Sprite {
     this._assertAlive();
     const scale = Math.abs(this._getT().scaleY) || 1;
     this._getRB().height = v / scale;
+    this._syncCollider();
   }
 
   get nativeWidth() {
@@ -566,11 +569,14 @@ export class Sprite {
 
   _syncCollider() {
     if (this.#_hasExplicitCollider) return;
-    const r = this.#world.get(this.#entity, Renderable);
-    if (r.nativeWidth > 0 && r.nativeHeight > 0) {
+    const rb = this._getRB();
+    const t = this._getT();
+    const w = rb.width * Math.abs(t.scaleX);
+    const h = rb.height * Math.abs(t.scaleY);
+    if (w > 0 && h > 0) {
       const c = this._getC();
-      c.width = r.nativeWidth;
-      c.height = r.nativeHeight;
+      c.width = w;
+      c.height = h;
     }
   }
 
@@ -649,6 +655,7 @@ export class Sprite {
       if (v.x != null) t.scaleX = v.x;
       if (v.y != null) t.scaleY = v.y;
     }
+    this._syncCollider();
   }
 
   get style() {
