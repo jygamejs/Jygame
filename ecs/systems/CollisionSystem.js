@@ -49,12 +49,14 @@ export class CollisionSystem extends System {
         const ty = table.getColumn(tid, "y");
         const cw = table.getColumn(cid, "width");
         const ch = table.getColumn(cid, "height");
+        const ox = table.getColumn(cid, "offsetX");
+        const oy = table.getColumn(cid, "offsetY");
         const visible = table.getColumn(vid, "value");
         if (!tx || !ty || !cw || !ch || !visible) continue;
 
         for (let r = 0; r < count; r++) {
           if (!visible[r]) continue;
-          spatialHash.insert(table.getEntity(r), tx[r], ty[r], cw[r], ch[r]);
+          spatialHash.insert(table.getEntity(r), tx[r] + (ox?.[r] ?? 0), ty[r] + (oy?.[r] ?? 0), cw[r], ch[r]);
           insertCount++;
         }
       }

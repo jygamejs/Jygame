@@ -1,4 +1,7 @@
 import { Sprite } from "./Sprite.js";
+import { Transform } from "../ecs/components/Transform.js";
+import { Collider } from "../ecs/components/Collider.js";
+import { Visible } from "../ecs/components/Visible.js";
 import { SpatialHash } from "../collision/SpatialHash.js";
 
 function checkAABB(ax, ay, aw, ah, bx, by, bw, bh) {
@@ -253,7 +256,8 @@ export class Group {
     for (let i = 0; i < items.length; i++) {
       const item = items[i];
       if (!item.visible) continue;
-      h.insert(item.entity, item.transform.x, item.transform.y, item.collider.width, item.collider.height);
+      const c = item.collider;
+      h.insert(item.entity, item.transform.x + (c.offsetX ?? 0), item.transform.y + (c.offsetY ?? 0), c.width, c.height);
     }
   }
 
@@ -276,7 +280,7 @@ export class Group {
       if (!s.visible) return;
       const t = s.transform;
       const c = s.collider;
-      if (checkRect(t.x, t.y, c.width, c.height, rect)) {
+      if (checkRect(t.x + (c.offsetX ?? 0), t.y + (c.offsetY ?? 0), c.width, c.height, rect)) {
         hits.push(s);
       }
     });
@@ -295,7 +299,7 @@ export class Group {
       if (!s.visible) return;
       const t = s.transform;
       const c = s.collider;
-      if (containsPoint(t.x, t.y, c.width, c.height, point)) {
+      if (containsPoint(t.x + (c.offsetX ?? 0), t.y + (c.offsetY ?? 0), c.width, c.height, point)) {
         hits.push(s);
       }
     });
@@ -315,8 +319,7 @@ export class Group {
       if (!s.visible) return;
       const t = s.transform;
       const c = s.collider;
-      const cx2 = t.x, cy2 = t.y;
-      const dx = cx - cx2, dy = cy - cy2;
+      const cx2 = t.x + (c.offsetX ?? 0), cy2 = t.y + (c.offsetY ?? 0);
       const halfW = c.width / 2, halfH = c.height / 2;
       const closestX = Math.max(cx2 - halfW, Math.min(cx, cx2 + halfW));
       const closestY = Math.max(cy2 - halfH, Math.min(cy, cy2 + halfH));
@@ -337,12 +340,14 @@ export class Group {
       if (!a.visible) return;
       const ta = a.transform;
       const ca = a.collider;
+      const ax = ta.x + (ca.offsetX ?? 0), ay = ta.y + (ca.offsetY ?? 0);
       other.forEach(b => {
         if (!b.visible) return;
         if (a.entity != null && b.entity != null && a.entity === b.entity) return;
         const tb = b.transform;
         const cb = b.collider;
-        if (checkAABB(ta.x, ta.y, ca.width, ca.height, tb.x, tb.y, cb.width, cb.height)) {
+        const bx = tb.x + (cb.offsetX ?? 0), by = tb.y + (cb.offsetY ?? 0);
+        if (checkAABB(ax, ay, ca.width, ca.height, bx, by, cb.width, cb.height)) {
           if (isCallback) cbOrOut(a, b);
           else pairs.push([a, b]);
         }
@@ -357,10 +362,11 @@ export class Group {
     if (!sprite.visible) return hits;
     const tA = sprite.transform;
     const cA = sprite.collider;
+    const ax = tA.x + (cA.offsetX ?? 0), ay = tA.y + (cA.offsetY ?? 0);
 
     if (this._spatialHash) {
       this._buildHash();
-      this._resolveIds(this._spatialHash.queryAABB(tA.x, tA.y, cA.width, cA.height, []), hits);
+      this._resolveIds(this._spatialHash.queryAABB(ax, ay, cA.width, cA.height, []), hits);
       return hits;
     }
 
@@ -368,7 +374,8 @@ export class Group {
       if (!s.visible) return;
       const tB = s.transform;
       const cB = s.collider;
-      if (checkAABB(tA.x, tA.y, cA.width, cA.height, tB.x, tB.y, cB.width, cB.height)) {
+      const bx = tB.x + (cB.offsetX ?? 0), by = tB.y + (cB.offsetY ?? 0);
+      if (checkAABB(ax, ay, cA.width, cA.height, bx, by, cB.width, cB.height)) {
         hits.push(s);
       }
     });

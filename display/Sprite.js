@@ -9,6 +9,7 @@ import { RenderBounds } from "../ecs/components/RenderBounds.js";
 import { AnimationClipRegistry } from "../ecs/animation/AnimationClipRegistry.js";
 import { AnimationClip } from "../ecs/animation/AnimationClip.js";
 import { AssetRegistry } from "../ecs/render/AssetRegistry.js";
+import { SpatialHash } from "../collision/SpatialHash.js";
 import { Layer } from "../view/Layer.js";
 
 const _INTERNAL = Symbol("sprite.internal.wrap");
@@ -164,6 +165,8 @@ export class Sprite {
     const c = this._getC();
     if (v.width != null) c.width = v.width;
     if (v.height != null) c.height = v.height;
+    if (v.offsetX != null) c.offsetX = v.offsetX;
+    if (v.offsetY != null) c.offsetY = v.offsetY;
   }
 
   get velocity() {
@@ -367,6 +370,181 @@ export class Sprite {
       };
     }
     return this._boundsApi;
+  }
+
+  get hitbox() {
+    this._assertAlive();
+    if (!this._hitboxApi) {
+      const self = this;
+      this._hitboxApi = {
+        get _t() { return self._getT(); },
+        get _c() { return self._getC(); },
+
+        get x() {
+          const t = this._t, c = this._c;
+          return t.x + (c.offsetX ?? 0) - c.width / 2;
+        },
+        get y() {
+          const t = this._t, c = this._c;
+          return t.y + (c.offsetY ?? 0) - c.height / 2;
+        },
+        get width()   { return this._c.width; },
+        get height()  { return this._c.height; },
+        get left()    { return this.x; },
+        get right()   { return this.x + this.width; },
+        get top()     { return this.y; },
+        get bottom()  { return this.y + this.height; },
+        get centerx() {
+          const t = this._t, c = this._c;
+          return t.x + (c.offsetX ?? 0);
+        },
+        get centery() {
+          const t = this._t, c = this._c;
+          return t.y + (c.offsetY ?? 0);
+        },
+        get center()  { return { x: this.centerx, y: this.centery }; },
+
+        _r(other) {
+          const l = other.left ?? other.x;
+          const t = other.top ?? other.y;
+          return {
+            left: l,
+            right: other.right ?? (l + (other.width ?? other.w ?? 0)),
+            top: t,
+            bottom: other.bottom ?? (t + (other.height ?? other.h ?? 0)),
+          };
+        },
+
+        collides(other) {
+          const r = this._r(other);
+          return this.left < r.right && this.right > r.left
+            && this.top < r.bottom && this.bottom > r.top;
+        },
+
+        overlap(other) {
+          const r = this._r(other);
+          const ix = Math.max(this.left, r.left);
+          const iy = Math.max(this.top, r.top);
+          const iw = Math.min(this.right, r.right) - ix;
+          const ih = Math.min(this.bottom, r.bottom) - iy;
+          if (iw <= 0 || ih <= 0) return null;
+          return { x: ix, y: iy, width: iw, height: ih };
+        },
+
+        contains(point) {
+          return point.x >= this.left && point.x <= this.right
+            && point.y >= this.top && point.y <= this.bottom;
+        },
+      };
+    }
+    return this._hitboxApi;
+  }
+
+  collidesAny(group) {
+    this._assertAlive();
+    if (!this.visible) return null;
+
+    const ta = this._getT(), ca = this._getC();
+    const ax = ta.x + (ca.offsetX ?? 0), ay = ta.y + (ca.offsetY ?? 0);
+
+    // Group with SpatialHash
+    if (group && group._spatialHash) {
+      group._buildHash();
+      const ids = group._spatialHash.queryAABB(ax, ay, ca.width, ca.height, []);
+      for (let i = 0; i < ids.length; i++) {
+        const other = group._getOrWrap(ids[i]);
+        if (other && other !== this && other.visible) return other;
+      }
+      return null;
+    }
+
+    // Array or iterable (forEach, or has .length)
+    const items = Array.isArray(group) ? group : group;
+    if (items.forEach) {
+      let result = null;
+      items.forEach(other => {
+        if (result) return;
+        if (other === this || !other.visible || !other._getC) return;
+        const tb = other._getT(), cb = other._getC();
+        const bx = tb.x + (cb.offsetX ?? 0), by = tb.y + (cb.offsetY ?? 0);
+        if (ax - ca.width / 2 < bx + cb.width / 2
+         && ax + ca.width / 2 > bx - cb.width / 2
+         && ay - ca.height / 2 < by + cb.height / 2
+         && ay + ca.height / 2 > by - cb.height / 2) {
+          result = other;
+        }
+      });
+      return result;
+    }
+
+    return null;
+  }
+
+  distanceTo(other) {
+    this._assertAlive();
+    if (!other) return Infinity;
+    const ta = this._getT();
+    let ox, oy;
+    if (other._getT) {
+      ox = other._getT().x;
+      oy = other._getT().y;
+    } else {
+      ox = other.x ?? 0;
+      oy = other.y ?? 0;
+    }
+    const dx = ta.x - ox;
+    const dy = ta.y - oy;
+    return Math.sqrt(dx * dx + dy * dy);
+  }
+
+  queryNearby(radius) {
+    this._assertAlive();
+    const w = this.#world;
+    if (!w.hasResource(SpatialHash)) return [];
+    const hash = w.getResource(SpatialHash);
+    const ta = this._getT(), ca = this._getC();
+    const cx = ta.x + (ca.offsetX ?? 0);
+    const cy = ta.y + (ca.offsetY ?? 0);
+    const ids = radius != null
+      ? hash.queryCircle(cx, cy, radius, [])
+      : hash.queryAABB(cx, cy, ca.width, ca.height, []);
+    const result = [];
+    for (let i = 0; i < ids.length; i++) {
+      if (ids[i] === this.#entity) continue;
+      result.push(Sprite._wrap(w, ids[i]));
+    }
+    return result;
+  }
+
+  collides(other) {
+    this._assertAlive();
+    if (!other) return false;
+
+    // Sprite-vs-Sprite
+    if (other._getC && other._assertAlive) {
+      try { other._assertAlive(); } catch { return false; }
+      if (!other.visible) return false;
+      const ta = this._getT(), ca = this._getC();
+      const tb = other._getT(), cb = other._getC();
+      const ax = ta.x + (ca.offsetX ?? 0), ay = ta.y + (ca.offsetY ?? 0);
+      const bx = tb.x + (cb.offsetX ?? 0), by = tb.y + (cb.offsetY ?? 0);
+      return ax - ca.width / 2 < bx + cb.width / 2
+          && ax + ca.width / 2 > bx - cb.width / 2
+          && ay - ca.height / 2 < by + cb.height / 2
+          && ay + ca.height / 2 > by - cb.height / 2;
+    }
+
+    // Rect-like object
+    const l = other.left ?? other.x;
+    const t = other.top ?? other.y;
+    const r = other.right ?? (l + (other.width ?? other.w ?? 0));
+    const b = other.bottom ?? (t + (other.height ?? other.h ?? 0));
+
+    const ta2 = this._getT(), ca2 = this._getC();
+    const cx = ta2.x + (ca2.offsetX ?? 0), cy = ta2.y + (ca2.offsetY ?? 0);
+    const hl = cx - ca2.width / 2, hr = cx + ca2.width / 2;
+    const ht = cy - ca2.height / 2, hb = cy + ca2.height / 2;
+    return hl < r && hr > l && ht < b && hb > t;
   }
 
   _resolveNativeSize(w, h) {

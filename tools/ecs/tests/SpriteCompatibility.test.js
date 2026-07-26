@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import * as assert from "node:assert";
 import { Sprite } from "../../../display/Sprite.js";
+import { Group } from "../../../display/Group.js";
 import { World } from "../../../ecs/core/World.js";
 import { Transform } from "../../../ecs/components/Transform.js";
 import { Velocity } from "../../../ecs/components/Velocity.js";
@@ -516,6 +517,339 @@ describe("Bounds", () => {
     const s = new Sprite(0, 0, 32, 32);
     s.destroy();
     assert.throws(() => s.bounds, /destroyed/);
+  });
+});
+
+// ─────────────────────────────────────────────────────────
+// Hitbox / Collider Offset
+// ─────────────────────────────────────────────────────────
+describe("Hitbox / Collider Offset", () => {
+  it("hitbox matches bounds when offset is zero and sizes match", () => {
+    const s = new Sprite(100, 200, 50, 60);
+    assert.strictEqual(s.hitbox.x, s.bounds.x);
+    assert.strictEqual(s.hitbox.y, s.bounds.y);
+    assert.strictEqual(s.hitbox.width, s.bounds.width);
+    assert.strictEqual(s.hitbox.height, s.bounds.height);
+    assert.strictEqual(s.hitbox.centerx, s.bounds.centerx);
+    assert.strictEqual(s.hitbox.centery, s.bounds.centery);
+  });
+
+  it("hitbox center reflects collider offset", () => {
+    const s = new Sprite(100, 200, 50, 60);
+    s.collider = { offsetX: 20, offsetY: 30 };
+    assert.strictEqual(s.hitbox.centerx, s.centerx + 20);
+    assert.strictEqual(s.hitbox.centery, s.centery + 30);
+  });
+
+  it("hitbox edges reflect offset", () => {
+    const s = new Sprite(100, 200, 50, 60);
+    s.collider = { offsetX: 10, offsetY: 20 };
+    // center = 125, 230 → offset to 135, 250 → half extents 25, 30
+    assert.strictEqual(s.hitbox.left, 110);
+    assert.strictEqual(s.hitbox.top, 220);
+    assert.strictEqual(s.hitbox.right, 160);
+    assert.strictEqual(s.hitbox.bottom, 280);
+  });
+
+  it("offset does not affect visual position", () => {
+    const s = new Sprite(100, 200, 50, 60);
+    s.collider = { offsetX: 50, offsetY: 50 };
+    assert.strictEqual(s.x, 100);
+    assert.strictEqual(s.y, 200);
+    assert.strictEqual(s.centerx, 125);
+    assert.strictEqual(s.centery, 230);
+  });
+
+  it("collider setter accepts offsetX/offsetY", () => {
+    const s = new Sprite(0, 0, 32, 32);
+    s.collider = { width: 64, height: 48, offsetX: 10, offsetY: 20 };
+    assert.strictEqual(s.collider.width, 64);
+    assert.strictEqual(s.collider.height, 48);
+    assert.strictEqual(s.collider.offsetX, 10);
+    assert.strictEqual(s.collider.offsetY, 20);
+  });
+
+  it("collider offset persists through ECS readback", () => {
+    const s = new Sprite(0, 0, 32, 32);
+    s.collider = { offsetX: 15, offsetY: 25 };
+    const raw = s.world.get(s.entity, Collider);
+    assert.strictEqual(raw.offsetX, 15);
+    assert.strictEqual(raw.offsetY, 25);
+  });
+
+  it("hitbox stays live after collider mutation", () => {
+    const s = new Sprite(0, 0, 100, 100);
+    s.collider = { offsetX: 10, offsetY: 20, width: 50, height: 60 };
+    assert.strictEqual(s.hitbox.width, 50);
+    assert.strictEqual(s.hitbox.height, 60);
+    assert.strictEqual(s.hitbox.centerx, s.centerx + 10);
+    assert.strictEqual(s.hitbox.centery, s.centery + 20);
+  });
+
+  it("collides works with hitbox offset", () => {
+    const a = new Sprite(0, 0, 100, 100);
+    const b = new Sprite(60, 60, 100, 100);
+    // Without offset, a and b overlap visually (center 50,50 vs 110,110)
+    // With offset, b's hitbox can shift away
+    b.collider = { offsetX: 100, offsetY: 100 };
+    assert.strictEqual(a.hitbox.collides(b.hitbox), false);
+  });
+
+  it("same hitbox instance on repeated access", () => {
+    const s = new Sprite(0, 0, 32, 32);
+    assert.strictEqual(s.hitbox, s.hitbox);
+  });
+
+  it("hitbox throws after destroy", () => {
+    const s = new Sprite(0, 0, 32, 32);
+    s.destroy();
+    assert.throws(() => s.hitbox, /destroyed/);
+  });
+});
+
+// ─────────────────────────────────────────────────────────
+// Sprite.collides
+// ─────────────────────────────────────────────────────────
+describe("Sprite.collides", () => {
+  it("overlapping sprites return true", () => {
+    const a = new Sprite(0, 0, 100, 100);
+    const b = new Sprite(50, 50, 100, 100);
+    assert.strictEqual(a.collides(b), true);
+    assert.strictEqual(b.collides(a), true);
+  });
+
+  it("separated sprites return false", () => {
+    const a = new Sprite(0, 0, 100, 100);
+    const b = new Sprite(200, 200, 100, 100);
+    assert.strictEqual(a.collides(b), false);
+  });
+
+  it("edge-touching sprites return false (strict AABB)", () => {
+    const a = new Sprite(0, 0, 100, 100);
+    const b = new Sprite(100, 100, 100, 100);
+    assert.strictEqual(a.collides(b), false);
+  });
+
+  it("invisible other returns false", () => {
+    const a = new Sprite(0, 0, 100, 100);
+    const b = new Sprite(50, 50, 100, 100);
+    b.visible = false;
+    assert.strictEqual(a.collides(b), false);
+  });
+
+  it("destroyed other returns false", () => {
+    const a = new Sprite(0, 0, 100, 100);
+    const b = new Sprite(50, 50, 100, 100);
+    b.destroy();
+    assert.strictEqual(a.collides(b), false);
+  });
+
+  it("null/undefined other returns false", () => {
+    const a = new Sprite(0, 0, 100, 100);
+    assert.strictEqual(a.collides(null), false);
+    assert.strictEqual(a.collides(undefined), false);
+  });
+
+  it("collides accepts Rect-like object", () => {
+    const s = new Sprite(50, 50, 100, 100);
+    assert.strictEqual(s.collides({ x: 0, y: 0, width: 200, height: 200 }), true);
+    assert.strictEqual(s.collides({ x: 200, y: 200, width: 50, height: 50 }), false);
+  });
+
+  it("collides respects collider offset", () => {
+    const a = new Sprite(0, 0, 100, 100);
+    const b = new Sprite(60, 60, 100, 100);
+    // Without offset, these overlap (centers 50,50 vs 110,110 → half-extents 50)
+    assert.strictEqual(a.collides(b), true);
+    // With offset, b's collider moves away
+    b.collider = { offsetX: 100, offsetY: 100 };
+    assert.strictEqual(a.collides(b), false);
+  });
+
+  it("collides with self returns true", () => {
+    const s = new Sprite(0, 0, 100, 100);
+    assert.strictEqual(s.collides(s), true);
+  });
+
+  it("collides throws after destroy", () => {
+    const s = new Sprite(0, 0, 32, 32);
+    s.destroy();
+    assert.throws(() => s.collides(new Sprite()), /destroyed/);
+  });
+});
+
+// ─────────────────────────────────────────────────────────
+// Sprite.collidesAny
+// ─────────────────────────────────────────────────────────
+describe("Sprite.collidesAny", () => {
+  it("returns null for empty group", () => {
+    const s = new Sprite(0, 0, 100, 100);
+    assert.strictEqual(s.collidesAny(new Group()), null);
+  });
+
+  it("returns matching sprite from group", () => {
+    const s = new Sprite(0, 0, 100, 100);
+    const target = new Sprite(50, 50, 100, 100);
+    const group = new Group();
+    group.add(new Sprite(500, 500, 10, 10));
+    group.add(target);
+    group.add(new Sprite(600, 600, 10, 10));
+    assert.strictEqual(s.collidesAny(group), target);
+  });
+
+  it("returns null when no match in group", () => {
+    const s = new Sprite(0, 0, 100, 100);
+    const group = new Group();
+    group.add(new Sprite(500, 500, 10, 10));
+    group.add(new Sprite(600, 600, 10, 10));
+    assert.strictEqual(s.collidesAny(group), null);
+  });
+
+  it("skips self in group", () => {
+    const s = new Sprite(0, 0, 100, 100);
+    const group = new Group();
+    group.add(s);
+    group.add(new Sprite(500, 500, 10, 10));
+    assert.strictEqual(s.collidesAny(group), null);
+  });
+
+  it("works with plain array", () => {
+    const s = new Sprite(0, 0, 100, 100);
+    const target = new Sprite(50, 50, 100, 100);
+    const arr = [new Sprite(500, 500, 10, 10), target];
+    assert.strictEqual(s.collidesAny(arr), target);
+  });
+
+  it("skips invisible sprites in group", () => {
+    const s = new Sprite(0, 0, 100, 100);
+    const target = new Sprite(50, 50, 100, 100);
+    target.visible = false;
+    const group = new Group();
+    group.add(target);
+    assert.strictEqual(s.collidesAny(group), null);
+  });
+
+  it("invisible caller returns null", () => {
+    const s = new Sprite(0, 0, 100, 100);
+    s.visible = false;
+    const target = new Sprite(50, 50, 100, 100);
+    const group = new Group();
+    group.add(target);
+    assert.strictEqual(s.collidesAny(group), null);
+  });
+
+  it("works with SpatialHash-backed group", () => {
+    const s = new Sprite(0, 0, 100, 100);
+    const target = new Sprite(50, 50, 100, 100);
+    const group = new Group(s.world);
+    group.useSpatialHash();
+    group.add(new Sprite(500, 500, 10, 10));
+    group.add(target);
+    const hit = s.collidesAny(group);
+    assert.ok(hit);
+    assert.strictEqual(hit.entity, target.entity);
+  });
+});
+
+// ─────────────────────────────────────────────────────────
+// Sprite.queryNearby
+// ─────────────────────────────────────────────────────────
+describe("Sprite.queryNearby", () => {
+  function setupWorld() {
+    const world = new World();
+    for (const c of ALL_COMPONENTS) world.register(c);
+    const queue = new RenderQueue();
+    world.setResource(RenderQueue, queue);
+    world.setResource(CanvasContext, mockCtx());
+    const hash = new SpatialHash(64);
+    world.setResource(SpatialHash, hash);
+    world.addSystem(new CollisionSystem());
+    Sprite.setDefaultWorld(world);
+    return world;
+  }
+
+  it("returns empty array when no SpatialHash resource", () => {
+    const s = new Sprite(0, 0, 100, 100);
+    assert.deepStrictEqual(s.queryNearby(), []);
+  });
+
+  it("finds overlapping sprite without radius", () => {
+    const world = setupWorld();
+    const a = new Sprite(0, 0, 100, 100);
+    const b = new Sprite(50, 50, 100, 100);
+    world.update(16);
+    const hits = a.queryNearby();
+    assert.strictEqual(hits.length, 1);
+    assert.strictEqual(hits[0].entity, b.entity);
+  });
+
+  it("returns empty when no nearby sprites", () => {
+    const world = setupWorld();
+    const a = new Sprite(0, 0, 100, 100);
+    new Sprite(500, 500, 100, 100);
+    world.update(16);
+    assert.strictEqual(a.queryNearby().length, 0);
+  });
+
+  it("finds sprites within radius", () => {
+    const world = setupWorld();
+    const a = new Sprite(0, 0, 100, 100);
+    const b = new Sprite(80, 80, 10, 10);
+    world.update(16);
+    const hits = a.queryNearby(150);
+    assert.strictEqual(hits.length, 1);
+    assert.strictEqual(hits[0].entity, b.entity);
+  });
+
+  it("excludes self from results", () => {
+    const world = setupWorld();
+    const a = new Sprite(0, 0, 100, 100);
+    world.update(16);
+    const hits = a.queryNearby();
+    assert.strictEqual(hits.length, 0);
+  });
+
+  it("excludes sprites outside radius", () => {
+    const world = setupWorld();
+    const a = new Sprite(0, 0, 100, 100);
+    new Sprite(500, 500, 100, 100);
+    world.update(16);
+    const hits = a.queryNearby(50);
+    assert.strictEqual(hits.length, 0);
+  });
+});
+
+// ─────────────────────────────────────────────────────────
+// Sprite.distanceTo
+// ─────────────────────────────────────────────────────────
+describe("Sprite.distanceTo", () => {
+  it("returns distance between two sprites", () => {
+    const a = new Sprite(0, 0, 100, 100);
+    const b = new Sprite(300, 0, 100, 100);
+    assert.strictEqual(a.distanceTo(b), 300);
+  });
+
+  it("returns distance to a point", () => {
+    const s = new Sprite(0, 0, 100, 100);
+    assert.strictEqual(s.distanceTo({ x: 50, y: 0 }), 50);
+  });
+
+  it("distance from self is 0", () => {
+    const s = new Sprite(0, 0, 100, 100);
+    assert.strictEqual(s.distanceTo(s), 0);
+  });
+
+  it("handles null/undefined as Infinity", () => {
+    const s = new Sprite(0, 0, 100, 100);
+    assert.strictEqual(s.distanceTo(null), Infinity);
+    assert.strictEqual(s.distanceTo(undefined), Infinity);
+  });
+
+  it("distance is center-to-center (not top-left)", () => {
+    const a = new Sprite(0, 0, 100, 100);
+    const b = new Sprite(100, 0, 100, 100);
+    // centers: (50, 50) and (150, 50) → distance 100
+    assert.strictEqual(a.distanceTo(b), 100);
   });
 });
 
