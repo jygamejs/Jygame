@@ -752,6 +752,10 @@ export class Sprite {
         return new AnimationClip({ frames: ids, fps: clip.fps, loop: clip.loop });
       },
 
+      _clipKey(name) {
+        return `${self.#entity}:${name}`;
+      },
+
       add(name, clip) {
         if (!self._animMap) self._animMap = new Map();
         const w = self.#world;
@@ -759,7 +763,8 @@ export class Sprite {
         self._animMap.set(name, assetClip);
         if (w && w.hasResource(AnimationClipRegistry)) {
           const reg = w.getResource(AnimationClipRegistry);
-          if (!reg.has(name)) reg.register(name, assetClip);
+          const key = this._clipKey(name);
+          if (!reg.has(key)) reg.register(key, assetClip);
         }
         return this;
       },
@@ -774,7 +779,10 @@ export class Sprite {
         for (const [name, clip] of Object.entries(animations)) {
           const assetClip = this._toAssetClip(clip);
           self._animMap.set(name, assetClip);
-          if (reg && !reg.has(name)) reg.register(name, assetClip);
+          if (reg) {
+            const key = this._clipKey(name);
+            if (!reg.has(key)) reg.register(key, assetClip);
+          }
         }
         return this;
       },
@@ -788,7 +796,8 @@ export class Sprite {
           const w = self.#world;
           if (w && w.hasResource(AnimationClipRegistry)) {
             const reg = w.getResource(AnimationClipRegistry);
-            const id = reg.getId(name);
+            const key = this._clipKey(name);
+            const id = reg.getId(key) ?? reg.getId(name);
             if (id !== null) comp.clipId = id;
           }
           self._resolveFromClip(name, map.get(name));
@@ -807,7 +816,8 @@ export class Sprite {
           const w = self.#world;
           if (w && w.hasResource(AnimationClipRegistry)) {
             const reg = w.getResource(AnimationClipRegistry);
-            const id = reg.getId(name);
+            const key = this._clipKey(name);
+            const id = reg.getId(key) ?? reg.getId(name);
             if (id !== null) comp.clipId = id;
           }
           self._resolveFromClip(name, map.get(name));
