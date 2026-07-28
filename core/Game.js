@@ -94,6 +94,7 @@ export class Game {
       const debugCtx = new ActionInputContext("jygame-debug", this._debugActionMap, { priority: -100 });
       this.inputSystem.contextStack.push(debugCtx);
       enableDebugWorkspace(this);
+      this._debugOverlay = new OverlayHost(this);
     }
 
     this._visibilityHandler = null;

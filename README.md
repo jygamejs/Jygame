@@ -229,6 +229,8 @@ Full API reference, guides, and examples: [jygame-documentation.vercel.app](http
 
 The debug system is enabled by default (`debug: true` in the Game constructor). Press **Ctrl+F3** at any time to open the standalone debug workspace in a new window — it displays real-time frame metrics, a system timeline, metric browser, event log, and capture viewer.
 
+Press backtick (`` ` ``) to toggle the in-game overlay, or call `game.debug.show()` programmatically.
+
 To disable all debug overhead for production builds, pass `debug: false` to the Game constructor:
 
 ```js
