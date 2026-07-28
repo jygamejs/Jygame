@@ -21,7 +21,7 @@ import { OverlayHost } from "../debug/overlay/OverlayHost.js";
 import { enableDebugWorkspace, takeDebugSnapshot } from "../debug/EnableDebugWorkspace.js";
 
 export class Game {
-  constructor({ parent, width, height, fps = 60, maxTicks = 5, autoPause = true, scaleToFit = null, debug = true, interpolation = true, imageSmoothing = true }) {
+  constructor({ parent, width = 800, height = 600, fps = 60, maxTicks = 5, autoPause = true, scaleToFit = null, debug = true, interpolation = true, imageSmoothing = true }) {
     const container = typeof parent === "string"
       ? document.querySelector(parent)
       : document.body;

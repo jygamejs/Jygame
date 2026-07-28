@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Pause / Scene Stack Demo</title>
+  <style>
+    body { margin: 0; background: #111; display: flex; justify-content: center; align-items: center; height: 100vh; }
+  </style>
+</head>
+<body>
+<script type="importmap">
+{
+  "imports": { "jygame": "./jygame.js" }
+}
+</script>
+<script type="module">
+import { Game, Scene, Sprite, ActionKind, CompositeBinding, KeyBinding, KeyCode } from "jygame";
+
+// ─────────────────────────────────────────────
+// GameScene — main gameplay
+// ─────────────────────────────────────────────
+class GameScene extends Scene {
+  onEnter() {
+    this.player = new Sprite(400, 300, 48, 48);
+    this.player.renderable.fillColor = 0x44cc44;
+
+    this.box = new Sprite(600, 200, 48, 48);
+    this.box.renderable.fillColor = 0xcc4444;
+
+    this.escCount = 0;
+    this.pauseToggled = false;
+
+    // WASD movement
+    const move = new CompositeBinding(ActionKind.VECTOR2, [
+      { binding: new KeyBinding(KeyCode.KEY_D),        vector: [ 1,  0] },
+      { binding: new KeyBinding(KeyCode.KEY_A),        vector: [-1,  0] },
+      { binding: new KeyBinding(KeyCode.KEY_W),        vector: [ 0, -1] },
+      { binding: new KeyBinding(KeyCode.KEY_S),        vector: [ 0,  1] },
+    ]);
+    this._actionMap.bind("move", move, ActionKind.VECTOR2);
+
+    // Escape = push pause scene (scene stack blocks updates below)
+    this._actionMap.bind("esc", new KeyBinding(KeyCode.ESCAPE), ActionKind.DIGITAL);
+
+    // P = toggle game pause independently
+    this._actionMap.bind("pauseToggle", new KeyBinding(KeyCode.KEY_P), ActionKind.DIGITAL);
+  }
+
+  update(dt) {
+    const m = this._actionMap.getState("move")?.vector;
+    if (m && (m.x || m.y)) {
+      this.player.velocity.x = m.x * 250;
+      this.player.velocity.y = m.y * 250;
+    } else {
+      this.player.velocity.x = 0;
+      this.player.velocity.y = 0;
+    }
+
+    const esc = this._actionMap.getState("esc");
+    if (esc && esc.justPressed) {
+      this.escCount++;
+      this.pushScene(new PauseScene());
+    }
+
+    const p = this._actionMap.getState("pauseToggle");
+    if (p && p.justPressed) {
+      this.pauseToggled = !this.pauseToggled;
+      this.game.togglePause();
+    }
+  }
+
+  render(ctx) {
+    ctx.save();
+    ctx.font = "14px monospace";
+    ctx.fillStyle = "#aaa";
+    ctx.fillText("WASD = move green square", 10, 20);
+    ctx.fillText("ESC = push pause scene (scene stack)", 10, 40);
+    ctx.fillText("P = toggle game pause (game.togglePause)", 10, 60);
+    ctx.fillText(`Scene stack depth: ${this.game.sceneCount}`, 10, 80);
+    ctx.fillText(`Game paused: ${this.game.isPaused}`, 10, 100);
+    ctx.fillText(`Pause scene pushed: ${this.escCount}`, 10, 120);
+    ctx.restore();
+  }
+}
+
+// ─────────────────────────────────────────────
+// PauseScene — overlay on top
+// ─────────────────────────────────────────────
+class PauseScene extends Scene {
+  onEnter() {
+    this.blocksUpdateBelow = true;   // game scene below stops updating
+    this.blocksRenderBelow = false;  // game scene still visible underneath
+    this._actionMap.bind("resume", new KeyBinding(KeyCode.ESCAPE), ActionKind.DIGITAL);
+  }
+
+  update(dt) {
+    const r = this._actionMap.getState("resume");
+    if (r && r.justPressed) {
+      this.popScene();
+    }
+  }
+
+  render(ctx) {
+    ctx.save();
+    ctx.fillStyle = "rgba(0,0,0,0.4)";
+    ctx.fillRect(0, 0, this.game.width, this.game.height);
+
+    ctx.font = "bold 48px monospace";
+    ctx.fillStyle = "#fff";
+    ctx.textAlign = "center";
+    ctx.fillText("PAUSED", this.game.width / 2, this.game.height / 2 - 10);
+
+    ctx.font = "16px monospace";
+    ctx.fillStyle = "#ccc";
+    ctx.fillText("ESC = resume", this.game.width / 2, this.game.height / 2 + 40);
+    ctx.restore();
+  }
+}
+
+// ─────────────────────────────────────────────
+// Run
+// ─────────────────────────────────────────────
+const game = new Game({ width: 800, height: 600, debug: false });
+game.run(new GameScene());
+</script>
+</body>
+</html>

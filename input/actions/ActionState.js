@@ -8,13 +8,14 @@ export class ActionState {
     this._vector = { x: 0, y: 0 };
     this._prevVector = { x: 0, y: 0 };
     this._bufferTimer = 0;
+    this._cycle = 0;
   }
 
   get kind() { return this._kind; }
 
   get pressed() { return this._strength > 0; }
-  get justPressed() { return this._strength > 0 && this._prevStrength <= 0; }
-  get justReleased() { return this._strength <= 0 && this._prevStrength > 0; }
+  get justPressed() { return this._cycle >= 2 && this._strength > 0 && this._prevStrength <= 0; }
+  get justReleased() { return this._cycle >= 2 && this._strength <= 0 && this._prevStrength > 0; }
 
   get strength() { return this._kind === ActionKind.DIGITAL ? (this._strength > 0 ? 1 : 0) : this._strength; }
 
@@ -49,6 +50,7 @@ export class ActionState {
   }
 
   _update(strength, vector) {
+    if (this._cycle < 2) this._cycle++;
     this._strength = Math.max(0, Math.min(1, strength));
     if (vector) {
       this._vector.x = vector.x;
