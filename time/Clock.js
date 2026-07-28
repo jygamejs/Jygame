@@ -35,11 +35,12 @@ export class Clock {
   tick(realDt) {
     this._accumulator += Math.min(realDt, this._maxDelta);
     let count = 0;
-    while (this._accumulator >= this._fixedDt && count < this._maxTicks) {
+    const cap = this._maxTicks > 0 ? this._maxTicks : Infinity;
+    while (this._accumulator >= this._fixedDt && count < cap) {
       this._accumulator -= this._fixedDt;
       count++;
     }
-    if (count >= this._maxTicks) {
+    if (this._maxTicks > 0 && count >= this._maxTicks) {
       this._accumulator = 0;
     }
     return count;
