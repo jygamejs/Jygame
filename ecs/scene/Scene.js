@@ -38,9 +38,12 @@ export class Scene {
 
   _renderWorld(ctx) {}
 
+  renderBackground(ctx) {}
+
   render(ctx) {}
 
   _renderFrame(ctx) {
+    this.renderBackground(ctx);
     this._renderWorld(ctx);
     this.render(ctx);
   }

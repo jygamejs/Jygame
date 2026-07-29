@@ -280,6 +280,10 @@ export class Scene extends EcsScene {
     }
   }
 
+  renderBackground(ctx) {
+    // user-overridable hook — runs before _renderWorld (behind all entities)
+  }
+
   render(ctx) {
     // user-overridable overlay hook — runs after _renderWorld
   }

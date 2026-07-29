@@ -47,14 +47,12 @@ class GameScene extends Scene {
   }
 
   update(dt) {
-    const m = this._actionMap.getState("move")?.vector;
-    if (m && (m.x || m.y)) {
-      this.player.velocity.x = m.x * 250;
-      this.player.velocity.y = m.y * 250;
-    } else {
-      this.player.velocity.x = 0;
-      this.player.velocity.y = 0;
-    }
+    const speed = 350;
+    const state = this._actionMap.getState("move");
+    if (!state) return;
+    const m = state.vector;
+    this.player.velocity.x = m.x * speed;
+    this.player.velocity.y = m.y * speed;
 
     const esc = this._actionMap.getState("esc");
     if (esc && esc.justPressed) {
