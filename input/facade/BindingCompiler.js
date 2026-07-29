@@ -75,7 +75,6 @@ export class BindingCompiler {
     });
     map.bind(name, chord, ActionKind.DIGITAL);
   }
-}
 
   _compileString(map, name, str, add = false) {
     const upper = str.toUpperCase();
