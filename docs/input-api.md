@@ -10,8 +10,8 @@
 | `Input.value(name)` | `number` | Analog strength (0–1 for digital, raw for analog) |
 | `Input.axis(name)` | `{x, y}` | 2D directional vector for VECTOR2 actions |
 
-All methods accept action names (e.g. `"move"`, `"jump"`) or raw key/button strings
-(e.g. `"W"`, `"SPACE"`, `"MOUSE_LEFT"`). Strings are case-insensitive.
+All methods accept action names (e.g. `"move"`, `"jump"`) or raw key/button/gesture strings
+(e.g. `"W"`, `"SPACE"`, `"MOUSE_LEFT"`, `"TAP"`). Strings are case-insensitive.
 
 ## Binding Methods
 
@@ -32,7 +32,7 @@ All methods accept action names (e.g. `"move"`, `"jump"`) or raw key/button stri
 | `Input.touch` | `TouchFacade` | Touch-specific contacts |
 | `Input.wheel` | `number` | Scroll wheel delta this frame |
 | `Input.wheelX` | `number` | Horizontal scroll wheel delta |
-| `Input.raw` | `object|null` | Direct access to engine internals (`devices`, `contextStack`, `events`, `backend`, `coordinateSystem`) |
+| `Input.raw` | `object|null` | Direct access to engine internals (`devices`, `contextStack`, `events`, `backend`, `coordinateSystem`, `actionMap`) |
 
 ## PointerFacade (`Input.pointer`)
 
@@ -43,8 +43,8 @@ All methods accept action names (e.g. `"move"`, `"jump"`) or raw key/button stri
 | `.worldX` | `number` | World-space X (via CoordinateSystem) |
 | `.worldY` | `number` | World-space Y |
 | `.down` | `boolean` | Primary pointer button held |
-| `.justPressed` | `boolean` | Primary pointer just pressed |
-| `.justReleased` | `boolean` | Primary pointer just released |
+| `.pressed` | `boolean` | Primary pointer just pressed |
+| `.released` | `boolean` | Primary pointer just released |
 | `.deltaX` | `number` | Movement delta X this frame |
 | `.deltaY` | `number` | Movement delta Y this frame |
 | `.pressure` | `number` | Pointer pressure (0–1) |
@@ -54,10 +54,10 @@ All methods accept action names (e.g. `"move"`, `"jump"`) or raw key/button stri
 | Property | Type | Description |
 |----------|------|-------------|
 | `.count` | `number` | Number of active touch contacts |
-| `.contacts` | `array` | All touch contacts with `{id, x, y, down, justPressed, justReleased, pressure}` |
+| `.contacts` | `array` | All touch contacts with `{id, x, y, down, pressed, released, pressure}` |
 | `.primary` | `object|null` | First touch contact (same shape as contact), or `null` |
 
-## Event Methods
+## Event Methods (legacy)
 
 | Method | Returns | Description |
 |--------|---------|-------------|
@@ -65,6 +65,8 @@ All methods accept action names (e.g. `"move"`, `"jump"`) or raw key/button stri
 | `Input.onTap(cb)` | `function` (teardown) | Register a tap callback |
 | `Input.removeSwipe(cb)` | — | Remove a swipe callback |
 | `Input.removeTap(cb)` | — | Remove a tap callback |
+
+Prefer using gesture bindings instead of callbacks (see Gesture Bindings below).
 
 ## Internal / Engine Methods
 
@@ -105,9 +107,9 @@ These emit a one-time console warning.
 | `Input.resetKeyMap()` | `Input.unbind()` |
 | `Input.getKeyMap()` | `Input.bindings()` |
 
-## Raw Key Strings
+## Raw Key / Button / Gesture Strings
 
-Every query method accepts raw key/button strings without any setup:
+Every query method accepts raw strings without any setup:
 
 ```
 Letters:     "A"–"Z"
@@ -120,13 +122,16 @@ Special:     "SPACE", "ENTER", "TAB", "ESCAPE", "BACKSPACE", "DELETE"
 F-keys:      "F1"–"F24"
 Numpad:      "NUMPAD0"–"NUMPAD9"
 Mouse:       "MOUSE_LEFT", "MOUSE_RIGHT", "MOUSE_MIDDLE", "MOUSE_BACK", "MOUSE_FORWARD"
+Gestures:    "TAP", "DOUBLE_TAP", "LONG_PRESS", "DRAG", "SWIPE",
+             "SWIPE_LEFT", "SWIPE_RIGHT", "SWIPE_UP", "SWIPE_DOWN",
+             "PINCH", "ROTATE", "PAN"
 ```
 
-These work without any setup: `Input.down("W")`, `Input.pressed("SPACE")`, etc.
+These work without any setup: `Input.down("W")`, `Input.pressed("SPACE")`, `Input.pressed("TAP")`, etc.
 
 ## Declarative Scene Bindings
 
-Set `input` as a class field on a Scene subclass:
+Set `input` as a class field on a Scene subclass (read during initialization only):
 
 ```js
 class MyScene extends Scene {
@@ -134,11 +139,13 @@ class MyScene extends Scene {
     move: { up: "W", down: "S", left: "A", right: "D" },
     jump: "SPACE",
     shoot: "MOUSE_LEFT",
+    back: "SWIPE_RIGHT",
+    zoom: "PINCH",
   }
 }
 ```
 
-Suported binding shapes:
+Supported binding shapes:
 
 | Shape | Result |
 |-------|--------|
@@ -146,10 +153,43 @@ Suported binding shapes:
 | `shoot: ["MOUSE_LEFT", "SPACE"]` | Multiple keys, same action (OR) |
 | `move: { up: "W", down: "S", left: "A", right: "D" }` | VECTOR2 axis |
 | `save: { key: "S", ctrl: true }` | Chord (Ctrl+S) |
+| `back: "SWIPE_RIGHT"` | Gesture binding (digital) |
+| `zoom: "PINCH"` | Gesture binding (analog — scale value) |
+| `cam: "PAN"` | Gesture binding (VECTOR2 — delta) |
 
-Dynamic rebinding works by reassigning on the scene:
+The `input` object is static configuration. It is read once during scene initialization.
+For runtime rebinding, use `Input.bind()`:
 
 ```js
-this.input.jump = "SHIFT";       // recompiles the "jump" action
-this.input.newAction = "F";      // recompiles all actions
+Input.bind("jump", "SHIFT");
+Input.addBinding("jump", "GAMEPAD_A");
+Input.removeBinding("jump", "SPACE");
+```
+
+## Gesture Bindings
+
+Gestures integrate into the same polling API as keyboard and mouse.
+
+| Gesture | Type | Query | Description |
+|---------|------|-------|-------------|
+| `"TAP"` | digital | `Input.pressed("TAP")` | Quick tap |
+| `"DOUBLE_TAP"` | digital | `Input.pressed("DOUBLE_TAP")` | Two rapid taps |
+| `"LONG_PRESS"` | digital | `Input.down("LONG_PRESS")` | Hold down |
+| `"SWIPE"` | digital | `Input.pressed("SWIPE")` | Any-direction swipe |
+| `"SWIPE_LEFT"` | digital | `Input.pressed("SWIPE_LEFT")` | Leftward swipe |
+| `"SWIPE_RIGHT"` | digital | `Input.pressed("SWIPE_RIGHT")` | Rightward swipe |
+| `"SWIPE_UP"` | digital | `Input.pressed("SWIPE_UP")` | Upward swipe |
+| `"SWIPE_DOWN"` | digital | `Input.pressed("SWIPE_DOWN")` | Downward swipe |
+| `"PINCH"` | analog | `Input.value("PINCH")` | Pinch scale factor |
+| `"ROTATE"` | digital | `Input.pressed("ROTATE")` | Rotation gesture |
+| `"PAN"` | vector2 | `Input.axis("PAN")` | Pan delta as `{x, y}` |
+| `"DRAG"` | vector2 | `Input.axis("DRAG")` | Drag delta as `{x, y}` |
+
+Example usage:
+
+```js
+if (Input.pressed("TAP")) { fire(); }
+if (Input.pressed("SWIPE_RIGHT")) { nextPage(); }
+const zoom = Input.value("PINCH");
+const pan = Input.axis("PAN");
 ```

@@ -10,6 +10,7 @@ import { PointerManager } from "../input/PointerManager.js";
 import { TouchSurface } from "../input/TouchSurface.js";
 import { Stylus } from "../input/Stylus.js";
 import { TextInput } from "../input/TextInput.js";
+import { GestureEngine } from "../input/GestureEngine.js";
 import { ActionMap } from "../input/actions/ActionMap.js";
 import { ChordBinding } from "../input/actions/ChordBinding.js";
 import { KeyCode } from "../input/KeyCode.js";
@@ -84,6 +85,7 @@ export class Game {
     this.inputSystem.devices.register(new TouchSurface());
     this.inputSystem.devices.register(new Stylus());
     this.inputSystem.devices.register(new TextInput());
+    this.inputSystem.devices.register(new GestureEngine(this.inputSystem.devices.get(PointerManager)));
 
     // Wire the new Input facade
     Input.setSystem(this.inputSystem);

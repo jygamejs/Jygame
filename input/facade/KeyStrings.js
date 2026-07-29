@@ -1,8 +1,10 @@
 import { KeyCode } from "../KeyCode.js";
 import { MouseButton } from "../MouseButton.js";
+import { GestureType } from "../GestureType.js";
 
 const STRING_TO_KEYCODE = new Map();
 const STRING_TO_MOUSE = new Map();
+const STRING_TO_GESTURE = new Map();
 
 function addKey(str, code) {
   const upper = str.toUpperCase();
@@ -112,6 +114,23 @@ addMouse("MOUSE_MIDDLE", MouseButton.MIDDLE);
 addMouse("MOUSE_BACK", MouseButton.BACK);
 addMouse("MOUSE_FORWARD", MouseButton.FORWARD);
 
+function addGesture(str, type, options = {}) {
+  STRING_TO_GESTURE.set(str.toUpperCase(), { type, options });
+}
+
+addGesture("TAP", GestureType.TAP);
+addGesture("DOUBLE_TAP", GestureType.DOUBLE_TAP);
+addGesture("LONG_PRESS", GestureType.LONG_PRESS);
+addGesture("DRAG", GestureType.DRAG);
+addGesture("SWIPE", GestureType.SWIPE);
+addGesture("SWIPE_LEFT", GestureType.SWIPE, { direction: "left" });
+addGesture("SWIPE_RIGHT", GestureType.SWIPE, { direction: "right" });
+addGesture("SWIPE_UP", GestureType.SWIPE, { direction: "up" });
+addGesture("SWIPE_DOWN", GestureType.SWIPE, { direction: "down" });
+addGesture("PINCH", GestureType.PINCH);
+addGesture("ROTATE", GestureType.ROTATE);
+addGesture("PAN", GestureType.PAN);
+
 export function resolveKeyCode(str) {
   if (!str) return null;
   return STRING_TO_KEYCODE.get(str.toUpperCase()) ?? null;
@@ -122,7 +141,17 @@ export function resolveMouseButton(str) {
   return STRING_TO_MOUSE.get(str.toUpperCase()) ?? null;
 }
 
+export function resolveGesture(str) {
+  if (!str) return null;
+  return STRING_TO_GESTURE.get(str.toUpperCase()) ?? null;
+}
+
 export function isKeyName(str) {
   if (!str) return false;
   return STRING_TO_KEYCODE.has(str.toUpperCase()) || STRING_TO_MOUSE.has(str.toUpperCase());
+}
+
+export function isGestureName(str) {
+  if (!str) return false;
+  return STRING_TO_GESTURE.has(str.toUpperCase());
 }

@@ -1,9 +1,12 @@
 import { ActionKind } from "../ActionKind.js";
 import { ActionMap } from "../actions/ActionMap.js";
 import { KeyBinding } from "../actions/KeyBinding.js";
+import { MouseButtonBinding } from "../actions/MouseButtonBinding.js";
+import { GestureBinding } from "../actions/GestureBinding.js";
 import { ChordBinding } from "../actions/ChordBinding.js";
 import { CompositeBinding } from "../actions/CompositeBinding.js";
-import { resolveKeyCode } from "./KeyStrings.js";
+import { GestureType } from "../GestureType.js";
+import { resolveKeyCode, resolveMouseButton, resolveGesture } from "./KeyStrings.js";
 
 export class BindingCompiler {
   compile(bindings) {
@@ -19,8 +22,7 @@ export class BindingCompiler {
 
   _compileOne(map, name, binding) {
     if (typeof binding === "string") {
-      const kb = new KeyBinding(resolveKeyCode(binding));
-      map.bind(name, kb, ActionKind.DIGITAL);
+      this._compileString(map, name, binding);
       return;
     }
 
@@ -28,12 +30,11 @@ export class BindingCompiler {
       let first = true;
       for (const item of binding) {
         if (typeof item === "string") {
-          const kb = new KeyBinding(resolveKeyCode(item));
           if (first) {
-            map.bind(name, kb, ActionKind.DIGITAL);
+            this._compileString(map, name, item);
             first = false;
           } else {
-            map.addBinding(name, kb);
+            this._compileString(map, name, item, true);
           }
         }
       }
@@ -76,8 +77,52 @@ export class BindingCompiler {
   }
 }
 
+  _compileString(map, name, str, add = false) {
+    const upper = str.toUpperCase();
+
+    const gestureInfo = resolveGesture(upper);
+    if (gestureInfo) {
+      this._compileGesture(map, name, gestureInfo.type, gestureInfo.options, add);
+      return;
+    }
+
+    const kc = resolveKeyCode(upper);
+    if (kc !== null) {
+      const kb = new KeyBinding(kc);
+      if (add) { map.addBinding(name, kb); }
+      else { map.bind(name, kb, ActionKind.DIGITAL); }
+      return;
+    }
+
+    const mb = resolveMouseButton(upper);
+    if (mb !== null) {
+      const mbBinding = new MouseButtonBinding(mb);
+      if (add) { map.addBinding(name, mbBinding); }
+      else { map.bind(name, mbBinding, ActionKind.DIGITAL); }
+      return;
+    }
+  }
+
+  _compileGesture(map, name, gestureType, options, add = false) {
+    const gb = new GestureBinding(gestureType, options);
+    let kind = ActionKind.DIGITAL;
+    if (gestureType === GestureType.PINCH) kind = ActionKind.ANALOG;
+    if (gestureType === GestureType.PAN || gestureType === GestureType.DRAG) kind = ActionKind.VECTOR2;
+    if (add) { map.addBinding(name, gb); }
+    else { map.bind(name, gb, kind); }
+  }
+}
+
 export function inferActionKind(binding) {
-  if (typeof binding === "string") return ActionKind.DIGITAL;
+  if (typeof binding === "string") {
+    const upper = binding.toUpperCase();
+    if (resolveGesture(upper)) {
+      const info = resolveGesture(upper);
+      if (info.type === GestureType.PINCH) return ActionKind.ANALOG;
+      if (info.type === GestureType.PAN || info.type === GestureType.DRAG) return ActionKind.VECTOR2;
+    }
+    return ActionKind.DIGITAL;
+  }
   if (Array.isArray(binding)) return ActionKind.DIGITAL;
   if (binding && typeof binding === "object") {
     if (binding.up || binding.down || binding.left || binding.right) {

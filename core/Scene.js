@@ -33,7 +33,7 @@ export class Scene extends EcsScene {
     this._inputContext = null;
     this._actionMap = null;
     this._inputPriority = 0;
-    this._inputProxy = null;
+
     this[_VIEW_COMPONENTS] = [];
     this._listener = new AudioListener();
     this._ready = false;
@@ -161,60 +161,11 @@ export class Scene extends EcsScene {
     if (!rawInput || typeof rawInput !== "object" || Array.isArray(rawInput)) return;
 
     if (rawInput instanceof InputContext) return;
-    if (rawInput._compileDone) return;
 
     const compiler = new BindingCompiler();
     const map = compiler.compile(rawInput);
 
     this._actionMap = map;
-    rawInput._compileDone = true;
-
-    this.input = new Proxy(rawInput, {
-      set: (target, prop, value) => {
-        target[prop] = value;
-        if (map.has(prop)) {
-          this._recompileAction(prop, value, map);
-        } else {
-          this._recompileAll(compiler, rawInput, map);
-        }
-        return true;
-      },
-    });
-  }
-
-  _recompileAction(name, binding, map) {
-    const compiler = new BindingCompiler();
-    const actions = {};
-    actions[name] = binding;
-    const patch = compiler.compile(actions);
-    const entries = patch.entries();
-    if (entries.length > 0) {
-      const entry = entries[0];
-      map.remove(name);
-      const bindings = entry.bindings;
-      for (let i = 0; i < bindings.length; i++) {
-        if (i === 0) {
-          map.bind(name, bindings[i], entry.state.kind);
-        } else {
-          map.addBinding(name, bindings[i]);
-        }
-      }
-    }
-  }
-
-  _recompileAll(compiler, rawInput, map) {
-    map.clear();
-    const fresh = compiler.compile(rawInput);
-    for (const entry of fresh.entries()) {
-      const bindings = entry.bindings;
-      for (let i = 0; i < bindings.length; i++) {
-        if (i === 0) {
-          map.bind(entry.name, bindings[i], entry.state.kind);
-        } else {
-          map.addBinding(entry.name, bindings[i]);
-        }
-      }
-    }
   }
 
   enter() {

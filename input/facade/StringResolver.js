@@ -1,11 +1,12 @@
 import { Keyboard } from "../Keyboard.js";
 import { Mouse } from "../Mouse.js";
 import { GestureEngine } from "../GestureEngine.js";
+import { GestureType } from "../GestureType.js";
 import { ActionKind } from "../ActionKind.js";
 import { ActionMap } from "../actions/ActionMap.js";
 import { InputContext } from "../actions/InputContext.js";
 import { BindingCompiler } from "./BindingCompiler.js";
-import { resolveKeyCode, resolveMouseButton } from "./KeyStrings.js";
+import { resolveKeyCode, resolveMouseButton, resolveGesture } from "./KeyStrings.js";
 
 export class StringResolver {
   constructor(inputSystem) {
@@ -44,6 +45,47 @@ export class StringResolver {
     return fn(mouse, button);
   }
 
+  _queryGesture(name, kind) {
+    const ge = this._devices ? this._devices.get(GestureEngine) : null;
+    if (!ge) return kind === "value" ? 0 : kind === "axis" ? { x: 0, y: 0 } : false;
+
+    const gestureInfo = resolveGesture(name.toUpperCase());
+    if (!gestureInfo) return kind === "value" ? 0 : kind === "axis" ? { x: 0, y: 0 } : false;
+
+    const { type, options } = gestureInfo;
+    let direction = options.direction || null;
+
+    if (!direction) {
+      if (type === GestureType.SWIPE_LEFT) { direction = "left"; }
+      else if (type === GestureType.SWIPE_RIGHT) { direction = "right"; }
+      else if (type === GestureType.SWIPE_UP) { direction = "up"; }
+      else if (type === GestureType.SWIPE_DOWN) { direction = "down"; }
+    }
+
+    if (direction) {
+      const result = ge.last(GestureType.SWIPE);
+      if (!result || !result.delta) return kind === "value" ? 0 : kind === "axis" ? { x: 0, y: 0 } : false;
+      const angle = Math.atan2(-result.delta.y, result.delta.x);
+      const sectors = { left: Math.PI, right: 0, up: -Math.PI / 2, down: Math.PI / 2 };
+      const target = sectors[direction];
+      let diff = Math.abs(angle - target);
+      if (diff > Math.PI) diff = Math.PI * 2 - diff;
+      const active = diff < Math.PI / 3;
+      if (kind === "pressed" || kind === "down") return active;
+      if (kind === "value") return active ? (result.velocity || 1) : 0;
+      if (kind === "axis") return active ? { x: result.delta?.x || 0, y: result.delta?.y || 0 } : { x: 0, y: 0 };
+      return false;
+    }
+
+    const result = ge.last(type);
+    if (kind === "pressed") return result !== null;
+    if (kind === "down") return result !== null || ge.isActive(type);
+    if (kind === "released") return false;
+    if (kind === "value") return result ? (result.scale || 1) : 0;
+    if (kind === "axis") return result ? { x: result.delta?.x || 0, y: result.delta?.y || 0 } : { x: 0, y: 0 };
+    return false;
+  }
+
   down(name) {
     if (!name) return false;
     const upper = name.toUpperCase();
@@ -61,7 +103,7 @@ export class StringResolver {
       return this._queryMouse(mb, (mouse, btn) => mouse.isDown(btn));
     }
 
-    return false;
+    return this._queryGesture(name, "down");
   }
 
   pressed(name) {
@@ -81,7 +123,7 @@ export class StringResolver {
       return this._queryMouse(mb, (mouse, btn) => mouse.justPressed(btn));
     }
 
-    return false;
+    return this._queryGesture(name, "pressed");
   }
 
   released(name) {
@@ -101,7 +143,7 @@ export class StringResolver {
       return this._queryMouse(mb, (mouse, btn) => mouse.justReleased(btn));
     }
 
-    return false;
+    return this._queryGesture(name, "released");
   }
 
   value(name) {
@@ -126,7 +168,7 @@ export class StringResolver {
       return this._queryMouse(mb, (mouse, btn) => mouse.isDown(btn) ? 1 : 0);
     }
 
-    return 0;
+    return this._queryGesture(name, "value");
   }
 
   axis(name) {
@@ -138,6 +180,11 @@ export class StringResolver {
         return { x: state.vector.x, y: state.vector.y };
       }
       return { x: 0, y: 0 };
+    }
+
+    const gestureResult = this._queryGesture(name, "axis");
+    if (typeof gestureResult === "object" && gestureResult !== null) {
+      return gestureResult;
     }
 
     return { x: 0, y: 0 };

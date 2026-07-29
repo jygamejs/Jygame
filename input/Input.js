@@ -62,6 +62,10 @@ export const Input = {
       events: _system.events,
       backend: _system.backend,
       coordinateSystem: _system.coordinateSystem,
+      get actionMap() {
+        const active = _system.contextStack?.active;
+        return active ? active.actionMap : null;
+      },
     } : null;
   },
 

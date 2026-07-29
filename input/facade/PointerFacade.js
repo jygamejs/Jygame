@@ -58,12 +58,12 @@ export class PointerFacade {
     return ptr ? ptr.isDown : false;
   }
 
-  get justPressed() {
+  get pressed() {
     const ptr = this._getPrimary();
     return ptr ? ptr.justDown : false;
   }
 
-  get justReleased() {
+  get released() {
     const ptr = this._getPrimary();
     return ptr ? ptr.justUp : false;
   }
