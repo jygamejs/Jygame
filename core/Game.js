@@ -85,6 +85,9 @@ export class Game {
     this.inputSystem.devices.register(new Stylus());
     this.inputSystem.devices.register(new TextInput());
 
+    // Wire the new Input facade
+    Input.setSystem(this.inputSystem);
+
     this._interpolation = interpolation;
     this._debug = debug;
     this._debugActionMap = null;
