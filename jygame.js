@@ -18,6 +18,7 @@ export { Input, InputContext as OldInputContext } from "./input/Input.js";
 export * from "./input/index.js";
 export { LoadingTask } from "./loaders/LoadingTask.js";
 export { ImageLoader } from "./loaders/ImageLoader.js";
+export { Image } from "./loaders/Image.js";
 export { FontLoader } from "./loaders/FontLoader.js";
 export { Scene } from "./core/Scene.js";
 export { Game } from "./core/Game.js";

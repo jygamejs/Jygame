@@ -11,6 +11,7 @@ import { AnimationClip } from "../ecs/animation/AnimationClip.js";
 import { AssetRegistry } from "../ecs/render/AssetRegistry.js";
 import { SpatialHash } from "../collision/SpatialHash.js";
 import { Layer } from "../view/Layer.js";
+import { Image } from "../loaders/Image.js";
 
 const _INTERNAL = Symbol("sprite.internal.wrap");
 const _SPRITE_COMPONENTS = [Transform, Collider, Renderable, Visible, Velocity, Animation, RenderBounds];
@@ -110,6 +111,12 @@ export class Sprite {
 
     if (image !== null) {
       this.image = image;
+      if (typeof image === "string") {
+        const animSet = Image._animationSets.get(image);
+        if (animSet) {
+          this.animation.addAll(animSet);
+        }
+      }
     }
   }
 

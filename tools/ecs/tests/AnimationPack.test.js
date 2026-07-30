@@ -118,6 +118,32 @@ describe("AnimationPack.load", () => {
     assert.ok(loadCalls["anim_1"].includes("002.png"));
   });
 
+  it("uses per-entry folder override", async () => {
+    loadCalls = null;
+    await AnimationPack.load({
+      path: "assets/char",
+      walk: { frames: 2, folder: "." },
+    });
+    assert.ok(loadCalls);
+    const keys = Object.keys(loadCalls);
+    assert.strictEqual(keys.length, 2);
+    assert.ok(loadCalls["walk_0"].endsWith("assets/char/1.png"));
+    assert.ok(loadCalls["walk_1"].endsWith("assets/char/2.png"));
+  });
+
+  it("uses per-entry folder override (custom folder)", async () => {
+    loadCalls = null;
+    await AnimationPack.load({
+      path: "assets",
+      walk: { frames: 2, folder: "King" },
+    });
+    assert.ok(loadCalls);
+    const keys = Object.keys(loadCalls);
+    assert.strictEqual(keys.length, 2);
+    assert.ok(loadCalls["walk_0"].endsWith("assets/King/1.png"));
+    assert.ok(loadCalls["walk_1"].endsWith("assets/King/2.png"));
+  });
+
   it("throws if path is missing", async () => {
     await assert.rejects(() => AnimationPack.load({ idle: 3 }));
   });

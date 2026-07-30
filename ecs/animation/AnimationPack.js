@@ -43,7 +43,8 @@ export class AnimationPack {
         const frameNum = anim.start + i;
         const padded = this._pad(frameNum, anim.padding);
         const filename = `${anim.prefix}${padded}${anim.suffix}.${anim.extension}`;
-        const fullPath = `${basePath}/${anim.name}/${filename}`;
+        const folder = anim.folder != null ? (anim.folder === "." ? "" : anim.folder) : anim.name;
+        const fullPath = folder ? `${basePath}/${folder}/${filename}` : `${basePath}/${filename}`;
         const loadKey = `${anim.name}_${i}`;
         loadMap[loadKey] = fullPath;
         keys.push(loadKey);
