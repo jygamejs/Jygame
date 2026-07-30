@@ -22,11 +22,26 @@ export class BindingCompiler {
 
   _compileOne(map, name, binding) {
     if (typeof binding === "string") {
+      if (this._isMovementPattern(binding)) {
+        this._compileVector(map, name, this._expandMovementPattern(binding));
+        return;
+      }
       this._compileString(map, name, binding);
       return;
     }
 
     if (Array.isArray(binding)) {
+      const patterns = binding.filter(
+        item => typeof item === "string" && this._isMovementPattern(item)
+      );
+      if (patterns.length > 0) {
+        const merged = this._mergeMovementPatterns(
+          patterns.map(p => this._expandMovementPattern(p))
+        );
+        this._compileVector(map, name, merged);
+        return;
+      }
+
       let first = true;
       for (const item of binding) {
         if (typeof item === "string") {
@@ -54,12 +69,57 @@ export class BindingCompiler {
     }
   }
 
+  _isMovementPattern(str) {
+    const u = str.toUpperCase().replace(/[^A-Z]/g, "");
+    return u === "WASD" || u === "ARROWKEYS" || u === "ARROWS";
+  }
+
+  _expandMovementPattern(str) {
+    const u = str.toUpperCase().replace(/[^A-Z]/g, "");
+    if (u === "WASD") return { up: "W", down: "S", left: "A", right: "D" };
+    if (u === "ARROWKEYS" || u === "ARROWS") return { up: "UP", down: "DOWN", left: "LEFT", right: "RIGHT" };
+    return null;
+  }
+
+  _mergeMovementPatterns(patterns) {
+    const result = {};
+    for (const p of patterns) {
+      for (const dir of ["up", "down", "left", "right"]) {
+        if (p[dir]) {
+          if (!result[dir]) result[dir] = [];
+          result[dir] = result[dir].concat(p[dir]);
+        }
+      }
+    }
+    for (const dir of ["up", "down", "left", "right"]) {
+      if (Array.isArray(result[dir]) && result[dir].length === 1) {
+        result[dir] = result[dir][0];
+      }
+    }
+    return result;
+  }
+
   _compileVector(map, name, binding) {
     const subs = [];
-    if (binding.up)    subs.push({ binding: new KeyBinding(resolveKeyCode(binding.up)),    vector: [0, -1] });
-    if (binding.down)  subs.push({ binding: new KeyBinding(resolveKeyCode(binding.down)),  vector: [0, 1] });
-    if (binding.left)  subs.push({ binding: new KeyBinding(resolveKeyCode(binding.left)),  vector: [-1, 0] });
-    if (binding.right) subs.push({ binding: new KeyBinding(resolveKeyCode(binding.right)), vector: [1, 0] });
+    const dirs = [
+      { key: "up",    vec: [0, -1] },
+      { key: "down",  vec: [0, 1] },
+      { key: "left",  vec: [-1, 0] },
+      { key: "right", vec: [1, 0] },
+    ];
+    for (const { key, vec } of dirs) {
+      const val = binding[key];
+      if (!val) continue;
+      const items = Array.isArray(val) ? val : [val];
+      for (const item of items) {
+        if (typeof item === "string") {
+          const kc = resolveKeyCode(item.toUpperCase());
+          if (kc !== null) {
+            subs.push({ binding: new KeyBinding(kc), vector: vec });
+          }
+        }
+      }
+    }
     const composite = new CompositeBinding(ActionKind.VECTOR2, subs);
     map.bind(name, composite, ActionKind.VECTOR2);
   }
@@ -114,9 +174,10 @@ export class BindingCompiler {
 
 export function inferActionKind(binding) {
   if (typeof binding === "string") {
-    const upper = binding.toUpperCase();
-    if (resolveGesture(upper)) {
-      const info = resolveGesture(upper);
+    const u = binding.toUpperCase().replace(/[^A-Z]/g, "");
+    if (u === "WASD" || u === "ARROWKEYS" || u === "ARROWS") return ActionKind.VECTOR2;
+    if (resolveGesture(binding.toUpperCase())) {
+      const info = resolveGesture(binding.toUpperCase());
       if (info.type === GestureType.PINCH) return ActionKind.ANALOG;
       if (info.type === GestureType.PAN || info.type === GestureType.DRAG) return ActionKind.VECTOR2;
     }

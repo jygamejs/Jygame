@@ -66,12 +66,16 @@ addKey("CTRL", KeyCode.CTRL_LEFT);
 addKey("ALT", KeyCode.ALT_LEFT);
 addKey("META", KeyCode.META_LEFT);
 
+addKey("UP", KeyCode.ARROW_UP);
 addKey("UP_ARROW", KeyCode.ARROW_UP);
 addKey("ARROW_UP", KeyCode.ARROW_UP);
+addKey("DOWN", KeyCode.ARROW_DOWN);
 addKey("DOWN_ARROW", KeyCode.ARROW_DOWN);
 addKey("ARROW_DOWN", KeyCode.ARROW_DOWN);
+addKey("LEFT", KeyCode.ARROW_LEFT);
 addKey("LEFT_ARROW", KeyCode.ARROW_LEFT);
 addKey("ARROW_LEFT", KeyCode.ARROW_LEFT);
+addKey("RIGHT", KeyCode.ARROW_RIGHT);
 addKey("RIGHT_ARROW", KeyCode.ARROW_RIGHT);
 addKey("ARROW_RIGHT", KeyCode.ARROW_RIGHT);
 
