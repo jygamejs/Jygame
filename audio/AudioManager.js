@@ -3,7 +3,6 @@ import { Music } from "./Music.js";
 import { AudioGroup } from "./AudioGroup.js";
 import { AudioDefinition } from "./AudioDefinition.js";
 import { AudioListener } from "./AudioListener.js";
-import { AudioLoader } from "../loaders/AudioLoader.js";
 import { HtmlAudioBackend } from "./backends/HtmlAudioBackend.js";
 import { EffectChain } from "./effects/EffectChain.js";
 import { AudioScene } from "./AudioScene.js";
@@ -19,6 +18,7 @@ export class AudioManager {
   constructor(options = {}) {
     this._backend = options.backend || new HtmlAudioBackend();
     this._sounds = new Map();
+    this._assets = new Map();
     this._definitions = new Map();
     this._soundsByDefinition = new Map();
     this._diagnostics = null;
@@ -193,6 +193,20 @@ export class AudioManager {
     for (const sound of this._soundsByDefinition.values()) fn(sound);
   }
 
+  registerAsset(key, asset) {
+    if (!key) throw new Error("AudioManager.registerAsset() requires a non-empty key");
+    if (!asset) throw new Error("AudioManager.registerAsset() requires an asset");
+    this._assets.set(key, asset);
+  }
+
+  getAsset(key) {
+    return this._assets.get(key) || null;
+  }
+
+  removeAsset(key) {
+    this._assets.delete(key);
+  }
+
   add(key, asset) {
     if (!key) throw new Error("AudioManager.add() requires a non-empty key");
     if (!asset) throw new Error("AudioManager.add() requires an audio asset");
@@ -251,10 +265,13 @@ export class AudioManager {
 
     let sound = this._soundsByDefinition.get(name);
     if (!sound) {
-      const asset = this._backend.supportsGroupGain
-        ? AudioLoader.getBuffer(def.source)
-        : AudioLoader.get(def.source);
-      if (!asset) throw new Error("Asset '" + def.source + "' not loaded. Use AudioLoader.load" + (this._backend.supportsGroupGain ? "Buffer" : "") + "() to load it first.");
+      const asset = this._assets.get(def.source);
+      if (!asset) {
+        throw new Error(
+          "Asset for definition '" + name + "' is not registered. " +
+          "Load it first (e.g. via the Audio facade or AudioManager.registerAsset())."
+        );
+      }
 
       sound = new Sound(asset, this, { maxInstances: def.maxInstances, backend: this._backend });
       sound._onInstanceFinished = () => this._incrementSfxFinished();
@@ -310,10 +327,13 @@ export class AudioManager {
     if (!asset) {
       const def = this._definitions.get(key);
       if (def) {
-        asset = this._backend.supportsGroupGain
-          ? AudioLoader.getBuffer(def.source)
-          : AudioLoader.get(def.source);
-        if (!asset) throw new Error("Asset '" + def.source + "' not loaded. Use AudioLoader.load" + (this._backend.supportsGroupGain ? "Buffer" : "") + "() to load it first.");
+        asset = this._assets.get(def.source);
+        if (!asset) {
+          throw new Error(
+            "Asset for definition '" + key + "' is not registered. " +
+            "Load it first (e.g. via the Audio facade or AudioManager.registerAsset())."
+          );
+        }
       }
     }
     if (!asset) throw new Error("Sound '" + key + "' not found. Use audio.add() or audio.define() first.");
@@ -336,6 +356,7 @@ export class AudioManager {
     this._sounds.clear();
     for (const sound of this._soundsByDefinition.values()) sound.destroy();
     this._soundsByDefinition.clear();
+    this._assets.clear();
   }
 
   destroy() {
@@ -344,6 +365,7 @@ export class AudioManager {
     this._transition = null;
     this._transitionVolume = 1;
     this._definitions.clear();
+    this._assets.clear();
     for (const group of this._groups.values()) {
       this._backend._connectGroupEffectChain(group._name, null);
       group._manager = null;

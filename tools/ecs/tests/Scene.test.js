@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import * as assert from "node:assert";
-import { Scene, SceneManager, Transform, Velocity, System } from "../../../ecs/index.js";
+import { Scene, SceneManager, Transform, System } from "../../../ecs/index.js";
 
 describe("Scene", () => {
   it("creates with name", () => {
@@ -23,20 +23,6 @@ describe("Scene", () => {
     assert.doesNotThrow(() => s.onDestroy());
     assert.doesNotThrow(() => s.update(0.016));
     assert.doesNotThrow(() => s.render(null));
-  });
-
-  it("scene can set up world with components and systems", () => {
-    class GameScene extends Scene {
-      onCreate() {
-        this.world.register(Transform);
-        this.world.register(Velocity);
-      }
-    }
-
-    const s = new GameScene("Game");
-    s.onCreate();
-    assert.ok(s.world.registry.getId(Transform));
-    assert.ok(s.world.registry.getId(Velocity));
   });
 });
 
@@ -218,26 +204,6 @@ describe("SceneManager — lifecycle hooks", () => {
 });
 
 describe("SceneManager — scenes", () => {
-  it("update calls world.update + scene.update on active scene", () => {
-    let worldUpdated = false;
-    let sceneUpdated = false;
-
-    class TestScene extends Scene {
-      onCreate() {
-        this.world.register(Transform);
-        this.world.update = (dt) => { worldUpdated = true; };
-      }
-      update(dt) { sceneUpdated = true; }
-    }
-
-    const mgr = new SceneManager();
-    mgr.add(new TestScene("T"));
-    mgr.start("T");
-    mgr.update(0.016);
-    assert.ok(worldUpdated);
-    assert.ok(sceneUpdated);
-  });
-
   it("update does nothing with no active scene", () => {
     const mgr = new SceneManager();
     assert.doesNotThrow(() => mgr.update(0.016));

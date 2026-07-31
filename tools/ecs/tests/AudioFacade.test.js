@@ -360,3 +360,130 @@ describe("Audio surface is clean", () => {
     }
   });
 });
+
+describe("Audio backend auto-selection", () => {
+  const origLoad = AudioLoader.load;
+  const origLoadBuffer = AudioLoader.loadBuffer;
+  const origGet = AudioLoader.get;
+  const origHas = AudioLoader.has;
+  const origUnload = AudioLoader.unload;
+  const origClear = AudioLoader.clear;
+  const origWindow = global.window;
+  const fakeCache = new Map();
+
+  function mockAudioContext() {
+    const gain = () => ({
+      gain: { value: 1 },
+      connect: () => {},
+      disconnect: () => {},
+    });
+    return {
+      destination: {},
+      state: "running",
+      currentTime: 0,
+      listener: {
+        positionX: { value: 0 },
+        positionY: { value: 0 },
+        positionZ: { value: 0 },
+      },
+      createGain: gain,
+      createBufferSource: () => ({
+        buffer: null,
+        loop: false,
+        connect: () => {},
+        disconnect: () => {},
+        start: () => {},
+        stop: () => {},
+        onended: null,
+      }),
+      createPanner: () => ({
+        connect: () => {},
+        disconnect: () => {},
+        distanceModel: "",
+        refDistance: 0,
+        maxDistance: 0,
+        rolloffFactor: 0,
+        positionX: { value: 0 },
+        positionY: { value: 0 },
+        positionZ: { value: 0 },
+      }),
+      suspend: async () => {},
+      resume: async () => {},
+      close: async () => {},
+    };
+  }
+
+  before(() => {
+    Audio.clear();
+    global.window = {
+      AudioContext: mockAudioContext,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    };
+    AudioLoader.load = async (path) => {
+      const a = mockAudio();
+      fakeCache.set(path, a);
+      return a;
+    };
+    AudioLoader.loadBuffer = async (path) => ({ path, duration: 1 });
+    AudioLoader.get = (key) => fakeCache.get(key) || null;
+    AudioLoader.has = (key) => fakeCache.has(key);
+    AudioLoader.unload = (key) => fakeCache.delete(key);
+    AudioLoader.clear = () => fakeCache.clear();
+  });
+
+  after(() => {
+    Audio.clear();
+    AudioLoader.load = origLoad;
+    AudioLoader.loadBuffer = origLoadBuffer;
+    AudioLoader.get = origGet;
+    AudioLoader.has = origHas;
+    AudioLoader.unload = origUnload;
+    AudioLoader.clear = origClear;
+    if (origWindow === undefined) {
+      delete global.window;
+    } else {
+      global.window = origWindow;
+    }
+  });
+
+  it("uses AudioLoader.loadBuffer (WebAudio) when AudioContext exists", async () => {
+    const paths = [];
+    const origBuffer = AudioLoader.loadBuffer;
+    AudioLoader.loadBuffer = async (path) => {
+      paths.push(path);
+      return { path, duration: 1 };
+    };
+    const asset = await Audio.load("/sounds/auto.wav");
+    assert.deepStrictEqual(paths, ["/sounds/auto.wav"]);
+    assert.ok(asset);
+    assert.ok(asset.duration);
+    AudioLoader.loadBuffer = origBuffer;
+  });
+
+  it("plays a named WebAudio asset end-to-end", async () => {
+    await Audio.load("blip", "/sounds/blip.wav");
+    global.document.dispatchEvent({ type: "pointerdown" });
+    const instance = Audio.play("blip");
+    assert.ok(instance);
+    instance.stop();
+  });
+
+  it("falls back to HTML audio when window.AudioContext is missing", async () => {
+    Audio.clear();
+    global.window = {};
+    const paths = [];
+    const origLoad = AudioLoader.load;
+    AudioLoader.load = async (path) => {
+      paths.push(path);
+      const a = mockAudio();
+      fakeCache.set(path, a);
+      return a;
+    };
+    const asset = await Audio.load("/sounds/fallback.mp3");
+    assert.deepStrictEqual(paths, ["/sounds/fallback.mp3"]);
+    assert.ok(asset);
+    assert.strictEqual(typeof asset.play, "function");
+    AudioLoader.load = origLoad;
+  });
+});

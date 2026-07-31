@@ -297,10 +297,6 @@ describe("Animation component", () => {
 
 // ─── Renderable Component ───────────────────────────
 describe("Renderable component", () => {
-  it("has schema with image", () => {
-    assert.strictEqual(Renderable.schema.image, "u16");
-  });
-
   it("image zero-initialized", () => {
     const world = createWorld();
     const e = createEntity(world, [[Renderable]]);

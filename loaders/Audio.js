@@ -1,6 +1,7 @@
 import { AudioLoader } from "./AudioLoader.js";
 import { AudioManager } from "../audio/AudioManager.js";
 import { HtmlAudioBackend } from "../audio/backends/HtmlAudioBackend.js";
+import { WebAudioBackend } from "../audio/backends/WebAudioBackend.js";
 import { LoadingTask } from "./LoadingTask.js";
 import { Sound } from "../audio/Sound.js";
 import { Music } from "../audio/Music.js";
@@ -12,6 +13,18 @@ const _musicCache = new Map();
 
 let _rafId = null;
 let _lastTime = 0;
+
+function _detectBackendKind() {
+  if (typeof window !== "undefined" && (window.AudioContext || window.webkitAudioContext)) {
+    return "webaudio";
+  }
+  return "html";
+}
+
+function _createBackend() {
+  if (_detectBackendKind() === "webaudio") return new WebAudioBackend();
+  return new HtmlAudioBackend();
+}
 
 function _tick(time) {
   const dt = (time - _lastTime) / 1000;
@@ -35,9 +48,25 @@ function _stopLoop() {
 
 function _getManager() {
   if (!_manager) {
-    _manager = new AudioManager({ backend: new HtmlAudioBackend() });
+    _manager = new AudioManager({ backend: _createBackend() });
+    for (const [key, asset] of _assets) _manager.registerAsset(key, asset);
   }
   return _manager;
+}
+
+function _registerAsset(name, path, asset) {
+  if (!_manager) return;
+  _manager.registerAsset(name, asset);
+  if (path && path !== name) _manager.registerAsset(path, asset);
+}
+
+async function _loadAsset(path) {
+  if (_detectBackendKind() === "webaudio") {
+    const mgr = _getManager();
+    const ctx = mgr._backend._getContext();
+    return AudioLoader.loadBuffer(path, ctx);
+  }
+  return AudioLoader.load(path);
 }
 
 function _getSound(key) {
@@ -110,13 +139,14 @@ export const Audio = {
   },
 
   async _loadSingle(path) {
-    return AudioLoader.load(path);
+    return _loadAsset(path);
   },
 
   async _loadNamed(name, path) {
     if (_assets.has(name)) return _assets.get(name);
-    const audio = await AudioLoader.load(path);
+    const audio = await _loadAsset(path);
     _assets.set(name, audio);
+    _registerAsset(name, path, audio);
     return audio;
   },
 
@@ -132,9 +162,10 @@ export const Audio = {
         task.done();
         continue;
       }
-      AudioLoader.load(path).then((audio) => {
+      _loadAsset(path).then((audio) => {
         results[name] = audio;
         _assets.set(name, audio);
+        _registerAsset(name, path, audio);
         task.done();
       }).catch((err) => task.fail(err));
     }
@@ -237,6 +268,7 @@ export const Audio = {
     if (sound) { sound.destroy(); _sounds.delete(key); }
     const music = _musicCache.get(key);
     if (music) { music.destroy(); _musicCache.delete(key); }
+    if (_manager) _manager.removeAsset(key);
     AudioLoader.unload(key);
   },
 

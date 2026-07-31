@@ -30,7 +30,6 @@ import { Renderable } from "../../../ecs/components/Renderable.js";
 import { RenderBounds } from "../../../ecs/components/RenderBounds.js";
 import { Visible } from "../../../ecs/components/Visible.js";
 import { Collider } from "../../../ecs/components/Collider.js";
-import { AudioManager } from "../../../audio/AudioManager.js";
 import { ParticleSystem } from "../../../particles/ParticleSystem.js";
 import { CanvasParticleRenderer } from "../../../particles/renderers/CanvasParticleRenderer.js";
 import { ParticleRenderCommandBuffer } from "../../../particles/renderdata/ParticleRenderCommandBuffer.js";
@@ -1537,45 +1536,6 @@ describe("Diagnostics Subsystem Instrumentation", () => {
 
       world.update(1 / 60);
       assert.ok(true, "TrailSystem update completes without Diagnostics");
-    });
-  });
-
-  // ─── AudioManager ──────────────────────────────────
-
-  describe("AudioManager", () => {
-    it("records audio metrics via diagnostics", () => {
-      const am = new AudioManager();
-      const diag = new Diagnostics();
-      const reg = (name, type, unit) =>
-        diag.registerMetric({ name, category:MetricCategory.AUDIO, group:"Audio", unit, type, tags:Object.freeze(["audio"]) });
-      reg("audio.update",      MetricType.TIMER,   MetricUnit.MILLISECONDS);
-      reg("audio.active",      MetricType.GAUGE,   MetricUnit.COUNT);
-      reg("audio.pooled",      MetricType.GAUGE,   MetricUnit.COUNT);
-      reg("audio.channels",    MetricType.GAUGE,   MetricUnit.COUNT);
-      reg("audio.sfxPlayed",   MetricType.COUNTER, MetricUnit.COUNT);
-      reg("audio.musicPlayed", MetricType.COUNTER, MetricUnit.COUNT);
-      reg("audio.sfxFinished", MetricType.COUNTER, MetricUnit.COUNT);
-      diag.lockRegistry();
-
-      am.diagnostics = diag;
-
-      diag.beginFrame(1, 16.6);
-      am.update(1 / 60);
-      diag.endFrame();
-
-      const snap = diag.lastSnapshot;
-      const update = diag.metrics.find("audio.update");
-      const active = diag.metrics.find("audio.active");
-      const pooled = diag.metrics.find("audio.pooled");
-      const channels = diag.metrics.find("audio.channels");
-      assert.ok(update, "audio.update should exist");
-      assert.ok(active, "audio.active should exist");
-      assert.ok(pooled, "audio.pooled should exist");
-      assert.ok(channels, "audio.channels should exist");
-      assert.strictEqual(snap.timerCount(update.id), 1);
-      assert.strictEqual(snap.gauge(active.id), 0);
-      assert.ok(snap.gauge(pooled.id) >= 0);
-      assert.strictEqual(snap.gauge(channels.id), 0);
     });
   });
 

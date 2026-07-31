@@ -1,6 +1,11 @@
 import { AudioBackend } from "./AudioBackend.js";
 import { connectEffectChain, disconnectEffectChain } from "../effects/EffectChain.js";
 
+function _audioContextClass() {
+  if (typeof window === "undefined") return null;
+  return window.AudioContext || window.webkitAudioContext || null;
+}
+
 class WebAudioPlayback {
   constructor(context, buffer, groupGain, effectChain, groupName, groupGains) {
     this._context = context;
@@ -226,9 +231,18 @@ export class WebAudioBackend extends AudioBackend {
 
   get supportsGroupGain() { return true; }
 
+  _getContext() {
+    this._ensureContext();
+    return this._context;
+  }
+
   _ensureContext() {
     if (this._context) return;
-    this._context = new AudioContext();
+    const Ctor = _audioContextClass();
+    if (!Ctor) {
+      throw new Error("WebAudioBackend requires Web Audio API support.");
+    }
+    this._context = new Ctor();
     this._masterGain = this._context.createGain();
     this._masterGain.gain.value = 1;
     this._masterGain.connect(this._context.destination);
