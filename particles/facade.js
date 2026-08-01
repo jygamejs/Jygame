@@ -1,5 +1,6 @@
 import { ParticleAsset } from "./ParticleAsset.js";
 import { GpuParticleBackend } from "./backends/GpuParticleBackend.js";
+import { WebGpuDeviceManager } from "./gpu/webgpu/WebGpuDeviceManager.js";
 
 const DEFAULT_CAPACITY = 256;
 const CAPACITY_SAFETY_MULTIPLIER = 1.5;
@@ -58,10 +59,14 @@ export function createParticleEffect({
   renderParticle,
 } = {}) {
   let backendInstance;
-  if (backend === "gpu") {
+  if (backend === "cpu") {
+    backendInstance = null;
+  } else if (backend === "gpu") {
     backendInstance = new GpuParticleBackend({ renderer, storage });
-  } else if (backend && typeof backend !== "string") {
+  } else if (backend !== undefined && backend !== null && typeof backend !== "string") {
     backendInstance = backend;
+  } else if (backend === undefined && WebGpuDeviceManager.isAvailable() && renderer) {
+    backendInstance = new GpuParticleBackend({ renderer, storage });
   }
 
   const asset = new ParticleAsset({

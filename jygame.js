@@ -76,8 +76,6 @@ export { ShapeRegistry } from "./shapes/ShapeRegistry.js";
 export { ParticleAsset } from "./particles/ParticleAsset.js";
 export { ParticleEffect } from "./particles/ParticleEffect.js";
 export { ParticleAssetRegistry } from "./particles/ParticleAssetRegistry.js";
-export { ParticleLayer } from "./particles/layers/ParticleLayer.js";
-export { ParticleLayerManager } from "./particles/layers/ParticleLayerManager.js";
 export { AudioLoader } from "./loaders/AudioLoader.js";
 export { Audio } from "./loaders/Audio.js";
 export { ObjectPool } from "./audio/ObjectPool.js";

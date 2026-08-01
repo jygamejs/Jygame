@@ -2,7 +2,9 @@ import { describe, it } from "node:test";
 import * as assert from "node:assert";
 import { Particle } from "../../../display/Particle.js";
 import { ParticleEffect } from "../../../particles/ParticleEffect.js";
+import { World } from "../../../ecs/core/World.js";
 import { CpuParticleBackend } from "../../../particles/backends/CpuParticleBackend.js";
+import { GpuParticleBackend } from "../../../particles/backends/GpuParticleBackend.js";
 import { ObjectParticleStorage } from "../../../particles/storage/ObjectParticleStorage.js";
 import { ConeShape } from "../../../shapes/ConeShape.js";
 
@@ -283,6 +285,75 @@ describe("Particle completion", () => {
   });
 });
 
+describe("Particle World integration", () => {
+  function mockCtx() {
+    return {
+      save() {}, restore() {}, translate() {}, rotate() {}, scale() {},
+      fillRect() {}, beginPath() {}, arc() {}, fill() {}, drawImage() {},
+      moveTo() {}, lineTo() {}, stroke() {},
+      set fillStyle(v) {}, set strokeStyle(v) {}, set lineWidth(v) {},
+      getTransform() { return { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }; },
+      setTransform() {},
+    };
+  }
+
+  it("registers into the active World and is updated/rendered automatically", () => {
+    const world = new World();
+    ParticleEffect._defaultWorld = world;
+    try {
+      const effect = Particle.create({ storage: objectStorage() });
+      assert.ok(world._effects.includes(effect));
+      assert.strictEqual(effect._world, world);
+
+      let updated = 0;
+      effect.update = (dt) => { updated++; };
+      world.update(16);
+      assert.strictEqual(updated, 1);
+
+      let rendered = 0;
+      effect.render = (ctx) => { rendered++; };
+      world.render(mockCtx());
+      assert.strictEqual(rendered, 1);
+
+      effect.destroy();
+      assert.ok(!world._effects.includes(effect));
+    } finally {
+      ParticleEffect._defaultWorld = null;
+    }
+  });
+
+  it("sorts effects by depth before rendering", () => {
+    const world = new World();
+    ParticleEffect._defaultWorld = world;
+    try {
+      const a = Particle.create();
+      a.depth = 10;
+      const b = Particle.create();
+      b.depth = -5;
+      const c = Particle.create();
+      c.depth = 0;
+      const order = [];
+      for (const fx of world._effects) {
+        fx.render = (ctx) => { order.push(fx.depth); };
+      }
+      world.render(mockCtx());
+      assert.deepStrictEqual(order, [-5, 0, 10]);
+      a.destroy();
+      b.destroy();
+      c.destroy();
+    } finally {
+      ParticleEffect._defaultWorld = null;
+    }
+  });
+
+  it("does not register when no World is active", () => {
+    ParticleEffect._defaultWorld = null;
+    const effect = Particle.create({ storage: objectStorage() });
+    assert.strictEqual(effect._world, null);
+    effect.destroy();
+  });
+});
+
 describe("Particle rotation", () => {
   it("forwards to a ConeShape direction", () => {
     const cone = new ConeShape({ radius: 10, angle: Math.PI / 2, direction: 0, speed: 50 });
@@ -309,6 +380,13 @@ describe("Particle capacity", () => {
 });
 
 describe("Particle backend", () => {
+  const mockRenderer = () => ({
+    render() {},
+    destroy() {},
+    get _renderParticle() { return null; },
+    set _renderParticle(v) {},
+  });
+
   it("uses the CPU backend by default", () => {
     const effect = Particle.create({ rate: 10, lifetime: 1 });
     assert.ok(effect.system._backend instanceof CpuParticleBackend);
@@ -321,10 +399,59 @@ describe("Particle backend", () => {
     effect.destroy();
   });
 
+  it("accepts backend: \"gpu\"", () => {
+    const effect = Particle.create({ rate: 10, lifetime: 1, backend: "gpu", renderer: mockRenderer() });
+    assert.ok(effect.system._backend instanceof GpuParticleBackend);
+    effect.destroy();
+  });
+
   it("accepts a backend instance", () => {
     const backend = new CpuParticleBackend({ storage: objectStorage() });
     const effect = Particle.create({ rate: 10, lifetime: 1, backend });
     assert.strictEqual(effect.system._backend, backend);
     effect.destroy();
+  });
+
+  function withNavigator(navigatorValue, fn) {
+    const desc = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+    const hadNavigator = desc !== undefined;
+    try {
+      if (navigatorValue === undefined) {
+        if (hadNavigator) delete globalThis.navigator;
+      } else {
+        Object.defineProperty(globalThis, "navigator", { value: navigatorValue, configurable: true });
+      }
+      return fn();
+    } finally {
+      if (hadNavigator) {
+        Object.defineProperty(globalThis, "navigator", desc);
+      } else {
+        delete globalThis.navigator;
+      }
+    }
+  }
+
+  it("auto-selects the GPU backend when WebGPU is available and a renderer is provided", () => {
+    withNavigator({ gpu: {} }, () => {
+      const effect = Particle.create({ rate: 10, lifetime: 1, renderer: mockRenderer() });
+      assert.ok(effect.system._backend instanceof GpuParticleBackend);
+      effect.destroy();
+    });
+  });
+
+  it("stays on CPU when WebGPU is available but no renderer is provided", () => {
+    withNavigator({ gpu: {} }, () => {
+      const effect = Particle.create({ rate: 10, lifetime: 1 });
+      assert.ok(effect.system._backend instanceof CpuParticleBackend);
+      effect.destroy();
+    });
+  });
+
+  it("falls back to CPU when WebGPU is unavailable", () => {
+    withNavigator(undefined, () => {
+      const effect = Particle.create({ rate: 10, lifetime: 1 });
+      assert.ok(effect.system._backend instanceof CpuParticleBackend);
+      effect.destroy();
+    });
   });
 });

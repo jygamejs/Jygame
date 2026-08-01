@@ -168,7 +168,6 @@ ParticleEmitter
 ParticleEffect
 ParticleAsset
 ParticleAssetRegistry
-ParticleLayerManager
 ```
 
 ### Backend Details
@@ -296,11 +295,11 @@ Particles are engine-managed objects. The following API is intentionally
 avoided:
 
 ```js
-particle.update(dt);
-particle.render(ctx);
+effect.update(dt);
+effect.render(ctx);
 ```
 
-The particle system should behave similarly to:
+Particle effects should behave similarly to:
 
 ```js
 Audio.play()
@@ -317,29 +316,71 @@ The user is not responsible for:
 ```text
 updating emitters
 updating particle systems
+simulating particles
+applying modifiers
 rendering particles
 cleaning up dead particles
 ```
 
-The engine owns the particle lifecycle. Internally, the game loop handles:
+The World owns the particle lifecycle. Ownership follows the same hierarchy
+as every other retained object:
 
 ```text
-Update
-|
-+-- update emitters
-|
-+-- update particle systems
-|
-+-- apply modifiers
-|
-+-- render particles
-|
-+-- cleanup dead particles
+Game
+    |
+    +-- Scene.update()
+    |
+    +-- World.update()
+            |
+            +-- update particle effects
+            +-- update emitters
+            +-- simulate particles
+            +-- apply modifiers
+    |
+    +-- Scene.render()
+    |
+    +-- World.render()
+            |
+            +-- render retained objects
+                    |
+                    +-- sprites
+                    +-- trails
+                    +-- particle effects
+    |
+    +-- Scene.renderUI()
 ```
 
 The entire simulation pipeline is invisible to the user. The facade
-registers the effect into the Scene/Game so it is updated and rendered every
-frame automatically, and destroyed when necessary.
+registers the effect with the active World. The World owns the lifecycle of
+retained particle effects, updating, sorting, and rendering them
+automatically every frame, and destroying them when necessary.
+
+---
+
+### 5.4 Particle Effects are Retained Objects
+
+Particle effects are retained renderables managed by the World.
+
+After creation they remain alive until explicitly destroyed:
+
+```js
+const fire = Particle.create(...);
+
+fire.play();
+```
+
+The effect becomes part of the World and participates in the normal retained
+rendering pipeline alongside Sprites, Trails, Tilemaps, and other retained
+renderables.
+
+Users never call:
+
+```js
+effect.update(dt);
+effect.render(ctx);
+```
+
+The World performs these operations automatically.
 
 ---
 
@@ -615,23 +656,39 @@ Disabled effects:
 * do not emit
 * do not render
 
-### Layering
+### Depth
 
-Effects may optionally specify a render layer:
-
-```js
-Particle.create({ layer: "foreground", ... });
-```
-
-Examples:
+Effects participate in the same depth ordering as every retained renderable
+in the World:
 
 ```js
-layer: "background"
-layer: "particles"
-layer: "ui"
+effect.depth = 50;
 ```
 
-The engine manages ordering internally.
+Sprites, trails, tilemaps, and particles are sorted together using their
+depth. There are no named render layers in the public API — depth is the
+single ordering axis.
+
+The engine sorts retained renderables before drawing them, so a lower depth
+renders behind a higher depth:
+
+```js
+const smoke = Particle.create(...);
+smoke.depth = 10;
+
+const player = new Sprite(...);
+player.depth = 20;
+```
+
+```text
+Smoke
+
+↓
+
+Player
+```
+
+Every retained renderable shares the same ordering system.
 
 ### Destruction
 
@@ -784,16 +841,21 @@ These options exist solely for advanced use cases.
 
 Responsible for:
 
-* Creating particle systems
-* Creating emitters
-* Selecting the optimal backend
+* Creating a `ParticleEffect`
+* Configuring infrastructure
+* Choosing the optimal backend
 * Calculating particle capacity
 * Selecting storage implementations
-* Registering itself with the engine
-* Updating automatically
-* Rendering automatically
-* Cleaning itself up
-* Managing the particle lifecycle
+* Registering the effect with the active World
+
+### World
+
+Responsible for:
+
+* Updating particle effects
+* Sorting retained renderables by depth
+* Rendering particle effects
+* Owning the particle lifecycle
 
 ### Shapes
 
@@ -883,6 +945,7 @@ effect.onFinish(callback)
 ```js
 effect.position
 effect.rotation
+effect.depth
 effect.visible
 effect.enabled
 effect.following
@@ -946,3 +1009,7 @@ particle engine whenever users need it.
 
 This API is scalable, extensible, easy to document, future-proof, and
 consistent with the rest of Jygame's philosophy.
+
+Particle effects are no longer a special rendering system. They are retained
+World objects that participate in the same update, sorting, and rendering
+pipeline as every other retained renderable in Jygame.

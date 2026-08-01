@@ -294,8 +294,6 @@ This strips diagnostics, the debug overlay, snapshot broadcasting, and the Ctrl+
 | `ParticleSystem` | SoA particle system with ActivePool-backed lifecycle, modifier pipeline, O(n) update/render, and full statistics. |
 | `Particle` | Lightweight data container for particle effects. Fields: `x`, `y`, `vx`, `vy`, `ax`, `ay`, `life`, `maxLife`, `size`, `rotation`, `alpha`, `color`. |
 | `ParticleEmitter` | Automated spawner on top of `ParticleSystem`. Frame-rate independent accumulator. `start()`, `stop()`, `burst()`, `toggle()`. |
-| `ParticleLayer` | Rendering layer for particle effects (supports multiple layers). |
-| `ParticleLayerManager` | Manages multiple `ParticleLayer` instances. |
 | `ParticleAsset` | Serializable particle effect definition. |
 | `ParticleEffect` | Runtime particle effect instance from a `ParticleAsset`. |
 | `ParticleAssetRegistry` | Global registry of named `ParticleAsset` definitions. |
