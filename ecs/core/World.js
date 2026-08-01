@@ -14,6 +14,14 @@ import { AudioSource } from "../audio/AudioSource.js";
 import { AudioSystem } from "../audio/AudioSystem.js";
 import { StreamingManager } from "../streaming/StreamingManager.js";
 import { Diagnostics, resolveMetricIds } from "../../debug/index.js";
+import { RenderQueue } from "../render/RenderQueue.js";
+import { CanvasContext } from "../render/CanvasContext.js";
+import { TrailRenderer } from "../render/TrailRenderer.js";
+import { Trail } from "../components/Trail.js";
+import { Visible } from "../components/Visible.js";
+import { TrailManager } from "../trails/TrailManager.js";
+import { Camera } from "../../view/Camera.js";
+import { Viewport } from "../../view/Viewport.js";
 
 export class World {
   constructor(options = {}) {
@@ -60,6 +68,7 @@ export class World {
     this._entityDestroyedCallbacks = [];
     this._frameCount = 0;
     this._diagIds = null;
+    this._effects = [];
   }
 
   get registry() {
@@ -676,6 +685,10 @@ export class World {
       worldComponents: "ecs.world.components",
       worldTables: "ecs.world.tables",
       worldCapacity: "ecs.world.capacity",
+      trails: "render.trails",
+      trailSegments: "render.trails.segments",
+      trailLines: "render.trails.lines",
+      trailRibbons: "render.trails.ribbons",
     });
   }
 
@@ -697,9 +710,170 @@ export class World {
         if (mids.worldTables >= 0) diag.recordGauge(mids.worldTables, this._archetypeSystem.archetypeCount);
         if (mids.worldCapacity >= 0) diag.recordGauge(mids.worldCapacity, this._entityManager.capacity);
       }
+      this._updateEffects(dt);
     } finally {
       if (ownFrame) diag.endFrame();
       this._events.clear();
+    }
+  }
+
+  render(ctx) {
+    const diag = this._resources.get(Diagnostics);
+    const ownFrame = diag && !diag.isInsideFrame;
+    if (ownFrame) diag.beginFrame(this._frameCount++, 16);
+
+    try {
+      ctx.save();
+      const camera = this._resources.get(Camera);
+      if (camera) {
+        const vp = this._resources.get(Viewport);
+        const cx = vp ? vp.x + vp.width * 0.5 : 0;
+        const cy = vp ? vp.y + vp.height * 0.5 : 0;
+        ctx.translate(cx, cy);
+        ctx.scale(camera.zoom, camera.zoom);
+        ctx.rotate(-camera.rotation);
+        ctx.translate(-camera.x, -camera.y);
+      }
+      const queue = this._resources.get(RenderQueue);
+      if (queue && queue.count > 0) {
+        queue.execute(ctx);
+      }
+      this._renderTrails(ctx);
+      this._renderEffects(ctx);
+      ctx.restore();
+    } finally {
+      if (ownFrame) diag.endFrame();
+    }
+  }
+
+  _getTrailView() {
+    if (this._trailViewCache) return this._trailViewCache;
+    if (!this._registry.has(Trail) || !this._registry.has(Transform) || !this._registry.has(Visible)) {
+      return null;
+    }
+    const t = this._resolveComponentId(Transform, "render.trails");
+    const tr = this._resolveComponentId(Trail, "render.trails");
+    const v = this._resolveComponentId(Visible, "render.trails");
+    const query = this._queryEngine.createQuery({ all: [t, tr, v] });
+    this._trailViewCache = {
+      view: new QueryView(this._queryEngine, query),
+      t,
+      tr,
+      v,
+    };
+    return this._trailViewCache;
+  }
+
+  _renderTrails(ctx) {
+    const manager = this._resources.get(TrailManager);
+    if (!manager || manager.size === 0) return;
+    const canvas = this._resources.get(CanvasContext);
+    if (!canvas) return;
+    const cache = this._getTrailView();
+    if (!cache) return;
+
+    const diag = this._resources.get(Diagnostics);
+    if (diag) this._initDiag(diag);
+    const ids = this._diagIds;
+
+    let segments = 0, lines = 0, ribbons = 0;
+
+    const doRender = () => {
+      const { view, t, tr, v } = cache;
+      const items = [];
+      for (const table of view.tables()) {
+        if (table.count === 0) continue;
+
+        const tx = table.getColumn(t, "x");
+        const ty = table.getColumn(t, "y");
+        const enabledCol = table.getColumn(tr, "enabled");
+        const maxPointsCol = table.getColumn(tr, "maxPoints");
+        const spacingCol = table.getColumn(tr, "spacing");
+        const visibleCol = table.getColumn(v, "value");
+        const entities = table.entityIds;
+        if (!tx || !ty || !enabledCol || !maxPointsCol || !spacingCol || !visibleCol || !entities) continue;
+
+        const colorCol = table.getColumn(tr, "color");
+        const widthCol = table.getColumn(tr, "width");
+        const modeCol = table.getColumn(tr, "mode");
+        const depthCol = table.getColumn(tr, "depth");
+
+        for (let r = 0; r < table.count; r++) {
+          const eid = entities[r];
+          if (!visibleCol[r] || !enabledCol[r]) continue;
+          const maxP = maxPointsCol[r];
+          if (maxP < 2) continue;
+          const sp = spacingCol[r];
+          if (sp <= 0) continue;
+          const buffer = manager.get(eid);
+          if (!buffer || buffer.count < 2) continue;
+          segments += buffer.count - 1;
+          if (modeCol[r] === 1) {
+            ribbons++;
+          } else {
+            lines++;
+          }
+          items.push({
+            depth: depthCol ? depthCol[r] : 0,
+            buffer,
+            color: colorCol[r],
+            width: widthCol[r],
+            mode: modeCol[r],
+          });
+        }
+      }
+
+      if (items.length === 0) return;
+      if (items.length > 1) items.sort((a, b) => a.depth - b.depth);
+      if (!this._trailRenderer) this._trailRenderer = new TrailRenderer();
+      this._trailRenderer.render(canvas, items);
+    };
+
+    if (diag && ids && ids.trails >= 0) {
+      diag.scope(ids.trails, doRender);
+    } else {
+      doRender();
+    }
+
+    if (diag && ids) {
+      if (ids.trailSegments >= 0) diag.recordCounter(ids.trailSegments, segments);
+      if (ids.trailLines >= 0) diag.recordCounter(ids.trailLines, lines);
+      if (ids.trailRibbons >= 0) diag.recordCounter(ids.trailRibbons, ribbons);
+    }
+  }
+
+  addEffect(effect) {
+    if (this._effects.indexOf(effect) !== -1) return;
+    this._effects.push(effect);
+  }
+
+  removeEffect(effect) {
+    const idx = this._effects.indexOf(effect);
+    if (idx !== -1) {
+      this._effects.splice(idx, 1);
+    }
+  }
+
+  _updateEffects(dt) {
+    const effects = this._effects;
+    for (let i = effects.length - 1; i >= 0; i--) {
+      const effect = effects[i];
+      if (effect._destroyed) {
+        effects.splice(i, 1);
+        continue;
+      }
+      effect.update(dt);
+    }
+  }
+
+  _renderEffects(ctx) {
+    const effects = this._effects;
+    if (effects.length === 0) return;
+    if (effects.length > 1) {
+      effects.sort((a, b) => (a.depth || 0) - (b.depth || 0));
+    }
+    for (let i = 0; i < effects.length; i++) {
+      effects[i].render(ctx);
     }
   }
 

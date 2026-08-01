@@ -342,65 +342,87 @@ describe("Game loop integration", () => {
   });
 });
 
-// ─── Render Overlay ────────────────────────────────
+// ─── Render Pipeline ────────────────────────────────
 
-describe("Scene — render overlay", () => {
-  it("_renderFrame calls _renderWorld then render(ctx) in order", () => {
+describe("Scene — render pipeline", () => {
+  function mockRenderCtx() {
+    let mat = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 };
+    return {
+      save() {}, restore() {}, translate() {}, rotate() {}, scale() {},
+      fillRect() {}, beginPath() {}, arc() {}, fill() {}, drawImage() {}, stroke() {},
+      moveTo() {}, lineTo() {}, strokeStyle: "", fillStyle: "", lineWidth: 0,
+      getTransform() { return mat; },
+      setTransform(a, b, c, d, e, f) { mat = { a, b, c, d, e, f }; },
+    };
+  }
+
+  function makeWorld() {
+    const world = new World();
+    for (const c of [Transform, Renderable, RenderBounds, Visible]) world.register(c);
+    world.setResource(RenderQueue, new RenderQueue());
+    world.addSystem(new RenderSystem());
+    return world;
+  }
+
+  it("World.render executes the retained render queue", () => {
+    const world = makeWorld();
+    const e = world.createEntity();
+    world.addMany(e, Transform, Renderable, RenderBounds, Visible);
+    world.set(e, Transform, { x: 10, y: 10, rotation: 0, scaleX: 1, scaleY: 1 });
+    world.set(e, Renderable, { image: 0, layer: 1 });
+    world.set(e, RenderBounds, { width: 10, height: 10 });
+    world.set(e, Visible, { value: 1 });
+
+    world.update(16);
+    const queue = world.getResource(RenderQueue);
+    assert.ok(queue.count > 0);
+
+    assert.doesNotThrow(() => world.render(mockRenderCtx()));
+  });
+
+  it("Game step renders scene.render(ctx) before world.render(ctx)", () => {
+    const scene = new Scene();
+    const w = scene.world;
     const calls = [];
-    class OverlayScene extends Scene {
-      _renderWorld(ctx) {
-        calls.push("world");
-      }
-      render(ctx) {
-        calls.push("overlay");
-      }
-    }
-    const scene = new OverlayScene();
-    scene._renderFrame(null);
-    assert.deepStrictEqual(calls, ["world", "overlay"]);
+    const original = w.render.bind(w);
+    w.render = (ctx) => { calls.push("world"); original(ctx); };
+    scene.render = (ctx) => { calls.push("scene"); };
+
+    scene.render(mockRenderCtx());
+    scene.world.render(mockRenderCtx());
+
+    assert.deepStrictEqual(calls, ["scene", "world"]);
   });
 
-  it("user render(ctx) without super still runs world render", () => {
-    let worldRendered = false;
-    class OverlayScene extends Scene {
-      _renderWorld(ctx) {
-        worldRendered = true;
-      }
-      render(ctx) {
-        // user overlay — no super call needed
+  it("renderUI() remains DOM-based and takes no canvas context", () => {
+    class UIScene extends Scene {
+      renderUI() {
+        return "<div id=\"score\">0</div>";
       }
     }
-    const scene = new OverlayScene();
-    scene._renderFrame(null);
-    assert.strictEqual(worldRendered, true);
+    const scene = new UIScene();
+    assert.strictEqual(scene.renderUI(), "<div id=\"score\">0</div>");
   });
 
-  it("scene without override renders world via _renderFrame", () => {
-    let worldRan = false;
-    class MyScene extends Scene {
-      _renderWorld(ctx) {
-        worldRan = true;
-      }
-    }
-    const scene = new MyScene();
-    scene._renderFrame(null);
-    assert.strictEqual(worldRan, true);
-  });
+  it("world.render applies camera transform when Camera resource is set", () => {
+    const world = makeWorld();
+    const camera = new Camera(100, 50, 2);
+    world.setResource(Camera, camera);
 
-  it("Game._renderScenes calls _renderFrame instead of render directly", () => {
+    const e = world.createEntity();
+    world.addMany(e, Transform, Renderable, RenderBounds, Visible);
+    world.set(e, Transform, { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 });
+    world.set(e, Renderable, { image: 0, layer: 1 });
+    world.set(e, RenderBounds, { width: 10, height: 10 });
+    world.set(e, Visible, { value: 1 });
+    world.update(16);
+
     const calls = [];
-    class GameScene extends Scene {
-      _renderWorld(ctx) {
-        calls.push("world");
-      }
-      render(ctx) {
-        calls.push("overlay");
-      }
-    }
-    const scene = new GameScene();
-    // Simulate what Game._renderScenes does
-    scene._renderFrame(null);
-    assert.deepStrictEqual(calls, ["world", "overlay"]);
+    const ctx = mockRenderCtx();
+    ctx.translate = (x, y) => calls.push(`translate:${x}:${y}`);
+    ctx.scale = (x, y) => calls.push(`scale:${x}:${y}`);
+    world.render(ctx);
+    assert.deepStrictEqual(calls, ["translate:0:0", "scale:2:2", "translate:-100:-50"]);
   });
 });
 

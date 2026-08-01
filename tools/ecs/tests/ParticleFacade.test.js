@@ -1,0 +1,330 @@
+import { describe, it } from "node:test";
+import * as assert from "node:assert";
+import { Particle } from "../../../display/Particle.js";
+import { ParticleEffect } from "../../../particles/ParticleEffect.js";
+import { CpuParticleBackend } from "../../../particles/backends/CpuParticleBackend.js";
+import { ObjectParticleStorage } from "../../../particles/storage/ObjectParticleStorage.js";
+import { ConeShape } from "../../../shapes/ConeShape.js";
+
+const objectStorage = () => new ObjectParticleStorage();
+
+describe("Particle.create", () => {
+  it("returns a ParticleEffect", () => {
+    const effect = Particle.create();
+    assert.ok(effect instanceof ParticleEffect);
+    assert.ok(effect.system);
+    assert.ok(effect.emitter);
+    effect.destroy();
+  });
+
+  it("works with minimal options", () => {
+    const effect = Particle.create({});
+    assert.strictEqual(effect.system.activeCount, 0);
+    effect.destroy();
+  });
+
+  it("applies position from {x, y}", () => {
+    const effect = Particle.create({ position: { x: 42, y: 99 } });
+    assert.strictEqual(effect.position.x, 42);
+    assert.strictEqual(effect.position.y, 99);
+    assert.strictEqual(effect.emitter.x, 42);
+    effect.destroy();
+  });
+
+  it("applies position from [x, y]", () => {
+    const effect = Particle.create({ position: [7, 8] });
+    assert.strictEqual(effect.position.x, 7);
+    assert.strictEqual(effect.position.y, 8);
+    effect.destroy();
+  });
+
+  it("defaults position to 0, 0", () => {
+    const effect = Particle.create();
+    assert.strictEqual(effect.position.x, 0);
+    assert.strictEqual(effect.position.y, 0);
+    effect.destroy();
+  });
+
+  it("does not autoplay", () => {
+    const effect = Particle.create({ rate: 100, lifetime: 1, storage: objectStorage() });
+    effect.update(0.1);
+    assert.strictEqual(effect.system.activeCount, 0);
+    effect.play();
+    effect.update(0.1);
+    assert.ok(effect.system.activeCount > 0);
+    effect.destroy();
+  });
+
+  it("emits while stopped", () => {
+    const effect = Particle.create({ storage: objectStorage() });
+    effect.emit(5);
+    assert.strictEqual(effect.system.activeCount, 5);
+    effect.destroy();
+  });
+
+  it("bursts while stopped", () => {
+    const effect = Particle.create({ storage: objectStorage() });
+    effect.burst(10);
+    assert.strictEqual(effect.system.activeCount, 10);
+    effect.destroy();
+  });
+
+  it("applies a single lifetime value", () => {
+    const effect = Particle.create({ rate: 10, lifetime: 1.5, storage: objectStorage() });
+    effect.play();
+    effect.update(0.1);
+    const p = effect.system.particles[0];
+    assert.strictEqual(p.maxLife, 1.5);
+    assert.ok(Math.abs(p.life - 1.4) < 1e-3);
+    effect.destroy();
+  });
+
+  it("randomizes lifetime within a range", () => {
+    const effect = Particle.create({ rate: 100, lifetime: [0.5, 1.5], storage: objectStorage() });
+    effect.play();
+    effect.update(0.1);
+    const particles = effect.system.particles;
+    assert.ok(particles.length > 0);
+    for (const p of particles) {
+      assert.ok(p.maxLife >= 0.5);
+      assert.ok(p.maxLife <= 1.5);
+    }
+    effect.destroy();
+  });
+
+  it("composes lifetime with a user initializer", () => {
+    const effect = Particle.create({
+      rate: 10,
+      lifetime: 1,
+      initializer: (p) => { p.size = 3; },
+      storage: objectStorage(),
+    });
+    effect.play();
+    effect.update(0.1);
+    const p = effect.system.particles[0];
+    assert.strictEqual(p.maxLife, 1);
+    assert.strictEqual(p.size, 3);
+    effect.destroy();
+  });
+
+  it("uses a custom shape", () => {
+    const cone = new ConeShape({ radius: 10, angle: Math.PI / 2, direction: 0, speed: 50 });
+    const effect = Particle.create({ rate: 10, lifetime: 1, shape: cone });
+    effect.play();
+    effect.update(0.1);
+    assert.strictEqual(effect.emitter.shape, cone);
+    effect.destroy();
+  });
+});
+
+describe("Particle position", () => {
+  it("supports live x/y mutation", () => {
+    const effect = Particle.create({ position: { x: 10, y: 20 } });
+    effect.position.x = 5;
+    assert.strictEqual(effect.position.x, 5);
+    assert.strictEqual(effect.position.y, 20);
+    assert.strictEqual(effect.emitter.x, 5);
+    effect.position.y = 30;
+    assert.strictEqual(effect.position.y, 30);
+    effect.destroy();
+  });
+
+  it("supports assignment of {x, y}", () => {
+    const effect = Particle.create();
+    effect.position = { x: 1, y: 2 };
+    assert.strictEqual(effect.position.x, 1);
+    assert.strictEqual(effect.position.y, 2);
+    effect.destroy();
+  });
+
+  it("supports assignment of [x, y]", () => {
+    const effect = Particle.create();
+    effect.position = [7, 8];
+    assert.strictEqual(effect.position.x, 7);
+    assert.strictEqual(effect.position.y, 8);
+    effect.destroy();
+  });
+
+  it("supports position.set(x, y)", () => {
+    const effect = Particle.create();
+    effect.position.set(3, 4);
+    assert.strictEqual(effect.position.x, 3);
+    assert.strictEqual(effect.position.y, 4);
+    effect.destroy();
+  });
+
+  it("moves via move(dx, dy)", () => {
+    const effect = Particle.create({ position: { x: 10, y: 20 } });
+    effect.move(10, 20);
+    assert.strictEqual(effect.position.x, 20);
+    assert.strictEqual(effect.position.y, 40);
+    effect.destroy();
+  });
+});
+
+describe("Particle follow", () => {
+  it("tracks a target through the default getter", () => {
+    const target = { transform: { x: 100, y: 200 } };
+    const effect = Particle.create({ rate: 10, lifetime: 1, follow: target });
+    effect.play();
+    effect.update(0.1);
+    assert.strictEqual(effect.following, true);
+    assert.strictEqual(effect.position.x, 100);
+    assert.strictEqual(effect.position.y, 200);
+    target.transform.x = 150;
+    effect.update(0.1);
+    assert.strictEqual(effect.position.x, 150);
+    effect.destroy();
+  });
+
+  it("accepts a custom getter via { target, getter }", () => {
+    const player = { weapon: { x: 5, y: 6 } };
+    const effect = Particle.create({
+      rate: 10,
+      lifetime: 1,
+      follow: { target: player, getter: (p) => p.weapon },
+    });
+    effect.play();
+    effect.update(0.1);
+    assert.strictEqual(effect.position.x, 5);
+    assert.strictEqual(effect.position.y, 6);
+    effect.destroy();
+  });
+
+  it("unfollows", () => {
+    const target = { transform: { x: 100, y: 200 } };
+    const effect = Particle.create({ rate: 10, lifetime: 1, follow: target });
+    effect.play();
+    effect.update(0.1);
+    assert.strictEqual(effect.following, true);
+    effect.unfollow();
+    assert.strictEqual(effect.following, false);
+    target.transform.x = 999;
+    effect.update(0.1);
+    assert.strictEqual(effect.position.x, 100);
+    effect.destroy();
+  });
+});
+
+describe("Particle state", () => {
+  it("visible = false skips rendering", () => {
+    const effect = Particle.create();
+    let rendered = 0;
+    effect.system.render = () => { rendered++; };
+    effect.visible = false;
+    effect.render({});
+    assert.strictEqual(rendered, 0);
+    effect.visible = true;
+    effect.render({});
+    assert.strictEqual(rendered, 1);
+    effect.destroy();
+  });
+
+  it("enabled = false skips update and render", () => {
+    const effect = Particle.create({ storage: objectStorage() });
+    effect.burst(5);
+    let updated = 0;
+    effect.system.update = (dt) => { updated++; };
+    effect.enabled = false;
+    effect.update(0.1);
+    effect.render({});
+    assert.strictEqual(updated, 0);
+    assert.strictEqual(effect.system.activeCount, 5);
+    effect.enabled = true;
+    effect.update(0.1);
+    assert.strictEqual(updated, 1);
+    effect.destroy();
+  });
+
+  it("restart() resumes emission after a stop", () => {
+    const effect = Particle.create({ rate: 50, lifetime: 1, storage: objectStorage() });
+    effect.play();
+    effect.update(0.2);
+    assert.ok(effect.system.activeCount > 0);
+    effect.restart();
+    assert.strictEqual(effect.system.activeCount, 0);
+    effect.update(0.2);
+    assert.ok(effect.system.activeCount > 0);
+    effect.destroy();
+  });
+
+  it("clear() kills all alive particles", () => {
+    const effect = Particle.create({ storage: objectStorage() });
+    effect.burst(10);
+    assert.strictEqual(effect.system.activeCount, 10);
+    effect.clear();
+    assert.strictEqual(effect.system.activeCount, 0);
+    effect.destroy();
+  });
+
+  it("destroy() halts everything", () => {
+    const effect = Particle.create({ rate: 50, lifetime: 1 });
+    effect.play();
+    effect.destroy();
+    assert.strictEqual(effect.active, false);
+    assert.strictEqual(effect.finished, true);
+    effect.update(0.1);
+    effect.play();
+    assert.strictEqual(effect.active, false);
+  });
+});
+
+describe("Particle completion", () => {
+  it("fires onFinish once when empty and stopped", () => {
+    let called = 0;
+    const effect = Particle.create({ rate: 0, lifetime: 0.1 });
+    effect.onFinish(() => { called++; });
+    effect.burst(1);
+    effect.update(0.2);
+    assert.strictEqual(called, 1);
+    assert.strictEqual(effect.finished, true);
+    effect.update(0.2);
+    assert.strictEqual(called, 1);
+  });
+});
+
+describe("Particle rotation", () => {
+  it("forwards to a ConeShape direction", () => {
+    const cone = new ConeShape({ radius: 10, angle: Math.PI / 2, direction: 0, speed: 50 });
+    const effect = Particle.create({ shape: cone });
+    effect.rotation = -Math.PI / 2;
+    assert.strictEqual(cone._coneDirection, -Math.PI / 2);
+    assert.strictEqual(effect.rotation, -Math.PI / 2);
+    effect.destroy();
+  });
+});
+
+describe("Particle capacity", () => {
+  it("estimates capacity from rate and lifetime", () => {
+    const effect = Particle.create({ rate: 100, lifetime: 2, storage: objectStorage() });
+    assert.ok(effect.system.capacity >= 300);
+    effect.destroy();
+  });
+
+  it("honors an explicit capacity", () => {
+    const effect = Particle.create({ capacity: 500, storage: objectStorage() });
+    assert.ok(effect.system.capacity >= 500);
+    effect.destroy();
+  });
+});
+
+describe("Particle backend", () => {
+  it("uses the CPU backend by default", () => {
+    const effect = Particle.create({ rate: 10, lifetime: 1 });
+    assert.ok(effect.system._backend instanceof CpuParticleBackend);
+    effect.destroy();
+  });
+
+  it("accepts backend: \"cpu\"", () => {
+    const effect = Particle.create({ rate: 10, lifetime: 1, backend: "cpu" });
+    assert.ok(effect.system._backend instanceof CpuParticleBackend);
+    effect.destroy();
+  });
+
+  it("accepts a backend instance", () => {
+    const backend = new CpuParticleBackend({ storage: objectStorage() });
+    const effect = Particle.create({ rate: 10, lifetime: 1, backend });
+    assert.strictEqual(effect.system._backend, backend);
+    effect.destroy();
+  });
+});

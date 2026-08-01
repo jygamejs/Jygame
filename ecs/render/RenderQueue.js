@@ -2,6 +2,7 @@ export class RenderQueue {
   constructor() {
     this._commands = [];
     this._count = 0;
+    this._order = [];
     this.imagesDrawn = 0;
     this.primitivesDrawn = 0;
   }
@@ -18,16 +19,17 @@ export class RenderQueue {
       cmds[i].sy = 0;
       cmds[i].sw = 0;
       cmds[i].sh = 0;
+      cmds[i].depth = 0;
     }
     this._count = 0;
     this.imagesDrawn = 0;
     this.primitivesDrawn = 0;
   }
 
-  push(sourceImage, sx, sy, sw, sh, x, y, rotation, scaleX, scaleY, width, height, fillColor, shape, layer, imageSmoothing) {
+  push(sourceImage, sx, sy, sw, sh, x, y, rotation, scaleX, scaleY, width, height, fillColor, shape, layer, imageSmoothing, depth) {
     let cmd = this._commands[this._count];
     if (!cmd) {
-      cmd = { sourceImage: null, sx: 0, sy: 0, sw: 0, sh: 0, x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, width: 0, height: 0, fillColor: 0, shape: 0, layer: 0, imageSmoothing: true };
+      cmd = { sourceImage: null, sx: 0, sy: 0, sw: 0, sh: 0, x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, width: 0, height: 0, fillColor: 0, shape: 0, layer: 0, depth: 0, imageSmoothing: true };
       this._commands[this._count] = cmd;
     }
     cmd.sourceImage = sourceImage;
@@ -46,6 +48,7 @@ export class RenderQueue {
     cmd.shape = shape;
     cmd.layer = layer;
     cmd.imageSmoothing = imageSmoothing !== undefined ? imageSmoothing : true;
+    cmd.depth = depth || 0;
     this._count++;
   }
 
@@ -55,8 +58,27 @@ export class RenderQueue {
     const cache = this._fillStyleCache || (this._fillStyleCache = new Map());
     let lastColor = -1;
     let images = 0, primitives = 0;
-    for (let i = 0; i < this._count; i++) {
-      const cmd = this._commands[i];
+
+    const count = this._count;
+    const cmds = this._commands;
+    let order = null;
+
+    if (count > 1) {
+      order = this._order;
+      order.length = 0;
+      for (let i = 0; i < count; i++) order.push(i);
+      order.sort((a, b) => {
+        const ca = cmds[a];
+        const cb = cmds[b];
+        if (ca.layer !== cb.layer) return ca.layer - cb.layer;
+        if (ca.depth !== cb.depth) return ca.depth - cb.depth;
+        return a - b;
+      });
+    }
+
+    for (let n = 0; n < count; n++) {
+      const i = order ? order[n] : n;
+      const cmd = cmds[i];
       if (!(cmd.layer & layerMask)) continue;
       const rot = cmd.rotation;
       const sx = cmd.scaleX;

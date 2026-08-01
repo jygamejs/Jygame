@@ -11,8 +11,8 @@ import { InputContext } from "../input/actions/InputContext.js";
 import { ActionMap } from "../input/actions/ActionMap.js";
 import { BindingCompiler } from "../input/facade/BindingCompiler.js";
 import { Transform } from "../ecs/components/Transform.js";
-import { RenderQueue } from "../ecs/render/RenderQueue.js";
 import { AudioListener } from "../audio/AudioListener.js";
+import { ParticleEffect } from "../particles/ParticleEffect.js";
 
 const _VIEW_COMPONENTS = Symbol("scene.views");
 
@@ -30,6 +30,7 @@ export class Scene extends EcsScene {
     this.blocksUpdateBelow = true;
     this.blocksRenderBelow = false;
     this._prevDefaultWorld = null;
+    this._prevDefaultParticleWorld = null;
     this._inputContext = null;
     this._actionMap = null;
     this._inputPriority = 0;
@@ -140,6 +141,9 @@ export class Scene extends EcsScene {
       if (this.view && this.view.camera) {
         this._world.setResource(Camera, this.view.camera);
       }
+      if (this.view && this.view.viewport) {
+        this._world.setResource(Viewport, this.view.viewport);
+      }
       if (!this._world.getResource(AudioListener)) {
         this._world.setResource(AudioListener, this._listener);
       }
@@ -147,6 +151,8 @@ export class Scene extends EcsScene {
 
     this._prevDefaultWorld = Sprite._defaultWorld;
     Sprite._defaultWorld = this._world;
+    this._prevDefaultParticleWorld = ParticleEffect._defaultWorld;
+    ParticleEffect._defaultWorld = this._world;
 
     const result = this.onEnter();
     if (result && typeof result.then === "function") {
@@ -201,6 +207,10 @@ export class Scene extends EcsScene {
 
     if (Sprite._defaultWorld === this._world) {
       Sprite._defaultWorld = this._prevDefaultWorld;
+    }
+
+    if (ParticleEffect._defaultWorld === this._world) {
+      ParticleEffect._defaultWorld = this._prevDefaultParticleWorld;
     }
 
     if (this._world) {
@@ -283,27 +293,8 @@ export class Scene extends EcsScene {
     }
   }
 
-  _renderWorld(ctx) {
-    const w = this._world;
-    if (!w) return;
-    const queue = w.getResource(RenderQueue);
-    if (!queue || queue.count === 0) return;
-
-    const sorted = this._getSortedViews();
-    for (const view of sorted) {
-      if (!view.active) continue;
-      view.prepare(ctx);
-      queue.execute(ctx, view.config.layers);
-      view.cleanup(ctx);
-    }
-  }
-
-  renderBackground(ctx) {
-    // user-overridable hook — runs before _renderWorld (behind all entities)
-  }
-
   render(ctx) {
-    // user-overridable overlay hook — runs after _renderWorld
+    // user-overridable hook — runs before the World renders retained objects
   }
 
   renderUI() {}

@@ -240,6 +240,16 @@ export class Sprite {
     this.#world.get(this.#entity, Renderable).layer = v;
   }
 
+  get depth() {
+    this._assertAlive();
+    return this.#world.get(this.#entity, Renderable).depth;
+  }
+
+  set depth(v) {
+    this._assertAlive();
+    this.#world.get(this.#entity, Renderable).depth = v;
+  }
+
   get imageSmoothing() {
     this._assertAlive();
     return !!this.#world.get(this.#entity, Renderable).imageSmoothing;
@@ -610,6 +620,24 @@ export class Sprite {
     }
   }
 
+  _showInitialFrame() {
+    if (this._animCurrent) return;
+    if (!this._animMap || this._animMap.size === 0) return;
+    const first = this._animMap.values().next().value;
+    if (!first || !first.frames || first.frames.length === 0) return;
+    const frame = first.frames[0];
+    if (typeof frame !== "number") return;
+    const w = this.#world;
+    if (w.hasResource(AssetRegistry)) {
+      const reg = w.getResource(AssetRegistry);
+      const current = w.get(this.#entity, Renderable).image;
+      if (current && reg.get(current)) return;
+    }
+    const r = w.get(this.#entity, Renderable);
+    r.image = frame;
+    this._resolveFromClip(null, first);
+  }
+
   get image() { this._assertAlive(); return this.#world.get(this.#entity, Renderable).image; }
   set image(v) {
     this._assertAlive();
@@ -773,6 +801,7 @@ export class Sprite {
           const key = this._clipKey(name);
           if (!reg.has(key)) reg.register(key, assetClip);
         }
+        self._showInitialFrame();
         return this;
       },
 
@@ -791,6 +820,7 @@ export class Sprite {
             if (!reg.has(key)) reg.register(key, assetClip);
           }
         }
+        self._showInitialFrame();
         return this;
       },
 

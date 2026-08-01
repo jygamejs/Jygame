@@ -1,4 +1,10 @@
+import { createParticleEffect } from "../particles/facade.js";
+
 export class Particle {
+  static create(options) {
+    return createParticleEffect(options);
+  }
+
   constructor() {
     this.x = 0;
     this.y = 0;

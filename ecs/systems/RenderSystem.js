@@ -74,11 +74,12 @@ export class RenderSystem extends System {
       const fillCol = table.getColumn(rid, "fillColor");
       const shape = table.getColumn(rid, "shape");
       const layer = table.getColumn(rid, "layer");
+      const depth = table.getColumn(rid, "depth");
       const smoothing = table.getColumn(rid, "imageSmoothing");
       const rw = table.getColumn(rbid, "width");
       const rh = table.getColumn(rbid, "height");
       const visible = table.getColumn(vid, "value");
-      if (!tx || !ty || !trot || !tsx || !tsy || !img || !fillCol || !shape || !layer || !smoothing || !rw || !rh || !visible) continue;
+      if (!tx || !ty || !trot || !tsx || !tsy || !img || !fillCol || !shape || !layer || !depth || !smoothing || !rw || !rh || !visible) continue;
 
       for (let r = 0; r < count; r++) {
         if (!visible[r]) continue;
@@ -100,7 +101,7 @@ export class RenderSystem extends System {
           sourceImage, sx, sy, sw, sh,
           tx[r], ty[r], trot[r], tsx[r], tsy[r],
           rw[r], rh[r], fillCol[r], shape[r], layer[r],
-          !!smoothing[r]
+          !!smoothing[r], depth[r]
         );
       }
     }

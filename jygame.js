@@ -39,7 +39,6 @@ export { Camera } from "./view/Camera.js";
 export { View } from "./view/View.js";
 export { Viewport } from "./view/Viewport.js";
 export { RenderConfig } from "./view/RenderConfig.js";
-export { Layer } from "./view/Layer.js";
 export { CollisionSystem } from "./ecs/systems/CollisionSystem.js";
 export { World } from "./ecs/core/World.js";
 export { DefaultWorldBuilder } from "./ecs/bootstrap/DefaultWorldBuilder.js";

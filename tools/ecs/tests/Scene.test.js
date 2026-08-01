@@ -222,13 +222,18 @@ describe("SceneManager — scenes", () => {
     class B extends Scene {
       render(ctx) { rendered.push("B"); }
     }
+    const mockCtx = {
+      save() {}, restore() {}, translate() {}, rotate() {}, scale() {},
+      getTransform() { return { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }; },
+      setTransform() {},
+    };
 
     const mgr = new SceneManager();
     mgr.add(new A("A"));
     mgr.add(new B("B"));
     mgr.start("A");
     mgr.push("B");
-    mgr.render(null);
+    mgr.render(mockCtx);
     assert.deepStrictEqual(rendered, ["A", "B"]);
   });
 

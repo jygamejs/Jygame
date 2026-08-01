@@ -299,6 +299,7 @@ export class Game {
     const html = scene.renderUI();
     if (html !== undefined && html !== null) {
       scene.root.innerHTML = html;
+      scene._lastUIHTML = html;
     }
   }
 
@@ -468,7 +469,16 @@ export class Game {
 
   _renderScenes(ctx, start) {
     for (let i = start; i < this._sceneStack.length; i++) {
-      this._sceneStack[i]._renderFrame(ctx);
+      const scene = this._sceneStack[i];
+      scene.render(ctx);
+      if (scene.world) {
+        scene.world.render(ctx);
+      }
+      const html = scene.renderUI();
+      if (html !== undefined && html !== null && html !== scene._lastUIHTML) {
+        scene.root.innerHTML = html;
+        scene._lastUIHTML = html;
+      }
     }
   }
 

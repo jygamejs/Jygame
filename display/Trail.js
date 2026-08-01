@@ -58,6 +58,7 @@ export class Trail {
       throw new Error("Trail layer must be a non-negative integer");
     }
     this._layer = layer;
+    this._depth = 0;
 
     this._maxPerFrame = maxPerFrame !== undefined ? maxPerFrame : maxPoints;
     if (!Number.isFinite(this._maxPerFrame) || this._maxPerFrame < 0) {
@@ -97,6 +98,12 @@ export class Trail {
     if (!Number.isFinite(v) || v < 0 || (v | 0) !== v) throw new Error("Trail layer must be a non-negative integer");
     Trail._globalLayerVersion++;
     this._layer = v;
+  }
+
+  get depth() { return this._depth; }
+  set depth(v) {
+    if (!Number.isFinite(v)) throw new Error("Trail depth must be a finite number");
+    this._depth = v;
   }
 
   follow(target) {

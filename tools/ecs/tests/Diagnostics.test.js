@@ -1393,6 +1393,7 @@ describe("Diagnostics Subsystem Instrumentation", () => {
       world.update(1 / 60);
       world.setComponent(e, Transform, { x:100, y:0 });
       world.update(1 / 60);
+      world.render(canvasCtx);
 
       const snap = diag.lastSnapshot;
       const trails = diag.metrics.find("render.trails");
@@ -1455,6 +1456,7 @@ describe("Diagnostics Subsystem Instrumentation", () => {
       world.update(1 / 60);
       world.setComponent(e, Transform, { x:50, y:0 });
       world.update(1 / 60);
+      world.render(canvasCtx);
 
       const snap = diag.lastSnapshot;
       const ribs = diag.metrics.find("render.trails.ribbons");
@@ -1499,6 +1501,7 @@ describe("Diagnostics Subsystem Instrumentation", () => {
       diag.lockRegistry();
 
       world.update(1 / 60);
+      world.render(canvasCtx);
       const snap = diag.lastSnapshot;
       const seg = diag.metrics.find("render.trails.segments");
       const lines = diag.metrics.find("render.trails.lines");
@@ -1535,6 +1538,7 @@ describe("Diagnostics Subsystem Instrumentation", () => {
       world.setComponent(e, Trail, { enabled:1, maxPoints:64, spacing:4, width:4, color:0xffffff, mode:0 });
 
       world.update(1 / 60);
+      assert.doesNotThrow(() => world.render(canvasCtx));
       assert.ok(true, "TrailSystem update completes without Diagnostics");
     });
   });

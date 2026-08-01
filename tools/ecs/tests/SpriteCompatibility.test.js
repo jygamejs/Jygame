@@ -976,6 +976,76 @@ describe("Lazy Size Resolution", () => {
     s.animation.play("walk");
     assert.strictEqual(s.nativeWidth, 80);
   });
+
+  it("addAll shows the first clip's first frame without play()", () => {
+    const s = new Sprite();
+    const w = s.world;
+
+    const reg = new AssetRegistry();
+    const id1 = reg.register({ sourceImage: {}, sw: 80, sh: 60 });
+    const id2 = reg.register({ sourceImage: {}, sw: 100, sh: 75 });
+    w.setResource(AssetRegistry, reg);
+
+    const clipReg = new AnimationClipRegistry();
+    w.setResource(AnimationClipRegistry, clipReg);
+
+    s.animation.addAll({
+      idle: new AnimationClip({ frames: [id1, id1], fps: 10, loop: true }),
+      walk: new AnimationClip({ frames: [id2], fps: 10, loop: true }),
+    });
+
+    const r = w.get(s.entity, Renderable);
+    assert.strictEqual(r.image, id1);
+    assert.strictEqual(s.nativeWidth, 80);
+    assert.strictEqual(s.nativeHeight, 60);
+    assert.strictEqual(s.width, 80);
+    assert.strictEqual(s.height, 60);
+  });
+
+  it("addAll after play() does not override the played animation", () => {
+    const s = new Sprite();
+    const w = s.world;
+
+    const reg = new AssetRegistry();
+    const id1 = reg.register({ sourceImage: {}, sw: 80, sh: 60 });
+    w.setResource(AssetRegistry, reg);
+
+    const clipReg = new AnimationClipRegistry();
+    w.setResource(AnimationClipRegistry, clipReg);
+
+    s.animation.addAll({
+      idle: new AnimationClip({ frames: [id1], fps: 10, loop: true }),
+    });
+    s.animation.play("idle");
+    const before = w.get(s.entity, Renderable).image;
+
+    s.animation.addAll({
+      walk: new AnimationClip({ frames: [id1], fps: 10, loop: true }),
+    });
+
+    assert.strictEqual(w.get(s.entity, Renderable).image, before);
+  });
+
+  it("addAll does not overwrite an explicitly set image", () => {
+    const s = new Sprite();
+    const w = s.world;
+
+    const reg = new AssetRegistry();
+    const id0 = reg.register({ sourceImage: {}, sw: 10, sh: 10 });
+    const id1 = reg.register({ sourceImage: {}, sw: 80, sh: 60 });
+    w.setResource(AssetRegistry, reg);
+
+    const clipReg = new AnimationClipRegistry();
+    w.setResource(AnimationClipRegistry, clipReg);
+
+    s.image = id0;
+
+    s.animation.addAll({
+      idle: new AnimationClip({ frames: [id1], fps: 10, loop: true }),
+    });
+
+    assert.strictEqual(w.get(s.entity, Renderable).image, id0);
+  });
 });
 
 // ─────────────────────────────────────────────────────────

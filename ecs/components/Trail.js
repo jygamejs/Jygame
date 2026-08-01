@@ -6,5 +6,6 @@ export class Trail {
     width: "f32",
     color: "u32",
     mode: "u8",
+    depth: "f32",
   };
 }
