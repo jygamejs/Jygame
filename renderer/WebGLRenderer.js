@@ -1,0 +1,413 @@
+import { Renderer } from "./Renderer.js";
+import { Diagnostics, resolveMetricIds } from "../debug/index.js";
+import { RenderQueue } from "../ecs/render/RenderQueue.js";
+import { RenderConfig } from "../view/RenderConfig.js";
+import { Camera } from "../view/Camera.js";
+import { Viewport } from "../view/Viewport.js";
+import { ImmediateCanvas } from "./immediate/ImmediateCanvas.js";
+import { QuadBatch } from "./gl/quad.batch.js";
+import { TextureCache } from "./gl/texture.cache.js";
+import { createProgram, buildViewProjection } from "./gl/index.js";
+
+const VERTEX_SOURCE = `#version 300 es
+precision highp float;
+in vec2 aCorner;
+in vec2 aPos;
+in float aRot;
+in vec2 aScale;
+in vec2 aSize;
+in vec4 aUv;
+in vec4 aColor;
+in float aDepth;
+in float aShape;
+out vec2 vUv;
+out vec4 vColor;
+out vec2 vLocal;
+out vec2 vScale;
+out float vRadius;
+out float vShape;
+uniform mat4 uMatrix;
+void main() {
+  vec2 local = (aCorner - 0.5) * aSize * aScale;
+  float cosR = cos(aRot);
+  float sinR = sin(aRot);
+  vec2 rotated = vec2(cosR * local.x - sinR * local.y, sinR * local.x + cosR * local.y);
+  vec2 world = rotated + aPos;
+  gl_Position = uMatrix * vec4(world, aDepth, 1.0);
+  vUv = mix(aUv.xy, aUv.zw, aCorner);
+  vColor = aColor;
+  vLocal = local;
+  vScale = aScale;
+  vRadius = min(abs(aSize.x), abs(aSize.y)) * 0.5;
+  vShape = aShape;
+}
+`;
+
+const FRAGMENT_SOURCE = `#version 300 es
+precision mediump float;
+in vec2 vUv;
+in vec4 vColor;
+in vec2 vLocal;
+in vec2 vScale;
+in float vRadius;
+in float vShape;
+uniform sampler2D uTexture;
+out vec4 outColor;
+void main() {
+  if (vShape > 0.5) {
+    vec2 p = vScale.x != 0.0 && vScale.y != 0.0 ? vLocal / vScale : vec2(0.0, 0.0);
+    if (length(p) > vRadius) discard;
+  }
+  vec4 color = texture(uTexture, vUv) * vColor;
+  if (color.a <= 0.001) discard;
+  outColor = color;
+}
+`;
+
+const COMPOSITE_VERTEX_SOURCE = `#version 300 es
+precision highp float;
+in vec2 aPos;
+in vec2 aUv;
+out vec2 vUv;
+void main() {
+  vUv = aUv;
+  gl_Position = vec4(aPos, 0.0, 1.0);
+}
+`;
+
+const COMPOSITE_FRAGMENT_SOURCE = `#version 300 es
+precision mediump float;
+in vec2 vUv;
+uniform sampler2D uTexture;
+out vec4 outColor;
+void main() {
+  outColor = texture(uTexture, vUv);
+}
+`;
+
+const COMPOSITE_VERTICES = new Float32Array([
+  -1, -1, 0, 1,
+   1, -1, 1, 1,
+  -1,  1, 0, 0,
+   1,  1, 1, 0,
+]);
+
+export class WebGLRenderer extends Renderer {
+  static isAvailable() {
+    if (typeof document === "undefined" || typeof document.createElement !== "function") {
+      return false;
+    }
+    try {
+      const probe = document.createElement("canvas");
+      return !!(probe.getContext && probe.getContext("webgl2"));
+    } catch (err) {
+      return false;
+    }
+  }
+
+  constructor({ canvas = null, context = null, width = 0, height = 0, options = {} } = {}) {
+    super({ canvas, width, height, options });
+
+    if (context) {
+      this._gl = context;
+    } else if (canvas) {
+      this._gl = canvas.getContext("webgl2", options.glAttributes || undefined);
+    } else {
+      this._gl = null;
+    }
+    if (!this._gl) {
+      throw new Error("WebGLRenderer requires a WebGL2 context.");
+    }
+
+    const gl = this._gl;
+    this._program = createProgram(gl, VERTEX_SOURCE, FRAGMENT_SOURCE, {
+      aCorner: 0, aPos: 1, aRot: 2, aScale: 3, aSize: 4, aUv: 5, aColor: 6, aDepth: 7, aShape: 8,
+    });
+    this._uMatrixLocation = gl.getUniformLocation(this._program, "uMatrix");
+    this._uTextureLocation = gl.getUniformLocation(this._program, "uTexture");
+
+    this._compositeProgram = createProgram(gl, COMPOSITE_VERTEX_SOURCE, COMPOSITE_FRAGMENT_SOURCE, {
+      aPos: 0, aUv: 1,
+    });
+    this._compositeTextureLocation = gl.getUniformLocation(this._compositeProgram, "uTexture");
+    this._compositeVertexBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, this._compositeVertexBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, COMPOSITE_VERTICES, gl.STATIC_DRAW);
+    this._compositeVAO = gl.createVertexArray();
+    gl.bindVertexArray(this._compositeVAO);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this._compositeVertexBuffer);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 16, 0);
+    gl.enableVertexAttribArray(1);
+    gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 16, 8);
+    gl.bindVertexArray(null);
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+    this._batch = new QuadBatch(gl, { maxInstances: options.maxInstances || 4096 });
+    this._textures = new TextureCache(gl);
+    this._compositeTexture = gl.createTexture();
+
+    this._immediate = new ImmediateCanvas(width, height);
+    this._clearColor = [0, 0, 0, 0];
+
+    this._frameCount = 0;
+    this._diagIds = null;
+    this._diag = null;
+    this._currentTexture = null;
+
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.disable(gl.DEPTH_TEST);
+  }
+
+  beginFrame() {
+    this._immediate.clear();
+  }
+
+  clear() {
+    const gl = this._gl;
+    const [r, g, b, a] = this._clearColor;
+    gl.clearColor(r, g, b, a);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+  }
+
+  render(world) {
+    const diag = world.getResource(Diagnostics);
+    const ownFrame = diag && !diag.isInsideFrame;
+    if (ownFrame) diag.beginFrame(this._frameCount++, 16);
+
+    try {
+      this._diag = diag;
+      if (diag) this._initDiag(diag);
+      const ids = this._diagIds;
+
+      const doRender = () => this._renderQueue(world);
+      if (diag && ids && ids.draw >= 0) {
+        diag.scope(ids.draw, doRender);
+      } else {
+        doRender();
+      }
+    } finally {
+      this._diag = null;
+      if (ownFrame) diag.endFrame();
+    }
+  }
+
+  endFrame() {
+    this._flushBatch();
+    this._compositeImmediate();
+  }
+
+  _renderQueue(world) {
+    const queue = world.getResource(RenderQueue);
+    if (!queue || queue.count === 0) return;
+
+    const cfg = world.getResource(RenderConfig);
+    this._applyClearColor(cfg);
+    const camera = world.getResource(Camera);
+    const vp = world.getResource(Viewport);
+    const matrix = buildViewProjection(camera, vp, this._width, this._height, !!(cfg && cfg.screenSpace));
+
+    const gl = this._gl;
+    gl.useProgram(this._program);
+    gl.uniformMatrix4fv(this._uMatrixLocation, false, matrix);
+    gl.uniform1i(this._uTextureLocation, 0);
+    gl.activeTexture(gl.TEXTURE0);
+
+    this._batch.reset();
+    this._currentTexture = null;
+
+    let images = 0, primitives = 0;
+
+    queue.forEachCommandSorted((cmd) => {
+      let entry = this._textures.white();
+      if (cmd.sourceImage) {
+        entry = this._textures.get(cmd.sourceImage, cmd.imageSmoothing);
+        images++;
+      } else {
+        primitives++;
+      }
+
+      if (entry.texture !== this._currentTexture) {
+        this._flushBatch();
+        this._currentTexture = entry.texture;
+        gl.bindTexture(gl.TEXTURE_2D, entry.texture);
+      }
+
+      if (this._cull(cmd, camera, vp, cfg)) return;
+
+      let x = cmd.x;
+      let y = cmd.y;
+      if (cfg && cfg.pixelPerfect) {
+        x = Math.round(x);
+        y = Math.round(y);
+      }
+
+      let r = 255, g = 255, b = 255;
+      let u0 = 0, v0 = 0, u1 = 1, v1 = 1;
+      if (cmd.sourceImage) {
+        const iw = entry.width;
+        const ih = entry.height;
+        u0 = cmd.sx / iw;
+        v0 = cmd.sy / ih;
+        u1 = (cmd.sx + cmd.sw) / iw;
+        v1 = (cmd.sy + cmd.sh) / ih;
+      } else {
+        r = (cmd.fillColor >> 16) & 255;
+        g = (cmd.fillColor >> 8) & 255;
+        b = cmd.fillColor & 255;
+      }
+
+      this._batch.add({
+        x,
+        y,
+        rotation: cmd.rotation,
+        scaleX: cmd.scaleX,
+        scaleY: cmd.scaleY,
+        width: cmd.width,
+        height: cmd.height,
+        u0, v0, u1, v1,
+        r: r / 255, g: g / 255, b: b / 255, a: 1,
+        depth: cmd.depth,
+        shape: cmd.shape,
+      });
+    });
+
+    this._flushBatch();
+
+    if (this._diag && this._diagIds) {
+      const ids = this._diagIds;
+      if (ids.images >= 0) this._diag.recordCounter(ids.images, images);
+      if (ids.primitives >= 0) this._diag.recordCounter(ids.primitives, primitives);
+    }
+  }
+
+  _flushBatch() {
+    if (this._batch.count === 0) return;
+    const diag = this._diag;
+    const ids = this._diagIds;
+    const doFlush = () => this._batch.flush();
+    if (diag && ids && ids.batch >= 0) {
+      diag.scope(ids.batch, doFlush);
+    } else {
+      doFlush();
+    }
+  }
+
+  _cull(cmd, camera, vp, cfg) {
+    if (!cfg || !cfg.culling || !camera || !vp) return false;
+    const dx = cmd.x - camera.x;
+    const dy = cmd.y - camera.y;
+    const maxHalf = Math.max(Math.abs(cmd.width * cmd.scaleX), Math.abs(cmd.height * cmd.scaleY)) * 0.5;
+    const radius = maxHalf * Math.SQRT2 * camera.zoom;
+    const cx = vp.width * 0.5;
+    const cy = vp.height * 0.5;
+    const sx = vp.x + cx + (dx * camera._cos + dy * camera._sin) * camera.zoom;
+    const sy = vp.y + cy + (-dx * camera._sin + dy * camera._cos) * camera.zoom;
+    return sx < -radius || sx > vp.width + radius || sy < -radius || sy > vp.height + radius;
+  }
+
+  _applyClearColor(cfg) {
+    if (!cfg || cfg.clearColor == null) {
+      this._clearColor = [0, 0, 0, 0];
+      return;
+    }
+    this._clearColor = this._parseColor(cfg.clearColor);
+  }
+
+  _parseColor(color) {
+    if (typeof color !== "string") return [0, 0, 0, 0];
+    const s = color.trim();
+    if (s[0] === "#") {
+      let hex = s.slice(1);
+      if (hex.length === 3) {
+        hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+      }
+      const int = parseInt(hex, 16);
+      if (Number.isNaN(int)) return [0, 0, 0, 0];
+      if (hex.length >= 8) {
+        return [
+          ((int >> 24) & 255) / 255,
+          ((int >> 16) & 255) / 255,
+          ((int >> 8) & 255) / 255,
+          (int & 255) / 255,
+        ];
+      }
+      return [
+        ((int >> 16) & 255) / 255,
+        ((int >> 8) & 255) / 255,
+        (int & 255) / 255,
+        1,
+      ];
+    }
+    if (s.startsWith("rgb")) {
+      const m = s.match(/([\d.]+)/g);
+      if (m && m.length >= 3) {
+        return [
+          parseFloat(m[0]) / 255,
+          parseFloat(m[1]) / 255,
+          parseFloat(m[2]) / 255,
+          m[3] !== undefined ? parseFloat(m[3]) : 1,
+        ];
+      }
+    }
+    return [0, 0, 0, 0];
+  }
+
+  _compositeImmediate() {
+    const overlay = this._immediate.canvas;
+    if (!overlay || !this._immediate.context) return;
+    const gl = this._gl;
+
+    gl.bindTexture(gl.TEXTURE_2D, this._compositeTexture);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, overlay);
+
+    gl.useProgram(this._compositeProgram);
+    gl.uniform1i(this._compositeTextureLocation, 0);
+    gl.activeTexture(gl.TEXTURE0);
+
+    gl.bindVertexArray(this._compositeVAO);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    gl.bindVertexArray(null);
+
+    gl.useProgram(this._program);
+  }
+
+  _initDiag(diag) {
+    if (this._diagIds) return;
+    this._diagIds = resolveMetricIds(diag, {
+      draw: "render.draw",
+      batch: "render.batch",
+      images: "render.images",
+      primitives: "render.primitives",
+    });
+  }
+
+  resize(width, height) {
+    super.resize(width, height);
+    if (this.canvas) {
+      if (this.canvas.width !== width) this.canvas.width = width;
+      if (this.canvas.height !== height) this.canvas.height = height;
+    }
+    const gl = this._gl;
+    gl.viewport(0, 0, this.canvas ? this.canvas.width : width, this.canvas ? this.canvas.height : height);
+    this._immediate.resize(width, height);
+  }
+
+  destroy() {
+    const gl = this._gl;
+    if (!gl) return;
+    this._textures.destroy();
+    this._batch.destroy();
+    gl.deleteProgram(this._program);
+    gl.deleteProgram(this._compositeProgram);
+    gl.deleteBuffer(this._compositeVertexBuffer);
+    gl.deleteVertexArray(this._compositeVAO);
+    gl.deleteTexture(this._compositeTexture);
+  }
+
+  get immediateContext() {
+    return this._immediate.context;
+  }
+}

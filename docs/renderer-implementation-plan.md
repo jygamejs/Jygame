@@ -2,7 +2,7 @@
 
 ## Status
 
-**In progress — Sessions 1-2 complete.** Design target: `docs/renderer-architecture.md`
+**In progress — Sessions 1-3 complete.** Design target: `docs/renderer-architecture.md`
 (Proposed). This plan turns that design into concrete, session-by-session work.
 
 Session 1 (Renderer contract + `CanvasRenderer`) is implemented and green:
@@ -18,7 +18,21 @@ Session 2 (resolver + lifecycle) is implemented and green:
 `Game.destroy` releases the renderer, base `Renderer.resize` bookkeeping with a
 behavior-preserving `CanvasRenderer.resize` (guarded backing-store reset +
 imageSmoothing re-apply). New `RendererResolver.test.js` (7) and
-`GameRenderer.test.js` (8, DOM-mocked). Next: Session 3 (`WebGLRenderer`).
+`GameRenderer.test.js` (8, DOM-mocked).
+
+Session 3 (`WebGLRenderer` sprites + primitives) is implemented and green:
+`renderer/WebGLRenderer.js` + `renderer/gl/{index,quad.batch,texture.cache}.js`
++ `renderer/immediate/ImmediateCanvas.js`. Instanced-quad batching (per-instance
+pos/rotation/scale/size/uv/color/depth/shape), camera view-projection uniform
+matching the CanvasRenderer transform, premultiplied blending, lazy texture
+upload, `RenderConfig` clearColor/screenSpace/pixelPerfect/culling, `render.draw`
+/`render.batch`/`render.images`/`render.primitives` metrics, offscreen 2D
+immediate overlay composited in `endFrame`. `RendererResolver` `"webgl"` +
+`"auto"` (via `WebGLRenderer.isAvailable()` probe); `Scene` registers
+`RenderConfig` as a resource; `RenderQueue.forEachCommandSorted`. New
+`WebGLRenderer.test.js` (14, mock GL) + `tools/ecs/tests/lib/MockGL.js`.
+Canvas remains the fallback; trails/particles on GL are Session 4. Next:
+Session 4 (GL trails + particles, wire `GpuParticleBackend`).
 
 Each session is independently completable: it ends with a green test suite and
 a working engine. Sessions build on each other; do not skip Session 1.

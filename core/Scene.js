@@ -147,6 +147,9 @@ export class Scene extends EcsScene {
       if (this.view && this.view.viewport) {
         this._world.setResource(Viewport, this.view.viewport);
       }
+      if (this.view && this.view.config) {
+        this._world.setResource(RenderConfig, this.view.config);
+      }
       if (!this._world.getResource(AudioListener)) {
         this._world.setResource(AudioListener, this._listener);
       }

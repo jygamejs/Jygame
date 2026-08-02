@@ -46,7 +46,6 @@ function setupDom() {
   canvas.style.display = "block";
   const ctx = makeContext();
   canvas.getContext = (kind) => (kind === "2d" ? ctx : null);
-
   globalThis.document = {
     body,
     documentElement: makeElement(),
@@ -120,8 +119,12 @@ describe("Game renderer option", () => {
     assert.strictEqual(instance.destroy.mock.callCount(), 1);
   });
 
-  it('throws "not implemented yet" for renderer: "webgl"', () => {
-    assert.throws(() => makeGame({ renderer: "webgl" }), /not implemented yet/);
+  it('throws for renderer: "webgl" when no WebGL2 context is available', () => {
+    assert.throws(() => makeGame({ renderer: "webgl" }), /WebGL2/);
+  });
+
+  it('throws "not implemented yet" for renderer: "webgpu"', () => {
+    assert.throws(() => makeGame({ renderer: "webgpu" }), /not implemented yet/);
   });
 });
 

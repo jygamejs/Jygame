@@ -52,6 +52,29 @@ export class RenderQueue {
     this._count++;
   }
 
+  forEachCommandSorted(fn) {
+    const count = this._count;
+    if (count === 0) return;
+    const cmds = this._commands;
+    if (count === 1) {
+      fn(cmds[0], 0);
+      return;
+    }
+    const order = this._order;
+    order.length = 0;
+    for (let i = 0; i < count; i++) order.push(i);
+    order.sort((a, b) => {
+      const ca = cmds[a];
+      const cb = cmds[b];
+      if (ca.layer !== cb.layer) return ca.layer - cb.layer;
+      if (ca.depth !== cb.depth) return ca.depth - cb.depth;
+      return a - b;
+    });
+    for (let n = 0; n < count; n++) {
+      fn(cmds[order[n]], order[n]);
+    }
+  }
+
   execute(ctx, layerMask = 0xFFFFFFFF) {
     ctx.save();
     const mat = ctx.getTransform();
