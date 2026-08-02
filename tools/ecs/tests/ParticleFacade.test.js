@@ -4,11 +4,14 @@ import { Particle } from "../../../display/Particle.js";
 import { ParticleEffect } from "../../../particles/ParticleEffect.js";
 import { World } from "../../../ecs/core/World.js";
 import { CpuParticleBackend } from "../../../particles/backends/CpuParticleBackend.js";
-import { GpuParticleBackend } from "../../../particles/backends/GpuParticleBackend.js";
-import { ObjectParticleStorage } from "../../../particles/storage/ObjectParticleStorage.js";
+import { SoAParticleStorage } from "../../../particles/storage/SoAParticleStorage.js";
+import { CanvasParticleRenderer } from "../../../particles/renderers/CanvasParticleRenderer.js";
+import { CanvasRenderer } from "../../../renderer/CanvasRenderer.js";
 import { ConeShape } from "../../../shapes/ConeShape.js";
 
-const objectStorage = () => new ObjectParticleStorage();
+function renderWorld(world, ctx) {
+  new CanvasRenderer({ context: ctx }).render(world);
+}
 
 describe("Particle.create", () => {
   it("returns a ParticleEffect", () => {
@@ -48,7 +51,7 @@ describe("Particle.create", () => {
   });
 
   it("does not autoplay", () => {
-    const effect = Particle.create({ rate: 100, lifetime: 1, storage: objectStorage() });
+    const effect = Particle.create({ rate: 100, lifetime: 1 });
     effect.update(0.1);
     assert.strictEqual(effect.system.activeCount, 0);
     effect.play();
@@ -58,21 +61,21 @@ describe("Particle.create", () => {
   });
 
   it("emits while stopped", () => {
-    const effect = Particle.create({ storage: objectStorage() });
+    const effect = Particle.create({});
     effect.emit(5);
     assert.strictEqual(effect.system.activeCount, 5);
     effect.destroy();
   });
 
   it("bursts while stopped", () => {
-    const effect = Particle.create({ storage: objectStorage() });
+    const effect = Particle.create({});
     effect.burst(10);
     assert.strictEqual(effect.system.activeCount, 10);
     effect.destroy();
   });
 
   it("applies a single lifetime value", () => {
-    const effect = Particle.create({ rate: 10, lifetime: 1.5, storage: objectStorage() });
+    const effect = Particle.create({ rate: 10, lifetime: 1.5 });
     effect.play();
     effect.update(0.1);
     const p = effect.system.particles[0];
@@ -82,7 +85,7 @@ describe("Particle.create", () => {
   });
 
   it("randomizes lifetime within a range", () => {
-    const effect = Particle.create({ rate: 100, lifetime: [0.5, 1.5], storage: objectStorage() });
+    const effect = Particle.create({ rate: 100, lifetime: [0.5, 1.5] });
     effect.play();
     effect.update(0.1);
     const particles = effect.system.particles;
@@ -99,7 +102,6 @@ describe("Particle.create", () => {
       rate: 10,
       lifetime: 1,
       initializer: (p) => { p.size = 3; },
-      storage: objectStorage(),
     });
     effect.play();
     effect.update(0.1);
@@ -223,7 +225,7 @@ describe("Particle state", () => {
   });
 
   it("enabled = false skips update and render", () => {
-    const effect = Particle.create({ storage: objectStorage() });
+    const effect = Particle.create({});
     effect.burst(5);
     let updated = 0;
     effect.system.update = (dt) => { updated++; };
@@ -239,7 +241,7 @@ describe("Particle state", () => {
   });
 
   it("restart() resumes emission after a stop", () => {
-    const effect = Particle.create({ rate: 50, lifetime: 1, storage: objectStorage() });
+    const effect = Particle.create({ rate: 50, lifetime: 1 });
     effect.play();
     effect.update(0.2);
     assert.ok(effect.system.activeCount > 0);
@@ -251,7 +253,7 @@ describe("Particle state", () => {
   });
 
   it("clear() kills all alive particles", () => {
-    const effect = Particle.create({ storage: objectStorage() });
+    const effect = Particle.create({});
     effect.burst(10);
     assert.strictEqual(effect.system.activeCount, 10);
     effect.clear();
@@ -301,7 +303,7 @@ describe("Particle World integration", () => {
     const world = new World();
     ParticleEffect._defaultWorld = world;
     try {
-      const effect = Particle.create({ storage: objectStorage() });
+      const effect = Particle.create({});
       assert.ok(world._effects.includes(effect));
       assert.strictEqual(effect._world, world);
 
@@ -312,7 +314,7 @@ describe("Particle World integration", () => {
 
       let rendered = 0;
       effect.render = (ctx) => { rendered++; };
-      world.render(mockCtx());
+      renderWorld(world, mockCtx());
       assert.strictEqual(rendered, 1);
 
       effect.destroy();
@@ -336,7 +338,7 @@ describe("Particle World integration", () => {
       for (const fx of world._effects) {
         fx.render = (ctx) => { order.push(fx.depth); };
       }
-      world.render(mockCtx());
+      renderWorld(world, mockCtx());
       assert.deepStrictEqual(order, [-5, 0, 10]);
       a.destroy();
       b.destroy();
@@ -348,7 +350,7 @@ describe("Particle World integration", () => {
 
   it("does not register when no World is active", () => {
     ParticleEffect._defaultWorld = null;
-    const effect = Particle.create({ storage: objectStorage() });
+    const effect = Particle.create({});
     assert.strictEqual(effect._world, null);
     effect.destroy();
   });
@@ -367,26 +369,19 @@ describe("Particle rotation", () => {
 
 describe("Particle capacity", () => {
   it("estimates capacity from rate and lifetime", () => {
-    const effect = Particle.create({ rate: 100, lifetime: 2, storage: objectStorage() });
+    const effect = Particle.create({ rate: 100, lifetime: 2 });
     assert.ok(effect.system.capacity >= 300);
     effect.destroy();
   });
 
   it("honors an explicit capacity", () => {
-    const effect = Particle.create({ capacity: 500, storage: objectStorage() });
+    const effect = Particle.create({ capacity: 500 });
     assert.ok(effect.system.capacity >= 500);
     effect.destroy();
   });
 });
 
-describe("Particle backend", () => {
-  const mockRenderer = () => ({
-    render() {},
-    destroy() {},
-    get _renderParticle() { return null; },
-    set _renderParticle(v) {},
-  });
-
+describe("Particle engine-owned configuration", () => {
   it("uses the CPU backend by default", () => {
     const effect = Particle.create({ rate: 10, lifetime: 1 });
     assert.ok(effect.system._backend instanceof CpuParticleBackend);
@@ -399,16 +394,43 @@ describe("Particle backend", () => {
     effect.destroy();
   });
 
-  it("accepts backend: \"gpu\"", () => {
-    const effect = Particle.create({ rate: 10, lifetime: 1, backend: "gpu", renderer: mockRenderer() });
-    assert.ok(effect.system._backend instanceof GpuParticleBackend);
+  it("resolves a CanvasParticleRenderer for the CPU backend", () => {
+    const effect = Particle.create({ rate: 10, lifetime: 1 });
+    assert.ok(effect.system._backend._renderer instanceof CanvasParticleRenderer);
     effect.destroy();
   });
 
+  it("uses the engine-owned SoA storage by default", () => {
+    const effect = Particle.create({ rate: 10, lifetime: 1 });
+    assert.ok(effect.system._backend._storage instanceof SoAParticleStorage);
+    effect.destroy();
+  });
+
+  it("accepts backend: \"gpu\" only when a WebGL2 context is available", () => {
+    assert.throws(
+      () => Particle.create({ rate: 10, lifetime: 1, backend: "gpu" }),
+      /WebGL2 context/,
+    );
+  });
+
   it("accepts a backend instance", () => {
-    const backend = new CpuParticleBackend({ storage: objectStorage() });
+    const backend = new CpuParticleBackend({});
     const effect = Particle.create({ rate: 10, lifetime: 1, backend });
     assert.strictEqual(effect.system._backend, backend);
+    effect.destroy();
+  });
+
+  it("ignores renderer/storage/renderParticle options — the engine owns them", () => {
+    const effect = Particle.create({
+      rate: 10,
+      lifetime: 1,
+      renderer: { render() {}, destroy() {} },
+      storage: {},
+      renderParticle: () => {},
+    });
+    assert.ok(effect.system._backend instanceof CpuParticleBackend);
+    assert.ok(effect.system._backend._renderer instanceof CanvasParticleRenderer);
+    assert.ok(effect.system._backend._storage instanceof SoAParticleStorage);
     effect.destroy();
   });
 
@@ -431,15 +453,7 @@ describe("Particle backend", () => {
     }
   }
 
-  it("auto-selects the GPU backend when WebGPU is available and a renderer is provided", () => {
-    withNavigator({ gpu: {} }, () => {
-      const effect = Particle.create({ rate: 10, lifetime: 1, renderer: mockRenderer() });
-      assert.ok(effect.system._backend instanceof GpuParticleBackend);
-      effect.destroy();
-    });
-  });
-
-  it("stays on CPU when WebGPU is available but no renderer is provided", () => {
+  it("falls back to CPU when the GPU renderer is unavailable even if WebGPU is available", () => {
     withNavigator({ gpu: {} }, () => {
       const effect = Particle.create({ rate: 10, lifetime: 1 });
       assert.ok(effect.system._backend instanceof CpuParticleBackend);

@@ -36,6 +36,7 @@ import { AnimationSystem } from "../../../ecs/systems/AnimationSystem.js";
 import { CollisionSystem } from "../../../ecs/systems/CollisionSystem.js";
 import { RenderSystem } from "../../../ecs/systems/RenderSystem.js";
 import { TrailSystem } from "../../../ecs/systems/TrailSystem.js";
+import { CanvasRenderer } from "../../../renderer/CanvasRenderer.js";
 import { EnemyTag } from "../../../ecs/components/tags/EnemyTag.js";
 import { PlayerTag } from "../../../ecs/components/tags/PlayerTag.js";
 
@@ -122,7 +123,7 @@ describe("Scene — resources", () => {
   it("registers CanvasContext when game is available", () => {
     const scene = new Scene();
     const mockCtx = { save() {}, restore() {}, getTransform() { return { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }; }, setTransform() {} };
-    scene._game = { ctx: mockCtx, width: 800, height: 600 };
+    scene._game = { renderer: { immediateContext: mockCtx }, ctx: mockCtx, width: 800, height: 600 };
     scene.enter();
     assert.strictEqual(scene.world.getResource(CanvasContext), mockCtx);
   });
@@ -364,7 +365,7 @@ describe("Scene — render pipeline", () => {
     return world;
   }
 
-  it("World.render executes the retained render queue", () => {
+  it("CanvasRenderer executes the retained render queue", () => {
     const world = makeWorld();
     const e = world.createEntity();
     world.addMany(e, Transform, Renderable, RenderBounds, Visible);
@@ -377,19 +378,21 @@ describe("Scene — render pipeline", () => {
     const queue = world.getResource(RenderQueue);
     assert.ok(queue.count > 0);
 
-    assert.doesNotThrow(() => world.render(mockRenderCtx()));
+    assert.doesNotThrow(() => new CanvasRenderer({ context: mockRenderCtx() }).render(world));
   });
 
-  it("Game step renders scene.render(ctx) before world.render(ctx)", () => {
+  it("scene.render(ctx) runs before renderer.render(world)", () => {
     const scene = new Scene();
     const w = scene.world;
     const calls = [];
-    const original = w.render.bind(w);
-    w.render = (ctx) => { calls.push("world"); original(ctx); };
+    const renderer = {
+      immediateContext: mockRenderCtx(),
+      render: (world) => { calls.push("world"); },
+    };
     scene.render = (ctx) => { calls.push("scene"); };
 
-    scene.render(mockRenderCtx());
-    scene.world.render(mockRenderCtx());
+    scene.render(renderer.immediateContext);
+    renderer.render(w);
 
     assert.deepStrictEqual(calls, ["scene", "world"]);
   });
@@ -404,7 +407,7 @@ describe("Scene — render pipeline", () => {
     assert.strictEqual(scene.renderUI(), "<div id=\"score\">0</div>");
   });
 
-  it("world.render applies camera transform when Camera resource is set", () => {
+  it("renderer.render applies camera transform when Camera resource is set", () => {
     const world = makeWorld();
     const camera = new Camera(100, 50, 2);
     world.setResource(Camera, camera);
@@ -421,7 +424,7 @@ describe("Scene — render pipeline", () => {
     const ctx = mockRenderCtx();
     ctx.translate = (x, y) => calls.push(`translate:${x}:${y}`);
     ctx.scale = (x, y) => calls.push(`scale:${x}:${y}`);
-    world.render(ctx);
+    new CanvasRenderer({ context: ctx }).render(world);
     assert.deepStrictEqual(calls, ["translate:0:0", "scale:2:2", "translate:-100:-50"]);
   });
 });

@@ -15,13 +15,10 @@ import { AudioSystem } from "../audio/AudioSystem.js";
 import { StreamingManager } from "../streaming/StreamingManager.js";
 import { Diagnostics, resolveMetricIds } from "../../debug/index.js";
 import { RenderQueue } from "../render/RenderQueue.js";
-import { CanvasContext } from "../render/CanvasContext.js";
-import { TrailRenderer } from "../render/TrailRenderer.js";
 import { Trail } from "../components/Trail.js";
 import { Visible } from "../components/Visible.js";
 import { TrailManager } from "../trails/TrailManager.js";
-import { Camera } from "../../view/Camera.js";
-import { Viewport } from "../../view/Viewport.js";
+import { CanvasRenderer } from "../../renderer/CanvasRenderer.js";
 
 export class World {
   constructor(options = {}) {
@@ -685,10 +682,6 @@ export class World {
       worldComponents: "ecs.world.components",
       worldTables: "ecs.world.tables",
       worldCapacity: "ecs.world.capacity",
-      trails: "render.trails",
-      trailSegments: "render.trails.segments",
-      trailLines: "render.trails.lines",
-      trailRibbons: "render.trails.ribbons",
     });
   }
 
@@ -718,32 +711,26 @@ export class World {
   }
 
   render(ctx) {
-    const diag = this._resources.get(Diagnostics);
-    const ownFrame = diag && !diag.isInsideFrame;
-    if (ownFrame) diag.beginFrame(this._frameCount++, 16);
-
-    try {
-      ctx.save();
-      const camera = this._resources.get(Camera);
-      if (camera) {
-        const vp = this._resources.get(Viewport);
-        const cx = vp ? vp.x + vp.width * 0.5 : 0;
-        const cy = vp ? vp.y + vp.height * 0.5 : 0;
-        ctx.translate(cx, cy);
-        ctx.scale(camera.zoom, camera.zoom);
-        ctx.rotate(-camera.rotation);
-        ctx.translate(-camera.x, -camera.y);
-      }
-      const queue = this._resources.get(RenderQueue);
-      if (queue && queue.count > 0) {
-        queue.execute(ctx);
-      }
-      this._renderTrails(ctx);
-      this._renderEffects(ctx);
-      ctx.restore();
-    } finally {
-      if (ownFrame) diag.endFrame();
+    if (!this._renderDeprecationWarned) {
+      this._renderDeprecationWarned = true;
+      console.warn(
+        "[jygame] World.render(ctx) is deprecated and will be removed. " +
+        "Render through a Renderer instead: new CanvasRenderer({ context: ctx }).render(world)."
+      );
     }
+    new CanvasRenderer({ context: ctx }).render(this);
+  }
+
+  get renderables() {
+    return {
+      queue: this._resources.get(RenderQueue),
+      trails: this.collectTrailRenderables(),
+      effects: this._effects.slice().sort((a, b) => (a.depth || 0) - (b.depth || 0)),
+    };
+  }
+
+  get effects() {
+    return this._effects;
   }
 
   _getTrailView() {
@@ -764,82 +751,52 @@ export class World {
     return this._trailViewCache;
   }
 
-  _renderTrails(ctx) {
+  collectTrailRenderables() {
     const manager = this._resources.get(TrailManager);
-    if (!manager || manager.size === 0) return;
-    const canvas = this._resources.get(CanvasContext);
-    if (!canvas) return;
+    if (!manager || manager.size === 0) return [];
     const cache = this._getTrailView();
-    if (!cache) return;
+    if (!cache) return [];
 
-    const diag = this._resources.get(Diagnostics);
-    if (diag) this._initDiag(diag);
-    const ids = this._diagIds;
+    const { view, t, tr, v } = cache;
+    const items = [];
+    for (const table of view.tables()) {
+      if (table.count === 0) continue;
 
-    let segments = 0, lines = 0, ribbons = 0;
+      const tx = table.getColumn(t, "x");
+      const ty = table.getColumn(t, "y");
+      const enabledCol = table.getColumn(tr, "enabled");
+      const maxPointsCol = table.getColumn(tr, "maxPoints");
+      const spacingCol = table.getColumn(tr, "spacing");
+      const visibleCol = table.getColumn(v, "value");
+      const entities = table.entityIds;
+      if (!tx || !ty || !enabledCol || !maxPointsCol || !spacingCol || !visibleCol || !entities) continue;
 
-    const doRender = () => {
-      const { view, t, tr, v } = cache;
-      const items = [];
-      for (const table of view.tables()) {
-        if (table.count === 0) continue;
+      const colorCol = table.getColumn(tr, "color");
+      const widthCol = table.getColumn(tr, "width");
+      const modeCol = table.getColumn(tr, "mode");
+      const depthCol = table.getColumn(tr, "depth");
 
-        const tx = table.getColumn(t, "x");
-        const ty = table.getColumn(t, "y");
-        const enabledCol = table.getColumn(tr, "enabled");
-        const maxPointsCol = table.getColumn(tr, "maxPoints");
-        const spacingCol = table.getColumn(tr, "spacing");
-        const visibleCol = table.getColumn(v, "value");
-        const entities = table.entityIds;
-        if (!tx || !ty || !enabledCol || !maxPointsCol || !spacingCol || !visibleCol || !entities) continue;
-
-        const colorCol = table.getColumn(tr, "color");
-        const widthCol = table.getColumn(tr, "width");
-        const modeCol = table.getColumn(tr, "mode");
-        const depthCol = table.getColumn(tr, "depth");
-
-        for (let r = 0; r < table.count; r++) {
-          const eid = entities[r];
-          if (!visibleCol[r] || !enabledCol[r]) continue;
-          const maxP = maxPointsCol[r];
-          if (maxP < 2) continue;
-          const sp = spacingCol[r];
-          if (sp <= 0) continue;
-          const buffer = manager.get(eid);
-          if (!buffer || buffer.count < 2) continue;
-          segments += buffer.count - 1;
-          if (modeCol[r] === 1) {
-            ribbons++;
-          } else {
-            lines++;
-          }
-          items.push({
-            depth: depthCol ? depthCol[r] : 0,
-            buffer,
-            color: colorCol[r],
-            width: widthCol[r],
-            mode: modeCol[r],
-          });
-        }
+      for (let r = 0; r < table.count; r++) {
+        const eid = entities[r];
+        if (!visibleCol[r] || !enabledCol[r]) continue;
+        const maxP = maxPointsCol[r];
+        if (maxP < 2) continue;
+        const sp = spacingCol[r];
+        if (sp <= 0) continue;
+        const buffer = manager.get(eid);
+        if (!buffer || buffer.count < 2) continue;
+        items.push({
+          depth: depthCol ? depthCol[r] : 0,
+          buffer,
+          color: colorCol[r],
+          width: widthCol[r],
+          mode: modeCol[r],
+        });
       }
-
-      if (items.length === 0) return;
-      if (items.length > 1) items.sort((a, b) => a.depth - b.depth);
-      if (!this._trailRenderer) this._trailRenderer = new TrailRenderer();
-      this._trailRenderer.render(canvas, items);
-    };
-
-    if (diag && ids && ids.trails >= 0) {
-      diag.scope(ids.trails, doRender);
-    } else {
-      doRender();
     }
 
-    if (diag && ids) {
-      if (ids.trailSegments >= 0) diag.recordCounter(ids.trailSegments, segments);
-      if (ids.trailLines >= 0) diag.recordCounter(ids.trailLines, lines);
-      if (ids.trailRibbons >= 0) diag.recordCounter(ids.trailRibbons, ribbons);
-    }
+    if (items.length > 1) items.sort((a, b) => a.depth - b.depth);
+    return items;
   }
 
   addEffect(effect) {
@@ -863,17 +820,6 @@ export class World {
         continue;
       }
       effect.update(dt);
-    }
-  }
-
-  _renderEffects(ctx) {
-    const effects = this._effects;
-    if (effects.length === 0) return;
-    if (effects.length > 1) {
-      effects.sort((a, b) => (a.depth || 0) - (b.depth || 0));
-    }
-    for (let i = 0; i < effects.length; i++) {
-      effects[i].render(ctx);
     }
   }
 

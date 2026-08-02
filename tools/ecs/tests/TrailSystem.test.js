@@ -6,6 +6,11 @@ import {
 } from "../../../ecs/index.js";
 import { Camera } from "../../../view/Camera.js";
 import { CanvasContext } from "../../../ecs/render/CanvasContext.js";
+import { CanvasRenderer } from "../../../renderer/CanvasRenderer.js";
+
+function renderWorld(world, ctx) {
+  new CanvasRenderer({ context: ctx }).render(world);
+}
 
 function cleanMockCtx() {
   return {
@@ -676,7 +681,7 @@ describe("TrailSystem", () => {
     ]);
     moveEntity(world, ids[0], 10, 0);
     world.update(16);
-    world.render(ctx);
+    renderWorld(world, ctx);
     assert.strictEqual(ctx.beginPath.mock.calls.length, 1);
     assert.strictEqual(ctx.stroke.mock.calls.length, 1);
     assert.ok(ctx.moveTo.mock.calls.length >= 1);
@@ -689,7 +694,7 @@ describe("TrailSystem", () => {
     ]);
     moveEntity(world, ids[0], 15, 0);
     world.update(16);
-    world.render(ctx);
+    renderWorld(world, ctx);
     assert.strictEqual(ctx.beginPath.mock.calls.length, 1);
     assert.strictEqual(ctx.fill.mock.calls.length, 1);
   });
@@ -700,7 +705,7 @@ describe("TrailSystem", () => {
     ]);
     moveEntity(world, ids[0], 50, 0);
     world.update(16);
-    world.render(ctx);
+    renderWorld(world, ctx);
     assert.strictEqual(ctx.beginPath.mock.calls.length, 0);
     assert.strictEqual(ctx.stroke.mock.calls.length, 0);
     assert.strictEqual(ctx.fill.mock.calls.length, 0);
@@ -712,7 +717,7 @@ describe("TrailSystem", () => {
     ]);
     moveEntity(world, ids[0], 20, 0);
     world.update(16);
-    world.render(ctx);
+    renderWorld(world, ctx);
     assert.strictEqual(ctx.stroke.mock.calls.length, 0);
   });
 
@@ -722,7 +727,7 @@ describe("TrailSystem", () => {
     ]);
     moveEntity(world, ids[0], 20, 0);
     world.update(16);
-    world.render(ctx);
+    renderWorld(world, ctx);
     assert.strictEqual(ctx.stroke.mock.calls.length, 0);
   });
 
@@ -738,7 +743,7 @@ describe("TrailSystem", () => {
     const e = setupEntity(world, { x: 0, y: 0, spacing: 1 });
     moveEntity(world, e, 10, 0);
     world.update(16);
-    world.render(ctx);
+    renderWorld(world, ctx);
     assert.strictEqual(ctx.save.mock.calls.length, 1);
     assert.strictEqual(ctx.translate.mock.calls.length, 2);
     assert.strictEqual(ctx.scale.mock.calls.length, 1);
@@ -751,7 +756,7 @@ describe("TrailSystem", () => {
     ]);
     moveEntity(world, ids[0], 10, 0);
     world.update(16);
-    world.render(ctx);
+    renderWorld(world, ctx);
     assert.strictEqual(ctx.save.mock.calls.length, 1);
     assert.strictEqual(ctx.restore.mock.calls.length, 1);
   });
@@ -879,7 +884,7 @@ describe("TrailSystem", () => {
     ]);
     moveEntity(world, ids[0], 10, 0);
     world.update(16);
-    world.render(ctx);
+    renderWorld(world, ctx);
     assert.strictEqual(ctx._strokeStyle, "#ff0000");
   });
 
@@ -889,7 +894,7 @@ describe("TrailSystem", () => {
     ]);
     moveEntity(world, ids[0], 15, 0);
     world.update(16);
-    world.render(ctx);
+    renderWorld(world, ctx);
     assert.strictEqual(ctx._fillStyle, "#00ff00");
   });
 
@@ -899,7 +904,7 @@ describe("TrailSystem", () => {
     ]);
     moveEntity(world, ids[0], 10, 0);
     world.update(16);
-    world.render(ctx);
+    renderWorld(world, ctx);
     assert.strictEqual(ctx._lineWidth, 6);
   });
 
@@ -909,7 +914,7 @@ describe("TrailSystem", () => {
     ]);
     moveEntity(world, ids[0], 10, 0);
     world.update(16);
-    world.render(ctx);
+    renderWorld(world, ctx);
     assert.strictEqual(ctx.stroke.mock.calls.length, 1);
     assert.strictEqual(ctx.fill.mock.calls.length, 0);
   });
@@ -920,7 +925,7 @@ describe("TrailSystem", () => {
     ]);
     moveEntity(world, ids[0], 15, 0);
     world.update(16);
-    world.render(ctx);
+    renderWorld(world, ctx);
     assert.strictEqual(ctx.fill.mock.calls.length, 1);
     assert.strictEqual(ctx.stroke.mock.calls.length, 0);
   });

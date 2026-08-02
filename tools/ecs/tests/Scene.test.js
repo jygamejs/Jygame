@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import * as assert from "node:assert";
 import { Scene, SceneManager, Transform, System } from "../../../ecs/index.js";
+import { CanvasRenderer } from "../../../renderer/CanvasRenderer.js";
 
 describe("Scene", () => {
   it("creates with name", () => {
@@ -227,13 +228,14 @@ describe("SceneManager — scenes", () => {
       getTransform() { return { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }; },
       setTransform() {},
     };
+    const renderer = new CanvasRenderer({ context: mockCtx });
 
     const mgr = new SceneManager();
     mgr.add(new A("A"));
     mgr.add(new B("B"));
     mgr.start("A");
     mgr.push("B");
-    mgr.render(mockCtx);
+    mgr.render(renderer);
     assert.deepStrictEqual(rendered, ["A", "B"]);
   });
 

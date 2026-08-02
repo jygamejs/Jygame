@@ -28,6 +28,11 @@ import { Transform } from "../../../ecs/components/Transform.js";
 import { Velocity } from "../../../ecs/components/Velocity.js";
 import { Renderable } from "../../../ecs/components/Renderable.js";
 import { RenderBounds } from "../../../ecs/components/RenderBounds.js";
+import { CanvasRenderer } from "../../../renderer/CanvasRenderer.js";
+
+function renderWorld(world, ctx) {
+  new CanvasRenderer({ context: ctx }).render(world);
+}
 import { Visible } from "../../../ecs/components/Visible.js";
 import { Collider } from "../../../ecs/components/Collider.js";
 import { ParticleSystem } from "../../../particles/ParticleSystem.js";
@@ -1393,7 +1398,7 @@ describe("Diagnostics Subsystem Instrumentation", () => {
       world.update(1 / 60);
       world.setComponent(e, Transform, { x:100, y:0 });
       world.update(1 / 60);
-      world.render(canvasCtx);
+      renderWorld(world, canvasCtx);
 
       const snap = diag.lastSnapshot;
       const trails = diag.metrics.find("render.trails");
@@ -1456,7 +1461,7 @@ describe("Diagnostics Subsystem Instrumentation", () => {
       world.update(1 / 60);
       world.setComponent(e, Transform, { x:50, y:0 });
       world.update(1 / 60);
-      world.render(canvasCtx);
+      renderWorld(world, canvasCtx);
 
       const snap = diag.lastSnapshot;
       const ribs = diag.metrics.find("render.trails.ribbons");
@@ -1501,7 +1506,7 @@ describe("Diagnostics Subsystem Instrumentation", () => {
       diag.lockRegistry();
 
       world.update(1 / 60);
-      world.render(canvasCtx);
+      renderWorld(world, canvasCtx);
       const snap = diag.lastSnapshot;
       const seg = diag.metrics.find("render.trails.segments");
       const lines = diag.metrics.find("render.trails.lines");
@@ -1538,7 +1543,7 @@ describe("Diagnostics Subsystem Instrumentation", () => {
       world.setComponent(e, Trail, { enabled:1, maxPoints:64, spacing:4, width:4, color:0xffffff, mode:0 });
 
       world.update(1 / 60);
-      assert.doesNotThrow(() => world.render(canvasCtx));
+      assert.doesNotThrow(() => renderWorld(world, canvasCtx));
       assert.ok(true, "TrailSystem update completes without Diagnostics");
     });
   });

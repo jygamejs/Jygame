@@ -23,7 +23,6 @@ The public particle API should satisfy the following principles:
 * Existing shapes and modifiers remain the source of truth.
 * Custom modifiers and shapes automatically work with the facade.
 * Particle effects behave similarly to `Audio` and `Sprite` APIs.
-
 The API should answer a single question:
 
 > What visual effect are you trying to create?
@@ -78,7 +77,8 @@ Particle.create({
 });
 ```
 
-No capacity is required. No backend is required. No renderer is required.
+No capacity is required. No backend is required. No renderer or storage is
+required.
 No `ParticleEmitter` or `ParticleSystem` needs to be constructed manually.
 
 ---
@@ -199,9 +199,10 @@ GpuParticleRenderer
 ```js
 capacity
 backend
-renderer
-storage
 ```
+
+Renderers and storage are fully engine-owned. They are never exposed as
+creation options and are resolved internally by the facade.
 
 The engine is responsible for selecting the optimal implementation.
 
@@ -234,6 +235,27 @@ Particle effects always attempt to use the fastest available implementation.
 The default path should always attempt to maximize performance. The user
 should never manually choose between GPU and CPU rendering unless they
 intentionally use the advanced APIs.
+
+Backend, storage, and renderer selection is resolved internally by the
+facade before the effect is constructed:
+
+```text
+Particle.create()
+    ↓
+BackendResolver
+    ↓
+StorageResolver
+    ↓
+RendererResolver
+    ↓
+ParticleSystem
+    ↓
+ParticleEmitter
+    ↓
+ParticleEffect
+```
+
+None of those implementation details leak into the public facade.
 
 ### 5.2 Automatic Capacity Calculation
 
@@ -813,8 +835,6 @@ Normal users should never need these:
 Particle.create({
     capacity: 2000,
     backend: "gpu",
-    renderer: renderer,
-    storage: storage,
     initializer(particle) { },
 });
 ```
@@ -831,7 +851,9 @@ or:
 backend: "gpu"
 ```
 
-These options exist solely for advanced use cases.
+`backend` and `capacity` are the only infrastructure overrides in the public
+API. Everything else related to rendering infrastructure — renderer, storage,
+and custom draw callbacks — is an implementation detail owned by the engine.
 
 ---
 
@@ -845,7 +867,7 @@ Responsible for:
 * Configuring infrastructure
 * Choosing the optimal backend
 * Calculating particle capacity
-* Selecting storage implementations
+* Selecting storage and renderer implementations automatically
 * Registering the effect with the active World
 
 ### World
@@ -967,9 +989,6 @@ effect.following
 
     capacity,
     backend,
-    renderer,
-    storage,
-    renderParticle,
 }
 ```
 
@@ -977,6 +996,11 @@ There is intentionally no `autoplay` option: an effect needs a position or a
 trigger before it makes sense to emit, so creation never starts it. Begin
 emission with `effect.play()`, `effect.emit(count)`, or `effect.burst(count)`
 (see "Playing Effects").
+
+`capacity` and `backend` are the only infrastructure overrides. Renderer,
+storage, and custom draw callbacks (`renderParticle`) are not creation options
+— the facade resolves them internally through `BackendResolver` →
+`StorageResolver` → `RendererResolver`.
 
 ---
 

@@ -118,7 +118,10 @@ export class Scene extends EcsScene {
     }
 
     if (this._game) {
-      this._world.setResource(CanvasContext, this._game.ctx);
+      const immediate = this._game.renderer
+        ? this._game.renderer.immediateContext
+        : this._game.ctx;
+      this._world.setResource(CanvasContext, immediate);
 
       if (this._game._imageSmoothing !== undefined) {
         this._world.setResource("imageSmoothing.default", this._game._imageSmoothing ? 1 : 0);

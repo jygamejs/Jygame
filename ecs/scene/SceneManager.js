@@ -222,14 +222,15 @@ export class SceneManager {
     scene.update(dt);
   }
 
-  render(ctx) {
+  render(renderer) {
     if (this._stack.length === 0) return;
 
+    const immediate = renderer && renderer.immediateContext;
     for (let i = 0; i < this._stack.length; i++) {
       const scene = this._stack[i];
-      scene.render(ctx);
-      if (scene.world) {
-        scene.world.render(ctx);
+      scene.render(immediate);
+      if (scene.world && renderer && renderer.render) {
+        renderer.render(scene.world);
       }
     }
   }

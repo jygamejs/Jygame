@@ -20,9 +20,10 @@ import { Diagnostics, MetricCategory, MetricUnit, MetricType, resolveMetricIds }
   from "../debug/index.js";
 import { OverlayHost } from "../debug/overlay/OverlayHost.js";
 import { enableDebugWorkspace, takeDebugSnapshot } from "../debug/EnableDebugWorkspace.js";
+import { CanvasRenderer } from "../renderer/CanvasRenderer.js";
 
 export class Game {
-  constructor({ parent, width = 800, height = 600, fps = 60, maxTicks = 5, autoPause = true, scaleToFit = null, debug = true, interpolation = true, imageSmoothing = true }) {
+  constructor({ parent, width = 800, height = 600, fps = 60, maxTicks = 5, autoPause = true, scaleToFit = null, debug = true, interpolation = true, imageSmoothing = true, renderer = "canvas" }) {
     const container = typeof parent === "string"
       ? document.querySelector(parent)
       : document.body;
@@ -46,9 +47,30 @@ export class Game {
       container.style.position = "relative";
     }
 
-    this.ctx = this.canvas.getContext("2d");
-    this.ctx.imageSmoothingEnabled = imageSmoothing;
+    this.ctx = null;
+    this.renderer = null;
     this._imageSmoothing = imageSmoothing;
+
+    if (renderer === undefined || renderer === "canvas") {
+      this.renderer = new CanvasRenderer({
+        canvas: this.canvas,
+        width,
+        height,
+        options: { imageSmoothing },
+      });
+    } else if (typeof renderer === "object" && renderer !== null) {
+      this.renderer = renderer;
+    } else {
+      throw new Error(
+        `Game: renderer '${renderer}' not implemented yet. ` +
+        `Supported: "canvas" or a Renderer instance.`
+      );
+    }
+
+    this.ctx = this.renderer.immediateContext;
+    if (this.ctx) {
+      this.ctx.imageSmoothingEnabled = imageSmoothing;
+    }
     this.width = width;
     this.height = height;
     this.clock = new Clock(fps, maxTicks);
@@ -467,12 +489,12 @@ export class Game {
     }
   }
 
-  _renderScenes(ctx, start) {
+  _renderScenes(renderer, start) {
     for (let i = start; i < this._sceneStack.length; i++) {
       const scene = this._sceneStack[i];
-      scene.render(ctx);
+      scene.render(renderer.immediateContext);
       if (scene.world) {
-        scene.world.render(ctx);
+        renderer.render(scene.world);
       }
       const html = scene.renderUI();
       if (html !== undefined && html !== null && html !== scene._lastUIHTML) {
@@ -617,12 +639,14 @@ export class Game {
       this._interpolateScenes(alpha, renderStart);
     }
 
-    const doCanvas = () => { this.ctx.clearRect(0, 0, this.width, this.height); };
+    this.renderer.beginFrame();
+
+    const doCanvas = () => { this.renderer.clear(); };
     if (diag && mids && mids.frameCanvas >= 0) {
       diag.scope(mids.frameCanvas, doCanvas);
     } else { doCanvas(); }
 
-    const doRender = () => { this._renderScenes(this.ctx, renderStart); };
+    const doRender = () => { this._renderScenes(this.renderer, renderStart); };
     if (diag && mids && mids.frameRender >= 0) {
       diag.scope(mids.frameRender, doRender);
     } else { doRender(); }
@@ -630,6 +654,8 @@ export class Game {
     if (this._debug && this._debugOverlay) {
       this._debugOverlay.render(this.ctx, this.width, this.height);
     }
+
+    this.renderer.endFrame();
 
     if (this._interpolation) {
       this._restoreSceneTransforms(renderStart);
