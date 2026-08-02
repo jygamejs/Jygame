@@ -28,7 +28,8 @@ export class Renderer {
   }
 
   resize(width, height) {
-    throw new Error("Renderer.resize() is not implemented.");
+    this._width = width;
+    this._height = height;
   }
 
   destroy() {

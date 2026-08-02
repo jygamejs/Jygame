@@ -20,7 +20,7 @@ import { Diagnostics, MetricCategory, MetricUnit, MetricType, resolveMetricIds }
   from "../debug/index.js";
 import { OverlayHost } from "../debug/overlay/OverlayHost.js";
 import { enableDebugWorkspace, takeDebugSnapshot } from "../debug/EnableDebugWorkspace.js";
-import { CanvasRenderer } from "../renderer/CanvasRenderer.js";
+import { RendererResolver } from "../renderer/RendererResolver.js";
 
 export class Game {
   constructor({ parent, width = 800, height = 600, fps = 60, maxTicks = 5, autoPause = true, scaleToFit = null, debug = true, interpolation = true, imageSmoothing = true, renderer = "canvas" }) {
@@ -51,21 +51,13 @@ export class Game {
     this.renderer = null;
     this._imageSmoothing = imageSmoothing;
 
-    if (renderer === undefined || renderer === "canvas") {
-      this.renderer = new CanvasRenderer({
-        canvas: this.canvas,
-        width,
-        height,
-        options: { imageSmoothing },
-      });
-    } else if (typeof renderer === "object" && renderer !== null) {
-      this.renderer = renderer;
-    } else {
-      throw new Error(
-        `Game: renderer '${renderer}' not implemented yet. ` +
-        `Supported: "canvas" or a Renderer instance.`
-      );
-    }
+    this.renderer = RendererResolver.resolve({
+      renderer,
+      canvas: this.canvas,
+      width,
+      height,
+      options: { imageSmoothing },
+    });
 
     this.ctx = this.renderer.immediateContext;
     if (this.ctx) {
@@ -180,6 +172,7 @@ export class Game {
       target.style.marginBottom = mv;
       doc.style.removeProperty("--jygame-scale");
       doc.style.removeProperty("--jygame-margin-v");
+      this.renderer.resize(this.width, this.height);
       return;
     }
     const { width: vpW, height: vpH, padding: pad } = this._viewport;
@@ -193,6 +186,18 @@ export class Game {
     target.style.transform = `scale(${scale})`;
     target.style.marginTop = marginV + "px";
     target.style.marginBottom = marginV + "px";
+    this.renderer.resize(this.width, this.height);
+  }
+
+  resize(width, height) {
+    this.width = width;
+    this.height = height;
+    if (this.renderer) {
+      this.renderer.resize(width, height);
+    }
+    if (this.inputSystem && this.inputSystem.coordinateSystem) {
+      this.inputSystem.coordinateSystem.canvasRect = { x: 0, y: 0, width, height };
+    }
   }
 
   enableDebugWorkspace(backend) {
@@ -681,5 +686,8 @@ export class Game {
     this.input.destroy();
     if (this._debug && this._debugBackend) this._debugBackend.close();
     if (this._debug && this._debugOverlay) this._debugOverlay.destroy();
+    if (this.renderer && this.renderer.destroy) {
+      this.renderer.destroy();
+    }
   }
 }

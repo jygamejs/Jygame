@@ -143,11 +143,13 @@ export class CanvasRenderer extends Renderer {
   }
 
   resize(width, height) {
-    this._width = width;
-    this._height = height;
+    super.resize(width, height);
     if (this.canvas) {
-      this.canvas.width = width;
-      this.canvas.height = height;
+      if (this.canvas.width !== width) this.canvas.width = width;
+      if (this.canvas.height !== height) this.canvas.height = height;
+    }
+    if (this._ctx && this._options.imageSmoothing !== undefined) {
+      this._ctx.imageSmoothingEnabled = this._options.imageSmoothing;
     }
   }
 

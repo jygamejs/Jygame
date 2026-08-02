@@ -2,15 +2,23 @@
 
 ## Status
 
-**In progress — Session 1 complete.** Design target: `docs/renderer-architecture.md`
+**In progress — Sessions 1-2 complete.** Design target: `docs/renderer-architecture.md`
 (Proposed). This plan turns that design into concrete, session-by-session work.
 
 Session 1 (Renderer contract + `CanvasRenderer`) is implemented and green:
 `renderer/{Renderer,CanvasRenderer,index}.js`, `Game` `renderer` option,
 `World` data surface (`renderables` / `effects` / `collectTrailRenderables`),
 deprecated `World.render` shim, updated render-path tests, new
-`tools/ecs/tests/Renderer.test.js` (15 tests). Next: Session 2 (resolver +
-lifecycle).
+`tools/ecs/tests/Renderer.test.js` (15 tests).
+
+Session 2 (resolver + lifecycle) is implemented and green:
+`renderer/RendererResolver.js` (`"auto"`/`"canvas"`/instance passthrough,
+`not-implemented` for `webgl`/`webgpu`), `Game` uses the resolver,
+`Game.resize(width, height)`, `_applyViewport`/ResizeObserver sync the renderer,
+`Game.destroy` releases the renderer, base `Renderer.resize` bookkeeping with a
+behavior-preserving `CanvasRenderer.resize` (guarded backing-store reset +
+imageSmoothing re-apply). New `RendererResolver.test.js` (7) and
+`GameRenderer.test.js` (8, DOM-mocked). Next: Session 3 (`WebGLRenderer`).
 
 Each session is independently completable: it ends with a green test suite and
 a working engine. Sessions build on each other; do not skip Session 1.
@@ -271,8 +279,11 @@ Resolved during the sessions noted; assumptions here are the recommended path.
 4. **Debug `OverlayHost` on GL renderers.** Draws to the immediate 2D surface
    (decision 1). Session 3.
 5. **Device pixel ratio.** Currently ignored except in input
-   `CoordinateSystem`. Unify in `Renderer.resize()` (Session 2) and keep GL
-   viewport = physical pixels, logical size for camera (Session 3).
+   `CoordinateSystem`. **Session 2 resolved: deferred.** To honor the
+   behavior-preservation rule, `Renderer.resize` keeps the 2D canvas at the
+   logical size (matching today's DPR-ignoring behavior); DPR-aware backing
+   stores are introduced with the GL renderers (Session 3+), where the GL
+   viewport is physical pixels and the camera stays logical.
 6. **`RenderConfig` parity** (`screenSpace`, `pixelPerfect`, `culling`).
    `CanvasRenderer` preserves current behavior; GL renders culling via camera
    viewport test and `screenSpace` via an identity-view uniform. Sessions 3-4.

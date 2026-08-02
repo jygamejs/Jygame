@@ -54,9 +54,16 @@ describe("Renderer contract", () => {
     assert.throws(() => b.clear(), /not implemented/);
     assert.throws(() => b.render({}), /not implemented/);
     assert.throws(() => b.endFrame(), /not implemented/);
-    assert.throws(() => b.resize(1, 1), /not implemented/);
     assert.throws(() => b.destroy(), /not implemented/);
     assert.throws(() => b.immediateContext, /not implemented/);
+  });
+
+  it("base resize updates shared width/height bookkeeping", () => {
+    class Broken extends Renderer {}
+    const b = new Broken();
+    b.resize(640, 480);
+    assert.strictEqual(b.width, 640);
+    assert.strictEqual(b.height, 480);
   });
 });
 
@@ -113,6 +120,22 @@ describe("CanvasRenderer", () => {
     assert.strictEqual(r.height, 480);
     assert.strictEqual(canvas.width, 640);
     assert.strictEqual(canvas.height, 480);
+  });
+
+  it("resize with the same size does not reset the canvas backing store", () => {
+    const canvas = { width: 100, height: 100, getContext: () => mockCtx() };
+    const r = new CanvasRenderer({ canvas });
+    r.resize(100, 100);
+    assert.strictEqual(canvas.width, 100);
+    assert.strictEqual(canvas.height, 100);
+  });
+
+  it("resize re-applies imageSmoothing after a backing-store reset", () => {
+    const ctx = mockCtx();
+    const r = new CanvasRenderer({ context: ctx, options: { imageSmoothing: false } });
+    ctx._imageSmoothingEnabled = true;
+    r.resize(640, 480);
+    assert.strictEqual(ctx._imageSmoothingEnabled, false);
   });
 
   it("render(world) is a no-op without a context", () => {

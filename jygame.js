@@ -23,7 +23,7 @@ export { FontLoader } from "./loaders/FontLoader.js";
 export { Font } from "./loaders/Font.js";
 export { Scene } from "./core/Scene.js";
 export { Game } from "./core/Game.js";
-export { Renderer, CanvasRenderer } from "./renderer/index.js";
+export { Renderer, CanvasRenderer, RendererResolver } from "./renderer/index.js";
 export { Color, Colors } from "./color/Colors.js";
 export { Palettes } from "./color/Palettes.js";
 export { Pool } from "./memory/Pool.js";
