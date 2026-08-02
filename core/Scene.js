@@ -6,6 +6,7 @@ import { Camera } from "../view/Camera.js";
 import { View } from "../view/View.js";
 import { Viewport } from "../view/Viewport.js";
 import { RenderConfig } from "../view/RenderConfig.js";
+import { Renderer } from "../renderer/index.js";
 import { Sprite } from "../display/Sprite.js";
 import { InputContext } from "../input/actions/InputContext.js";
 import { ActionMap } from "../input/actions/ActionMap.js";
@@ -122,6 +123,10 @@ export class Scene extends EcsScene {
         ? this._game.renderer.immediateContext
         : this._game.ctx;
       this._world.setResource(CanvasContext, immediate);
+
+      if (this._game.renderer) {
+        this._world.setResource(Renderer, this._game.renderer);
+      }
 
       if (this._game._imageSmoothing !== undefined) {
         this._world.setResource("imageSmoothing.default", this._game._imageSmoothing ? 1 : 0);

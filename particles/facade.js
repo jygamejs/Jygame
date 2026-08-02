@@ -1,6 +1,8 @@
 import { ParticleAsset } from "./ParticleAsset.js";
+import { ParticleEffect } from "./ParticleEffect.js";
 import { BackendResolver } from "./EngineResolvers.js";
 import { StorageResolver } from "./storage/StorageResolver.js";
+import { Renderer } from "../renderer/index.js";
 
 const DEFAULT_CAPACITY = 256;
 const CAPACITY_SAFETY_MULTIPLIER = 1.5;
@@ -44,6 +46,20 @@ function _estimateCapacity(rate, lifetime, capacity) {
   return DEFAULT_CAPACITY;
 }
 
+// A context source tells the backend resolver where to find a WebGL2 context.
+// Precedence: explicit `renderer` / `gl` options, then the active world's
+// `Renderer` resource (registered by the Scene from `game.renderer`).
+function _resolveContextSource({ renderer, gl }) {
+  if (renderer) return renderer;
+  if (gl) return gl;
+  const world = ParticleEffect._defaultWorld;
+  if (world && typeof world.getResource === "function") {
+    const r = world.getResource(Renderer);
+    if (r) return r;
+  }
+  return null;
+}
+
 export function createParticleEffect({
   rate = 0,
   shape,
@@ -54,9 +70,12 @@ export function createParticleEffect({
   initializer,
   capacity,
   backend,
+  renderer,
+  gl,
 } = {}) {
   const storage = StorageResolver.createDefault();
-  const backendInstance = BackendResolver.resolve({ backend, storage });
+  const contextSource = _resolveContextSource({ renderer, gl });
+  const backendInstance = BackendResolver.resolve({ backend, storage, renderer: contextSource });
 
   const asset = new ParticleAsset({
     capacity: _estimateCapacity(rate, lifetime, capacity),

@@ -7,6 +7,8 @@ import { Viewport } from "../view/Viewport.js";
 import { ImmediateCanvas } from "./immediate/ImmediateCanvas.js";
 import { QuadBatch } from "./gl/quad.batch.js";
 import { TextureCache } from "./gl/texture.cache.js";
+import { TrailBatch } from "./gl/trails.batch.js";
+import { readParticleInstance, buildBackendCommandBuffer } from "./gl/particles.batch.js";
 import { createProgram, buildViewProjection } from "./gl/index.js";
 
 const VERTEX_SOURCE = `#version 300 es
@@ -149,6 +151,9 @@ export class WebGLRenderer extends Renderer {
 
     this._immediate = new ImmediateCanvas(width, height);
     this._clearColor = [0, 0, 0, 0];
+    this._trailBatch = null;
+    this._tmpParticle = {};
+    this._matrix = null;
 
     this._frameCount = 0;
     this._diagIds = null;
@@ -181,7 +186,15 @@ export class WebGLRenderer extends Renderer {
       if (diag) this._initDiag(diag);
       const ids = this._diagIds;
 
-      const doRender = () => this._renderQueue(world);
+      const doRender = () => {
+        this._setupSpriteFrame(world);
+        this._renderQueue(world);
+        this._flushBatch();
+        this._renderTrails(world);
+        this._renderEffects(world);
+        this._flushBatch();
+      };
+
       if (diag && ids && ids.draw >= 0) {
         diag.scope(ids.draw, doRender);
       } else {
@@ -198,10 +211,7 @@ export class WebGLRenderer extends Renderer {
     this._compositeImmediate();
   }
 
-  _renderQueue(world) {
-    const queue = world.getResource(RenderQueue);
-    if (!queue || queue.count === 0) return;
-
+  _setupSpriteFrame(world) {
     const cfg = world.getResource(RenderConfig);
     this._applyClearColor(cfg);
     const camera = world.getResource(Camera);
@@ -216,7 +226,19 @@ export class WebGLRenderer extends Renderer {
 
     this._batch.reset();
     this._currentTexture = null;
+    this._matrix = matrix;
+    return matrix;
+  }
 
+  _renderQueue(world) {
+    const queue = world.getResource(RenderQueue);
+    if (!queue || queue.count === 0) return;
+
+    const cfg = world.getResource(RenderConfig);
+    const camera = world.getResource(Camera);
+    const vp = world.getResource(Viewport);
+
+    const gl = this._gl;
     let images = 0, primitives = 0;
 
     queue.forEachCommandSorted((cmd) => {
@@ -292,6 +314,156 @@ export class WebGLRenderer extends Renderer {
     } else {
       doFlush();
     }
+  }
+
+  _renderTrails(world) {
+    const items = world.collectTrailRenderables();
+    if (items.length === 0) return;
+
+    const diag = this._diag;
+    const ids = this._diagIds;
+    let segments = 0, lines = 0, ribbons = 0;
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      segments += item.buffer.count - 1;
+      if (item.mode === 1) {
+        ribbons++;
+      } else {
+        lines++;
+      }
+    }
+
+    const doRender = () => {
+      if (!this._trailBatch) {
+        this._trailBatch = new TrailBatch(this._gl, { maxVertices: this._options.maxTrailVertices || 16384 });
+      }
+      const batch = this._trailBatch;
+      batch.reset();
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        batch.addTrail(item.buffer, item.color, item.width);
+      }
+      batch.flush(this._matrix);
+
+      // Trails use their own program; restore the instanced sprite path for particles.
+      this._gl.useProgram(this._program);
+      this._currentTexture = null;
+    };
+
+    if (diag && ids && ids.trails >= 0) {
+      diag.scope(ids.trails, doRender);
+    } else {
+      doRender();
+    }
+
+    if (diag && ids) {
+      if (ids.trailSegments >= 0) diag.recordCounter(ids.trailSegments, segments);
+      if (ids.trailLines >= 0) diag.recordCounter(ids.trailLines, lines);
+      if (ids.trailRibbons >= 0) diag.recordCounter(ids.trailRibbons, ribbons);
+    }
+  }
+
+  _renderEffects(world) {
+    const effects = world.effects;
+    if (!effects || effects.length === 0) return;
+
+    const ordered = effects.length > 1
+      ? effects.slice().sort((a, b) => (a.depth || 0) - (b.depth || 0))
+      : effects;
+
+    let sprites = 0, primitives = 0;
+    for (let i = 0; i < ordered.length; i++) {
+      const effect = ordered[i];
+      if (effect._destroyed || effect._finished || !effect._enabled || !effect._visible) continue;
+      const res = this._renderEffect(effect);
+      sprites += res.sprites;
+      primitives += res.primitives;
+    }
+
+    this._flushBatch();
+    this._restoreSpriteState();
+
+    if (this._diag && this._diagIds) {
+      const ids = this._diagIds;
+      if (ids.particleSprites >= 0) this._diag.recordCounter(ids.particleSprites, sprites);
+      if (ids.particlePrimitives >= 0) this._diag.recordCounter(ids.particlePrimitives, primitives);
+    }
+  }
+
+  _renderEffect(effect) {
+    const backend = effect.system ? effect.system._backend : null;
+    if (!backend || backend.activeCount === 0) return { sprites: 0, primitives: 0 };
+
+    const buf = buildBackendCommandBuffer(backend);
+    if (!buf || buf.count === 0) return { sprites: 0, primitives: 0 };
+
+    const depth = effect.depth || 0;
+    const inst = this._tmpParticle;
+    let sprites = 0, primitives = 0;
+
+    for (let i = 0; i < buf.count; i++) {
+      readParticleInstance(buf, i, inst);
+      if (inst.texture) {
+        sprites++;
+      } else {
+        primitives++;
+      }
+      this._pushParticle(inst, depth);
+    }
+
+    return { sprites, primitives };
+  }
+
+  _pushParticle(inst, depth) {
+    const gl = this._gl;
+    const texture = inst.texture;
+    const entry = texture ? this._textures.get(texture, true) : this._textures.white();
+
+    if (entry.texture !== this._currentTexture) {
+      this._flushBatch();
+      this._currentTexture = entry.texture;
+      gl.bindTexture(gl.TEXTURE_2D, entry.texture);
+    }
+
+    const w = inst.width > 0 ? inst.width : inst.size;
+    const h = inst.height > 0 ? inst.height : inst.size;
+    const ox = (0.5 - inst.originX) * w;
+    const oy = (0.5 - inst.originY) * h;
+    const cosR = Math.cos(inst.rotation);
+    const sinR = Math.sin(inst.rotation);
+
+    let u0 = 0, v0 = 0, u1 = 1, v1 = 1;
+    if (texture) {
+      const iw = entry.width;
+      const ih = entry.height;
+      if (inst.frameWidth > 0 && inst.frameHeight > 0) {
+        u0 = inst.frameX / iw;
+        v0 = inst.frameY / ih;
+        u1 = (inst.frameX + inst.frameWidth) / iw;
+        v1 = (inst.frameY + inst.frameHeight) / ih;
+      }
+    }
+
+    this._batch.add({
+      x: inst.x + cosR * ox - sinR * oy,
+      y: inst.y + sinR * ox + cosR * oy,
+      rotation: texture ? inst.rotation : 0,
+      scaleX: 1,
+      scaleY: 1,
+      width: w,
+      height: h,
+      u0, v0, u1, v1,
+      r: inst.r, g: inst.g, b: inst.b,
+      a: inst.alpha,
+      depth,
+      shape: 0,
+    });
+  }
+
+  _restoreSpriteState() {
+    const gl = this._gl;
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.useProgram(this._program);
   }
 
   _cull(cmd, camera, vp, cfg) {
@@ -381,6 +553,12 @@ export class WebGLRenderer extends Renderer {
       batch: "render.batch",
       images: "render.images",
       primitives: "render.primitives",
+      trails: "render.trails",
+      trailSegments: "render.trails.segments",
+      trailLines: "render.trails.lines",
+      trailRibbons: "render.trails.ribbons",
+      particleSprites: "render.particles.sprites",
+      particlePrimitives: "render.particles.primitives",
     });
   }
 
@@ -400,6 +578,10 @@ export class WebGLRenderer extends Renderer {
     if (!gl) return;
     this._textures.destroy();
     this._batch.destroy();
+    if (this._trailBatch) {
+      this._trailBatch.destroy();
+      this._trailBatch = null;
+    }
     gl.deleteProgram(this._program);
     gl.deleteProgram(this._compositeProgram);
     gl.deleteBuffer(this._compositeVertexBuffer);
@@ -409,5 +591,9 @@ export class WebGLRenderer extends Renderer {
 
   get immediateContext() {
     return this._immediate.context;
+  }
+
+  get gl() {
+    return this._gl;
   }
 }

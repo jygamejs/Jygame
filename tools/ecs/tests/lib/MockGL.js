@@ -19,6 +19,9 @@ export function makeMockGL() {
     getUniformLocation: [],
     uniformMatrix4fv: [],
     uniform1i: [],
+    uniform1f: [],
+    uniform2f: [],
+    uniform4f: [],
     activeTexture: [],
     createTexture: [],
     bindTexture: [],
@@ -34,6 +37,7 @@ export function makeMockGL() {
     blendFunc: [],
     drawArrays: [],
     drawArraysInstanced: [],
+    getAttribLocation: [],
     deleteProgram: [],
     deleteShader: [],
     deleteBuffer: [],
@@ -47,12 +51,15 @@ export function makeMockGL() {
     COMPILE_STATUS: 0x8B81,
     LINK_STATUS: 0x8B82,
     ARRAY_BUFFER: 0x8892,
+    ELEMENT_ARRAY_BUFFER: 0x8893,
     STATIC_DRAW: 0x88E4,
     DYNAMIC_DRAW: 0x88E8,
     TRIANGLE_STRIP: 0x0005,
+    TRIANGLES: 0x0004,
     FLOAT: 0x1406,
-    RGBA: 0x1908,
     UNSIGNED_BYTE: 0x1401,
+    UNSIGNED_SHORT: 0x1403,
+    RGBA: 0x1908,
     TEXTURE_2D: 0x0DE1,
     TEXTURE_MIN_FILTER: 0x2801,
     TEXTURE_MAG_FILTER: 0x2800,
@@ -66,9 +73,12 @@ export function makeMockGL() {
     DEPTH_TEST: 0x0B71,
     ONE: 1,
     ONE_MINUS_SRC_ALPHA: 0x0303,
+    SRC_ALPHA: 0x0302,
     COLOR_BUFFER_BIT: 0x4000,
     TEXTURE0: 0x84C0,
   };
+
+  gl.canvas = { width: 800, height: 600 };
 
   let nextId = 1;
   const ids = { program: {}, shader: {}, buffer: {}, texture: {}, vao: {} };
@@ -123,6 +133,15 @@ export function makeMockGL() {
     calls.uniformMatrix4fv.push({ loc, transpose, value: value ? Array.from(value) : null });
   };
   gl.uniform1i = (loc, value) => calls.uniform1i.push({ loc, value });
+  gl.uniform1f = (loc, value) => calls.uniform1f.push({ loc, value });
+  gl.uniform2f = (loc, a, b) => calls.uniform2f.push({ loc, a, b });
+  gl.uniform4f = (loc, a, b, c, d) => calls.uniform4f.push({ loc, a, b, c, d });
+
+  let attribId = 100;
+  gl.getAttribLocation = (program, name) => {
+    calls.getAttribLocation.push({ program: program.id, name });
+    return attribId++;
+  };
 
   gl.createBuffer = () => {
     const buffer = { id: nextId++, data: null };

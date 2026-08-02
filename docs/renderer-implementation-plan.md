@@ -2,8 +2,9 @@
 
 ## Status
 
-**In progress — Sessions 1-3 complete.** Design target: `docs/renderer-architecture.md`
-(Proposed). This plan turns that design into concrete, session-by-session work.
+**In progress — Sessions 1-4 complete.** Design target:
+`docs/renderer-architecture.md` (Proposed). This plan turns that design into
+concrete, session-by-session work.
 
 Session 1 (Renderer contract + `CanvasRenderer`) is implemented and green:
 `renderer/{Renderer,CanvasRenderer,index}.js`, `Game` `renderer` option,
@@ -33,6 +34,26 @@ immediate overlay composited in `endFrame`. `RendererResolver` `"webgl"` +
 `WebGLRenderer.test.js` (14, mock GL) + `tools/ecs/tests/lib/MockGL.js`.
 Canvas remains the fallback; trails/particles on GL are Session 4. Next:
 Session 4 (GL trails + particles, wire `GpuParticleBackend`).
+
+Session 4 (GL trails + particles, wire `GpuParticleBackend`) is implemented and
+green: `renderer/gl/trails.batch.js` (single triangle-strip ribbon geometry with
+degenerate connectors; per-trail color/width, depth via pre-sorted items from
+`world.collectTrailRenderables()`) and `renderer/gl/particles.batch.js`
+(`readParticleInstance` + `buildBackendCommandBuffer`). `WebGLRenderer` now
+renders queue → trails → particles in one frame: CPU (and GPU operator) backends
+are drawn as instanced quads through the shared sprite batch (camera-correct,
+depth from `effect.depth`), texture/frame UVs supported; trail + particle
+`render.trails*` / `render.particles.*` metrics; `gl` getter; trail batch
+destroyed in `destroy`. `particles/EngineResolvers.js` accepts a context source
+(renderer `gl` getter or raw WebGL2 context) so `backend: "gpu"` constructs a
+`GpuParticleBackend`/`GpuParticleRenderer` wired to the renderer's context;
+`particles/facade.js` threads `renderer`/`gl` options and auto-selects GPU when
+the active world's `Renderer` resource (registered by `Scene` from
+`game.renderer`) provides WebGL2. MockGL extended (ELEMENT_ARRAY_BUFFER,
+`getAttribLocation`, uniforms, `canvas`). New `WebGLRenderer` trail/particle
+mock-GL tests (geometry counts, depth order, GPU end-to-end), particle
+`EngineResolvers.test.js` (9), and `ParticleFacade` GPU-with-renderer tests.
+Next: Session 5 (`WebGpuRenderer` + finalization).
 
 Each session is independently completable: it ends with a green test suite and
 a working engine. Sessions build on each other; do not skip Session 1.

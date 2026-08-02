@@ -7,7 +7,12 @@ import { CpuParticleBackend } from "../../../particles/backends/CpuParticleBacke
 import { SoAParticleStorage } from "../../../particles/storage/SoAParticleStorage.js";
 import { CanvasParticleRenderer } from "../../../particles/renderers/CanvasParticleRenderer.js";
 import { CanvasRenderer } from "../../../renderer/CanvasRenderer.js";
+import { Renderer } from "../../../renderer/Renderer.js";
+import { WebGLRenderer } from "../../../renderer/WebGLRenderer.js";
+import { GpuParticleBackend } from "../../../particles/backends/GpuParticleBackend.js";
+import { GpuParticleRenderer } from "../../../particles/renderers/GpuParticleRenderer.js";
 import { ConeShape } from "../../../shapes/ConeShape.js";
+import { makeMockGL } from "./lib/MockGL.js";
 
 function renderWorld(world, ctx) {
   new CanvasRenderer({ context: ctx }).render(world);
@@ -411,6 +416,36 @@ describe("Particle engine-owned configuration", () => {
       () => Particle.create({ rate: 10, lifetime: 1, backend: "gpu" }),
       /WebGL2 context/,
     );
+  });
+
+  it("accepts backend: \"gpu\" when a renderer provides a WebGL2 context", () => {
+    const { gl } = makeMockGL();
+    const renderer = new WebGLRenderer({ context: gl, width: 800, height: 600 });
+    try {
+      const effect = Particle.create({ rate: 10, lifetime: 1, backend: "gpu", renderer });
+      assert.ok(effect.system._backend instanceof GpuParticleBackend);
+      assert.ok(effect.system._backend._renderer instanceof GpuParticleRenderer);
+      assert.strictEqual(effect.system._backend._renderer._gl, renderer.gl);
+      effect.destroy();
+    } finally {
+      renderer.destroy();
+    }
+  });
+
+  it("auto-selects the GPU backend when the active world exposes a WebGL renderer", () => {
+    const { gl } = makeMockGL();
+    const renderer = new WebGLRenderer({ context: gl, width: 800, height: 600 });
+    const world = new World();
+    world.setResource(Renderer, renderer);
+    ParticleEffect._defaultWorld = world;
+    try {
+      const effect = Particle.create({ rate: 10, lifetime: 1 });
+      assert.ok(effect.system._backend instanceof GpuParticleBackend);
+      effect.destroy();
+    } finally {
+      ParticleEffect._defaultWorld = null;
+      renderer.destroy();
+    }
   });
 
   it("accepts a backend instance", () => {

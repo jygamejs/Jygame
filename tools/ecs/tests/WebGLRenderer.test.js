@@ -7,6 +7,11 @@ import { RenderConfig } from "../../../view/RenderConfig.js";
 import { Camera } from "../../../view/Camera.js";
 import { Viewport } from "../../../view/Viewport.js";
 import { Diagnostics, MetricCategory, MetricUnit, MetricType } from "../../../debug/index.js";
+import { Trail, Transform, Visible, TrailManager, TrailBuffer } from "../../../ecs/index.js";
+import { ParticleEffect } from "../../../particles/ParticleEffect.js";
+import { Particle } from "../../../display/Particle.js";
+import { GpuParticleBackend } from "../../../particles/backends/GpuParticleBackend.js";
+import { GpuParticleRenderer } from "../../../particles/renderers/GpuParticleRenderer.js";
 import { makeMockGL } from "./lib/MockGL.js";
 
 function makeWorld(opts = {}) {
@@ -218,4 +223,213 @@ describe("WebGLRenderer", () => {
     assert.ok(calls.deleteBuffer.length >= 1);
     assert.ok(calls.deleteVertexArray.length >= 1);
   });
+
+  it("exposes the WebGL2 context via the gl getter", () => {
+    const { gl } = makeMockGL();
+    const renderer = new WebGLRenderer({ context: gl, width: 800, height: 600 });
+    assert.strictEqual(renderer.gl, gl);
+  });
 });
+
+function addTrailEntity(world, points, opts = {}) {
+  const manager = world.getResource(TrailManager);
+  const e = world.createEntity();
+  world.addComponent(e, Transform);
+  world.setComponent(e, Transform, { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1 });
+  world.addComponent(e, Visible);
+  world.setComponent(e, Visible, { value: 1 });
+  world.addComponent(e, Trail);
+  world.setComponent(e, Trail, {
+    enabled: opts.enabled ?? 1,
+    maxPoints: opts.maxPoints ?? 64,
+    spacing: opts.spacing ?? 4,
+    width: opts.width ?? 4,
+    color: opts.color ?? 0xffffff,
+    mode: opts.mode ?? 0,
+    depth: opts.depth ?? 0,
+  });
+  const buf = manager.getOrCreate(e, opts.maxPoints ?? 64);
+  for (const [x, y] of points) buf.addPoint(x, y);
+  return { world, manager, e };
+}
+
+function makeTrailWorld(points, opts = {}) {
+  const world = new World();
+  world.register(Transform);
+  world.register(Visible);
+  world.register(Trail);
+  const manager = new TrailManager();
+  world.setResource(TrailManager, manager);
+  addTrailEntity(world, points, opts);
+  return { world, manager };
+}
+
+describe("WebGLRenderer trails", () => {
+  it("renders a trail as a single triangle strip with one quad per segment", () => {
+    const { gl, calls } = makeMockGL();
+    const renderer = new WebGLRenderer({ context: gl, width: 800, height: 600 });
+    const { world } = makeTrailWorld([[0, 0], [50, 0], [100, 0]]);
+    renderer.render(world);
+
+    const strips = calls.drawArrays.filter((c) => c.mode === gl.TRIANGLE_STRIP);
+    assert.strictEqual(strips.length, 1);
+    assert.strictEqual(strips[0].count, 6); // 3 points -> 6 ribbon vertices
+    renderer.destroy();
+  });
+
+  it("sorts trails by depth and bridges them in one strip", () => {
+    const { gl, calls } = makeMockGL();
+    const renderer = new WebGLRenderer({ context: gl, width: 800, height: 600 });
+    const world = new World();
+    world.register(Transform);
+    world.register(Visible);
+    world.register(Trail);
+    world.setResource(TrailManager, new TrailManager());
+    addTrailEntity(world, [[0, 0], [10, 0], [20, 0]], { depth: 5, color: 0xff0000 });
+    addTrailEntity(world, [[0, 0], [10, 0], [20, 0], [30, 0]], { depth: -2, color: 0x0000ff });
+    renderer.render(world);
+
+    const strips = calls.drawArrays.filter((c) => c.mode === gl.TRIANGLE_STRIP);
+    assert.strictEqual(strips.length, 1);
+    // blue trail (4 points -> 8 verts) + connector (2) + red trail (3 points -> 6 verts)
+    assert.strictEqual(strips[0].count, 16);
+
+    const d = renderer._trailBatch._data;
+    assert.strictEqual(d[0 * 5 + 4], 1);       // first vertex is blue (b = 1)
+    assert.strictEqual(d[10 * 5 + 2], 1);      // red trail starts after blue + connector
+    renderer.destroy();
+  });
+
+  it("records render.trails metrics", () => {
+    const { gl } = makeMockGL();
+    const renderer = new WebGLRenderer({ context: gl, width: 800, height: 600 });
+    const { world } = makeTrailWorld([[0, 0], [10, 0], [20, 0], [30, 0]], { mode: 1 });
+
+    const diag = new Diagnostics();
+    for (const name of ["render.trails", "render.trails.segments", "render.trails.lines", "render.trails.ribbons"]) {
+      diag.registerMetric({ name, category: MetricCategory.RENDER, group: "Render", unit: MetricUnit.MILLISECONDS, type: MetricType.COUNTER, tags: Object.freeze(["render"]) });
+    }
+    world.setResource(Diagnostics, diag);
+    diag.lockRegistry();
+
+    renderer.render(world);
+
+    const snap = diag.lastSnapshot;
+    assert.strictEqual(snap.counter(diag.metrics.find("render.trails.segments").id), 3);
+    assert.strictEqual(snap.counter(diag.metrics.find("render.trails.ribbons").id), 1);
+    assert.strictEqual(snap.counter(diag.metrics.find("render.trails.lines").id), 0);
+    renderer.destroy();
+  });
+});
+
+describe("WebGLRenderer particles", () => {
+  function makeEffectWorld() {
+    const world = new World();
+    world.setResource(RenderQueue, new RenderQueue());
+    return world;
+  }
+
+  it("draws CPU-backend particles as instanced quads", () => {
+    const { gl, calls } = makeMockGL();
+    const renderer = new WebGLRenderer({ context: gl, width: 800, height: 600 });
+    const world = makeEffectWorld();
+    ParticleEffect._defaultWorld = world;
+    try {
+      const effect = Particle.create({});
+      effect.burst(4);
+      renderer.render(world);
+
+      const draws = calls.drawArraysInstanced;
+      assert.strictEqual(draws.length, 1);
+      assert.strictEqual(draws[0].instanceCount, 4);
+      effect.destroy();
+    } finally {
+      ParticleEffect._defaultWorld = null;
+      renderer.destroy();
+    }
+  });
+
+  it("applies per-effect depth as the instance z (depth order)", () => {
+    const { gl } = makeMockGL();
+    const renderer = new WebGLRenderer({ context: gl, width: 800, height: 600 });
+    const world = makeEffectWorld();
+    ParticleEffect._defaultWorld = world;
+    try {
+      const back = Particle.create({});
+      back.depth = -5;
+      const front = Particle.create({});
+      front.depth = 10;
+      back.burst(1);
+      front.burst(1);
+      renderer.render(world);
+
+      const d = renderer._batch.data;
+      assert.ok(Math.abs(d[15] - (-0.99)) < 1e-6);   // back effect first
+      assert.ok(Math.abs(d[32] - 0.99) < 1e-6);      // front effect after
+      back.destroy();
+      front.destroy();
+    } finally {
+      ParticleEffect._defaultWorld = null;
+      renderer.destroy();
+    }
+  });
+
+  it("uploads particle textures and computes frame UVs", () => {
+    const { gl, calls } = makeMockGL();
+    const renderer = new WebGLRenderer({ context: gl, width: 800, height: 600 });
+    const world = makeEffectWorld();
+    ParticleEffect._defaultWorld = world;
+    try {
+      const img = { width: 32, height: 16 };
+      const effect = Particle.create({
+        initializer: (p) => {
+          p.texture = img;
+          p.size = 8;
+          p.frameX = 4;
+          p.frameY = 2;
+          p.frameWidth = 8;
+          p.frameHeight = 4;
+        },
+      });
+      effect.burst(1);
+      renderer.render(world);
+
+      const upload = calls.texImage2D.find((c) => c.source === img);
+      assert.ok(upload, "particle image should be uploaded as a texture");
+
+      const d = renderer._batch.data;
+      assert.ok(Math.abs(d[7] - 4 / 32) < 1e-6);   // u0
+      assert.ok(Math.abs(d[8] - 2 / 16) < 1e-6);   // v0
+      assert.ok(Math.abs(d[9] - 12 / 32) < 1e-6);  // u1
+      assert.ok(Math.abs(d[10] - 6 / 16) < 1e-6);  // v1
+      effect.destroy();
+    } finally {
+      ParticleEffect._defaultWorld = null;
+      renderer.destroy();
+    }
+  });
+
+  it("renders a backend:'gpu' effect end-to-end via the shared GL context", () => {
+    const { gl, calls } = makeMockGL();
+    const renderer = new WebGLRenderer({ context: gl, width: 800, height: 600 });
+    const world = makeEffectWorld();
+    ParticleEffect._defaultWorld = world;
+    try {
+      const effect = Particle.create({ backend: "gpu", renderer });
+      assert.ok(effect.system._backend instanceof GpuParticleBackend);
+      assert.ok(effect.system._backend._renderer instanceof GpuParticleRenderer);
+      assert.strictEqual(effect.system._backend._renderer._gl, renderer.gl);
+
+      effect.burst(3);
+      renderer.render(world);
+
+      const draws = calls.drawArraysInstanced;
+      assert.strictEqual(draws[draws.length - 1].instanceCount, 3);
+      effect.destroy();
+    } finally {
+      ParticleEffect._defaultWorld = null;
+      renderer.destroy();
+    }
+  });
+});
+
