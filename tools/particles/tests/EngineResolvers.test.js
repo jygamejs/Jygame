@@ -6,6 +6,31 @@ import { CanvasParticleRenderer } from "../../../particles/renderers/CanvasParti
 import { GpuParticleBackend } from "../../../particles/backends/GpuParticleBackend.js";
 import { CpuParticleBackend } from "../../../particles/backends/CpuParticleBackend.js";
 import { makeMockGL } from "../../ecs/tests/lib/MockGL.js";
+import { makeMockGPU } from "../../ecs/tests/lib/MockGPU.js";
+
+function withNavigatorGPU(gpuValue, fn) {
+  const desc = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  const hadNavigator = desc !== undefined;
+  try {
+    if (gpuValue === undefined) {
+      if (hadNavigator) delete globalThis.navigator;
+    } else {
+      Object.defineProperty(globalThis, "navigator", { value: { gpu: gpuValue }, configurable: true });
+    }
+    return fn();
+  } finally {
+    if (hadNavigator) {
+      Object.defineProperty(globalThis, "navigator", desc);
+    } else {
+      delete globalThis.navigator;
+    }
+  }
+}
+
+function wgpuCanvas() {
+  const mock = makeMockGPU();
+  return { canvas: { width: 800, height: 600, getContext: (kind) => (kind === "webgpu" ? mock.context : null) }, mock };
+}
 
 describe("particle RendererResolver (context source)", () => {
   it("resolves 'gpu' to a GpuParticleRenderer wired to a renderer-provided GL context", () => {
@@ -46,10 +71,28 @@ describe("particle BackendResolver (context source)", () => {
     backend.destroy();
   });
 
+  it("constructs a compute-mode GpuParticleBackend for backend 'gpu' with a WebGPU canvas", () => {
+    const { canvas } = wgpuCanvas();
+    const backend = BackendResolver.resolve({ backend: "gpu", renderer: { canvas } });
+    assert.ok(backend instanceof GpuParticleBackend);
+    assert.strictEqual(backend._mode, "compute");
+    assert.strictEqual(backend._canvas, canvas);
+    backend.destroy();
+  });
+
   it("auto-selects the GPU backend when a GL context is provided", () => {
     const { gl } = makeMockGL();
     const backend = BackendResolver.resolve({ renderer: { gl } });
     assert.ok(backend instanceof GpuParticleBackend);
+    backend.destroy();
+  });
+
+  it("auto-selects the compute backend when a WebGPU canvas and WebGPU are available", () => {
+    const { canvas } = wgpuCanvas();
+    const backend = withNavigatorGPU({}, () => BackendResolver.resolve({ renderer: { canvas } }));
+    assert.ok(backend instanceof GpuParticleBackend);
+    assert.strictEqual(backend._mode, "compute");
+    assert.strictEqual(backend._canvas, canvas);
     backend.destroy();
   });
 

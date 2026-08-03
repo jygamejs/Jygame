@@ -31,6 +31,10 @@ function _recordTextureGauge() {
 
 const _cache = new Map();
 
+// Capture the host Image constructor before the runtime exposes the jygame
+// Image facade as a global, which shadows the native HTMLImageElement.
+const _NativeImage = typeof globalThis.Image === "function" ? globalThis.Image : null;
+
 async function _decode(img, path) {
   if (typeof img.decode !== "function") return;
   try {
@@ -58,7 +62,7 @@ export const ImageLoader = {
     }
 
     return new Promise((resolve, reject) => {
-      const img = new Image();
+      const img = new _NativeImage();
       img.onload = async () => {
         if (decode) await _decode(img, path);
         _cache.set(path, img);

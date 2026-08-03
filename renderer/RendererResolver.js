@@ -1,5 +1,6 @@
 import { CanvasRenderer } from "./CanvasRenderer.js";
 import { WebGLRenderer } from "./WebGLRenderer.js";
+import { WebGpuRenderer } from "./WebGpuRenderer.js";
 
 export class RendererResolver {
   static resolve({ renderer = "auto", canvas = null, width = 0, height = 0, options = {} } = {}) {
@@ -9,6 +10,13 @@ export class RendererResolver {
 
     switch (renderer) {
       case "auto":
+        if (WebGpuRenderer.isAvailable()) {
+          try {
+            return new WebGpuRenderer({ canvas, width, height, options });
+          } catch (err) {
+            // webgpu context unobtainable — fall through to WebGL2
+          }
+        }
         if (WebGLRenderer.isAvailable()) {
           return new WebGLRenderer({ canvas, width, height, options });
         }
@@ -18,7 +26,7 @@ export class RendererResolver {
       case "webgl":
         return new WebGLRenderer({ canvas, width, height, options });
       case "webgpu":
-        throw new Error(`Renderer 'webgpu' not implemented yet.`);
+        return new WebGpuRenderer({ canvas, width, height, options });
       default:
         throw new Error(
           `Unknown renderer '${renderer}'. Supported: "auto", "canvas", "webgl", "webgpu", or a Renderer instance.`

@@ -17,6 +17,23 @@ function resolveGL(source) {
   return null;
 }
 
+// Extracts a canvas that can provide a WebGPU context from a context source
+// (e.g. `WebGpuRenderer.canvas`). Returns null when the source is a WebGL
+// source or has no usable canvas.
+function resolveWebGpu(source) {
+  if (!source) return null;
+  if (source.gl) return null;
+  const canvas = source.canvas || source;
+  if (canvas && typeof canvas.getContext === "function") {
+    try {
+      return canvas.getContext("webgpu") ? canvas : null;
+    } catch (err) {
+      return null;
+    }
+  }
+  return null;
+}
+
 export class RendererResolver {
   static resolve(backend, { renderer } = {}) {
     if (backend === "gpu") {
@@ -34,7 +51,14 @@ export class BackendResolver {
     }
     if (backend === "gpu") {
       const gl = resolveGL(renderer);
-      return new GpuParticleBackend({ storage, renderer: new GpuParticleRenderer(gl ? { gl } : {}) });
+      if (gl) {
+        return new GpuParticleBackend({ storage, renderer: new GpuParticleRenderer({ gl }) });
+      }
+      const canvas = resolveWebGpu(renderer);
+      if (canvas) {
+        return new GpuParticleBackend({ storage, mode: "compute", canvas });
+      }
+      return new GpuParticleBackend({ storage, renderer: new GpuParticleRenderer({}) });
     }
     if (backend != null && typeof backend !== "string") {
       return backend;
@@ -47,11 +71,12 @@ export class BackendResolver {
         // GPU renderer unavailable — fall back to the CPU backend
       }
     }
-    if (WebGpuDeviceManager.isAvailable()) {
+    const canvas = resolveWebGpu(renderer);
+    if (canvas && WebGpuDeviceManager.isAvailable()) {
       try {
-        return new GpuParticleBackend({ storage, renderer: RendererResolver.resolve("gpu") });
+        return new GpuParticleBackend({ storage, mode: "compute", canvas });
       } catch (err) {
-        // GPU renderer unavailable — fall back to the CPU backend
+        // WebGPU compute unavailable — fall back to the CPU backend
       }
     }
     return new CpuParticleBackend({ storage, renderer: RendererResolver.resolve("cpu") });

@@ -13,6 +13,7 @@ import { GpuParticleBackend } from "../../../particles/backends/GpuParticleBacke
 import { GpuParticleRenderer } from "../../../particles/renderers/GpuParticleRenderer.js";
 import { ConeShape } from "../../../shapes/ConeShape.js";
 import { makeMockGL } from "./lib/MockGL.js";
+import { makeMockGPU } from "./lib/MockGPU.js";
 
 function renderWorld(world, ctx) {
   new CanvasRenderer({ context: ctx }).render(world);
@@ -430,6 +431,17 @@ describe("Particle engine-owned configuration", () => {
     } finally {
       renderer.destroy();
     }
+  });
+
+  it("accepts backend: \"gpu\" when a renderer provides a WebGPU canvas", () => {
+    const mock = makeMockGPU();
+    const canvas = { width: 800, height: 600, getContext: (kind) => (kind === "webgpu" ? mock.context : null) };
+    const renderer = { canvas };
+    const effect = Particle.create({ rate: 10, lifetime: 1, backend: "gpu", renderer });
+    assert.ok(effect.system._backend instanceof GpuParticleBackend);
+    assert.strictEqual(effect.system._backend._mode, "compute");
+    assert.strictEqual(effect.system._backend._canvas, canvas);
+    effect.destroy();
   });
 
   it("auto-selects the GPU backend when the active world exposes a WebGL renderer", () => {

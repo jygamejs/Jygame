@@ -32,6 +32,10 @@ function _recordAudioGauge() {
 const _cache = new Map();
 const _bufferCache = new Map();
 
+// Capture the host Audio constructor before the runtime exposes the jygame
+// Audio facade as a global, which shadows the native HTMLAudioElement.
+const _NativeAudio = typeof globalThis.Audio === "function" ? globalThis.Audio : null;
+
 export const AudioLoader = {
   set diagnostics(diag) {
     _diagnostics = diag;
@@ -48,7 +52,7 @@ export const AudioLoader = {
     }
 
     return new Promise((resolve, reject) => {
-      const audio = new Audio();
+      const audio = new _NativeAudio();
       audio.preload = "auto";
       audio.oncanplaythrough = () => {
         _cache.set(path, audio);

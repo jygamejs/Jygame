@@ -102,3 +102,5 @@ export { DelayEffect } from "./audio/effects/DelayEffect.js";
 export { CompressorEffect } from "./audio/effects/CompressorEffect.js";
 export { DistortionEffect } from "./audio/effects/DistortionEffect.js";
 export { ReverbEffect } from "./audio/effects/ReverbEffect.js";
+
+export { default } from "./core/Runtime.js";

@@ -15,42 +15,6 @@ export class View {
     }
   }
 
-  prepare(ctx) {
-    ctx.save();
-
-    this.camera._syncTarget();
-
-    if (this.config.clearColor !== null) {
-      ctx.fillStyle = this.config.clearColor;
-      ctx.fillRect(
-        this.viewport.x, this.viewport.y,
-        this.viewport.width, this.viewport.height,
-      );
-    }
-
-    ctx.beginPath();
-    ctx.rect(
-      this.viewport.x, this.viewport.y,
-      this.viewport.width, this.viewport.height,
-    );
-    ctx.clip();
-
-    if (!this.config.screenSpace) {
-      const cam = this.camera;
-      const vp = this.viewport;
-      const cx = vp.width * 0.5;
-      const cy = vp.height * 0.5;
-      ctx.translate(vp.x + cx, vp.y + cy);
-      ctx.scale(cam.zoom, cam.zoom);
-      ctx.rotate(-cam.rotation);
-      ctx.translate(-cam.x, -cam.y);
-    }
-  }
-
-  cleanup(ctx) {
-    ctx.restore();
-  }
-
   screenToWorld(sx, sy) {
     const vp = this.viewport;
     const cam = this.camera;

@@ -3,7 +3,9 @@ import * as assert from "node:assert";
 import { RendererResolver } from "../../../renderer/RendererResolver.js";
 import { CanvasRenderer } from "../../../renderer/CanvasRenderer.js";
 import { WebGLRenderer } from "../../../renderer/WebGLRenderer.js";
+import { WebGpuRenderer } from "../../../renderer/WebGpuRenderer.js";
 import { makeMockGL } from "./lib/MockGL.js";
+import { makeMockGPU } from "./lib/MockGPU.js";
 
 let webgl2Available = false;
 
@@ -27,6 +29,29 @@ function glCanvas() {
   return canvasWith((kind) => (kind === "webgl2" ? makeMockGL().gl : null));
 }
 
+function wgpuCanvas() {
+  return canvasWith((kind) => (kind === "webgpu" ? makeMockGPU().context : null));
+}
+
+function withNavigatorGPU(gpuValue, fn) {
+  const desc = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  const hadNavigator = desc !== undefined;
+  try {
+    if (gpuValue === undefined) {
+      if (hadNavigator) delete globalThis.navigator;
+    } else {
+      Object.defineProperty(globalThis, "navigator", { value: { gpu: gpuValue }, configurable: true });
+    }
+    return fn();
+  } finally {
+    if (hadNavigator) {
+      Object.defineProperty(globalThis, "navigator", desc);
+    } else {
+      delete globalThis.navigator;
+    }
+  }
+}
+
 after(() => {
   webgl2Available = false;
 });
@@ -37,16 +62,26 @@ describe("RendererResolver", () => {
     assert.ok(r instanceof CanvasRenderer);
   });
 
-  it('resolves "auto" to a CanvasRenderer when WebGL2 is unavailable', () => {
+  it('resolves "auto" to a CanvasRenderer when WebGL2 and WebGPU are unavailable', () => {
     webgl2Available = false;
-    const r = RendererResolver.resolve({ renderer: "auto", canvas: canvasWith((k) => (k === "2d" ? {} : null)), width: 800, height: 600 });
+    const r = withNavigatorGPU(undefined, () =>
+      RendererResolver.resolve({ renderer: "auto", canvas: canvasWith((k) => (k === "2d" ? {} : null)), width: 800, height: 600 }));
     assert.ok(r instanceof CanvasRenderer);
   });
 
-  it('resolves "auto" to a WebGLRenderer when WebGL2 is available', () => {
+  it('resolves "auto" to a WebGLRenderer when only WebGL2 is available', () => {
     webgl2Available = true;
-    const r = RendererResolver.resolve({ renderer: "auto", canvas: glCanvas(), width: 800, height: 600 });
+    const r = withNavigatorGPU(undefined, () =>
+      RendererResolver.resolve({ renderer: "auto", canvas: glCanvas(), width: 800, height: 600 }));
     assert.ok(r instanceof WebGLRenderer);
+    r.destroy();
+  });
+
+  it('resolves "auto" to a WebGpuRenderer when WebGPU is available', () => {
+    webgl2Available = true;
+    const r = withNavigatorGPU({}, () =>
+      RendererResolver.resolve({ renderer: "auto", canvas: wgpuCanvas(), width: 800, height: 600 }));
+    assert.ok(r instanceof WebGpuRenderer);
     r.destroy();
   });
 
@@ -60,13 +95,20 @@ describe("RendererResolver", () => {
     assert.throws(() => RendererResolver.resolve({ renderer: "webgl", canvas: canvasWith(() => null) }), /WebGL2/);
   });
 
-  it('throws "not implemented yet" for "webgpu"', () => {
-    assert.throws(() => RendererResolver.resolve({ renderer: "webgpu" }), /not implemented yet/);
+  it('resolves "webgpu" to a WebGpuRenderer when a WebGPU context exists', () => {
+    const r = RendererResolver.resolve({ renderer: "webgpu", canvas: wgpuCanvas(), width: 800, height: 600 });
+    assert.ok(r instanceof WebGpuRenderer);
+    r.destroy();
+  });
+
+  it('throws for "webgpu" without a WebGPU context', () => {
+    assert.throws(() => RendererResolver.resolve({ renderer: "webgpu", canvas: canvasWith(() => null) }), /WebGPU/);
   });
 
   it("defaults to auto when renderer is omitted", () => {
     webgl2Available = false;
-    const r = RendererResolver.resolve({ canvas: canvasWith((k) => (k === "2d" ? {} : null)), width: 800, height: 600 });
+    const r = withNavigatorGPU(undefined, () =>
+      RendererResolver.resolve({ canvas: canvasWith((k) => (k === "2d" ? {} : null)), width: 800, height: 600 }));
     assert.ok(r instanceof CanvasRenderer);
   });
 

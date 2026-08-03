@@ -59,6 +59,15 @@ export class Game {
       options: { imageSmoothing },
     });
 
+    if (this.renderer && typeof this.renderer.initialize === "function") {
+      this.renderer.initialize().catch((err) => {
+        console.warn(
+          "[jygame] renderer initialization failed:",
+          err && err.message ? err.message : err,
+        );
+      });
+    }
+
     this.ctx = this.renderer.immediateContext;
     if (this.ctx) {
       this.ctx.imageSmoothingEnabled = imageSmoothing;

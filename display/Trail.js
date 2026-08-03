@@ -31,7 +31,7 @@ export class Trail {
     }
     this._lifetime = lifetime || null;
 
-    if (!Number.isFinite(maxDistance) || maxDistance <= 0) {
+    if ((maxDistance !== Infinity && !Number.isFinite(maxDistance)) || maxDistance <= 0) {
       throw new Error("Trail maxDistance must be a finite number > 0");
     }
     this._maxDistance = maxDistance;

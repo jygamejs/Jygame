@@ -18,7 +18,6 @@ import { RenderQueue } from "../render/RenderQueue.js";
 import { Trail } from "../components/Trail.js";
 import { Visible } from "../components/Visible.js";
 import { TrailManager } from "../trails/TrailManager.js";
-import { CanvasRenderer } from "../../renderer/CanvasRenderer.js";
 
 export class World {
   constructor(options = {}) {
@@ -708,17 +707,6 @@ export class World {
       if (ownFrame) diag.endFrame();
       this._events.clear();
     }
-  }
-
-  render(ctx) {
-    if (!this._renderDeprecationWarned) {
-      this._renderDeprecationWarned = true;
-      console.warn(
-        "[jygame] World.render(ctx) is deprecated and will be removed. " +
-        "Render through a Renderer instead: new CanvasRenderer({ context: ctx }).render(world)."
-      );
-    }
-    new CanvasRenderer({ context: ctx }).render(this);
   }
 
   get renderables() {

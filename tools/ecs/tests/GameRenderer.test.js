@@ -123,8 +123,8 @@ describe("Game renderer option", () => {
     assert.throws(() => makeGame({ renderer: "webgl" }), /WebGL2/);
   });
 
-  it('throws "not implemented yet" for renderer: "webgpu"', () => {
-    assert.throws(() => makeGame({ renderer: "webgpu" }), /not implemented yet/);
+  it('throws for renderer: "webgpu" when no WebGPU context is available', () => {
+    assert.throws(() => makeGame({ renderer: "webgpu" }), /WebGPU/);
   });
 });
 

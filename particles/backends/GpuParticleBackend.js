@@ -29,7 +29,7 @@ export class GpuParticleBackend {
     this._storage = storage || StorageResolver.createDefault();
     this._useSoA = StorageResolver.isSoA(this._storage) && this._mode !== "object";
     this._accessor = StorageResolver.createAccessor(this._storage);
-    this._renderer = renderer || new GpuParticleRenderer({});
+    this._renderer = renderer || (this._mode === "compute" ? null : new GpuParticleRenderer({}));
     this._compiler = new ModifierCompiler();
     this._executor = this._mode === "compute" ? null : new GpuPassExecutor();
     this._computeDispatcher = null;
@@ -229,7 +229,7 @@ export class GpuParticleBackend {
   destroy() {
     this.clear();
     this.clearModifiers();
-    this._renderer.destroy();
+    if (this._renderer) this._renderer.destroy();
     this._renderer = null;
     if (this._executor) this._executor.releaseAll();
     if (this._computeDispatcher) this._computeDispatcher.destroy();
@@ -711,7 +711,7 @@ export class GpuParticleBackend {
     const buf = this._commandBuffer;
     buf.clear();
     renderData.fillCommandBuffer(buf);
-    this._renderer.render(buf, ctx);
+    if (this._renderer) this._renderer.render(buf, ctx);
   }
 
   clear() {
