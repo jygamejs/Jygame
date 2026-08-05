@@ -11,8 +11,7 @@ import { Sprite } from "../display/Sprite.js";
 import { InputContext } from "../input/actions/InputContext.js";
 import { ActionMap } from "../input/actions/ActionMap.js";
 import { BindingCompiler } from "../input/facade/BindingCompiler.js";
-import { Transform } from "../ecs/components/Transform.js";
-import { RenderSystem } from "../ecs/systems/RenderSystem.js";
+import { RenderQueue } from "../ecs/render/RenderQueue.js";
 import { AudioListener } from "../audio/AudioListener.js";
 import { ParticleEffect } from "../particles/ParticleEffect.js";
 
@@ -22,13 +21,15 @@ export class Scene extends EcsScene {
   constructor() {
     super();
     this.dom = null;
-    this.root = document.createElement("div");
-    this.root.style.position = "absolute";
-    this.root.style.inset = "0";
+    // A scene's UI root is created lazily so that constructing a Scene needs
+    // no DOM at all. The element comes from the Game's host when the scene is
+    // mounted; standalone scenes (tests, headless tools) fall back to the
+    // ambient document if one exists, and simply have no root if it does not.
+    this._root = null;
     this._cleanups = [];
     this._entered = false;
     this._exited = false;
-    this._game = null;
+    this._context = null;
     this.blocksUpdateBelow = true;
     this.blocksRenderBelow = false;
     this._prevDefaultWorld = null;
@@ -40,10 +41,34 @@ export class Scene extends EcsScene {
     this[_VIEW_COMPONENTS] = [];
     this._listener = new AudioListener();
     this._ready = false;
+    this._initPromise = null;
+    this._initError = null;
   }
 
   get ready() {
     return this._ready;
+  }
+
+  // The scene's DOM layer. Created on first access from the host that owns
+  // this scene, so it costs nothing for scenes that never render UI.
+  get root() {
+    if (!this._root) this._root = this._createRoot();
+    return this._root;
+  }
+
+  set root(el) {
+    this._root = el;
+  }
+
+  _createRoot() {
+    const el = this._context
+      ? this._context.createElement("div")
+      : (typeof document !== "undefined" ? document.createElement("div") : null);
+    if (el) {
+      el.style.position = "absolute";
+      el.style.inset = "0";
+    }
+    return el;
   }
 
   _createWorld() {
@@ -61,6 +86,13 @@ export class Scene extends EcsScene {
 
   onTap(cb) {
     this._cleanups.push(Input.onTap(cb));
+  }
+
+  // Any other recognized gesture — long press, pinch, rotate, drag, pan,
+  // double tap, or a direction-specific swipe. The callback receives the
+  // GestureEvent. Unsubscribed automatically when the scene exits.
+  onGesture(type, cb) {
+    this._cleanups.push(Input.gestures.on(type, cb));
   }
 
   cleanup(fn) {
@@ -101,8 +133,8 @@ export class Scene extends EcsScene {
 
   _ensureDefaultView() {
     if (this[_VIEW_COMPONENTS].length === 0) {
-      const vp = this._game
-        ? new Viewport(0, 0, this._game.width, this._game.height)
+      const vp = this._context
+        ? new Viewport(0, 0, this._context.width, this._context.height)
         : new Viewport(0, 0, 800, 600);
       const cam = new Camera(vp.width * 0.5, vp.height * 0.5);
       this[_VIEW_COMPONENTS].push(new View({ camera: cam, viewport: vp }));
@@ -119,21 +151,32 @@ export class Scene extends EcsScene {
       this._created = true;
     }
 
-    if (this._game) {
-      const immediate = this._game.renderer
-        ? this._game.renderer.immediateContext
-        : this._game.ctx;
+    if (this._context) {
+      const immediate = this._context.renderer
+        ? this._context.renderer.immediateContext
+        : this._context.ctx;
       this._world.setResource(CanvasContext, immediate);
 
-      if (this._game.renderer) {
-        this._world.setResource(Renderer, this._game.renderer);
+      if (this._context.renderer) {
+        this._world.setResource(Renderer, this._context.renderer);
       }
 
-      if (this._game._imageSmoothing !== undefined) {
-        this._world.setResource("imageSmoothing.default", this._game._imageSmoothing ? 1 : 0);
+      if (this._context.imageSmoothing !== undefined) {
+        this._world.setResource("imageSmoothing.default", this._context.imageSmoothing ? 1 : 0);
       }
+
+      // Tells the queue whether to carry per-command interpolation endpoints.
+      // With interpolation off those writes are pure overhead.
+      const queue = this._world.getResource(RenderQueue);
+<<<<<<< HEAD
+      if (queue) queue.interpolation = this._game._interpolation !== false;
 
       if (this._game.inputSystem && this._game.inputSystem.contextStack) {
+=======
+      if (queue) queue.interpolation = this._context.interpolation !== false;
+
+      if (this._context.inputSystem && this._context.inputSystem.contextStack) {
+>>>>>>> 07d6ec7 (refactor: add host abstraction, scene stack/context and renderer host; make debug streaming opt-in)
         this._compileInputBindings();
         if (!this._actionMap) {
           this._actionMap = new ActionMap();
@@ -143,7 +186,7 @@ export class Scene extends EcsScene {
           this._actionMap,
           { priority: this._inputPriority },
         );
-        this._game.inputSystem.contextStack.push(this._inputContext);
+        this._context.inputSystem.contextStack.push(this._inputContext);
       }
 
       this._ensureDefaultView();
@@ -190,8 +233,8 @@ export class Scene extends EcsScene {
   // renderer. Called by Game when a renderer fallback swaps the renderer
   // after the scene has already entered.
   _refreshRendererResources() {
-    if (!this._game || !this._world) return;
-    const renderer = this._game.renderer;
+    if (!this._context || !this._world) return;
+    const renderer = this._context.renderer;
     if (!renderer) return;
     const immediate = renderer.immediateContext;
     if (immediate) {
@@ -200,14 +243,15 @@ export class Scene extends EcsScene {
     this._world.setResource(Renderer, renderer);
   }
 
-  // Rebuilds the RenderQueue from the world's current transforms. Called by
-  // the Game right after interpolation has blended transform positions, so
-  // the renderers draw the smoothed positions instead of the pre-interpolation
-  // values the RenderSystem captured during world.update().
-  _populateRenderQueue() {
+  // Blends the render positions already captured in the RenderQueue toward
+  // the current tick. The queue stores previous and current tick positions
+  // per command, so this is a single allocation-free pass over pooled
+  // objects — no ECS work, and nothing in the world is mutated.
+  _applyRenderAlpha(alpha) {
     const w = this._world;
-    if (!w || typeof w.runSystem !== "function") return;
-    w.runSystem(RenderSystem);
+    if (!w) return;
+    const queue = w.getResource(RenderQueue);
+    if (queue) queue.applyAlpha(alpha);
   }
 
   enter() {
@@ -218,8 +262,46 @@ export class Scene extends EcsScene {
 
     this.world;
 
-    this._initScene();
+    // `_initScene()` is async (it awaits `onEnter()`), but `enter()` is called
+    // from a synchronous mount path. Without this catch a throwing `onEnter`
+    // becomes an unhandled rejection: `_ready` stays false forever and the
+    // frame loop silently skips update and render, so the developer sees a
+    // black screen and no error. Capture it, report it loudly, and keep it
+    // queryable via `scene.initError`.
+    this._initPromise = this._initScene().catch((err) => {
+      this._initError = err ?? new Error("Scene initialization failed");
+      console.error(
+        `[jygame] Scene "${this.constructor.name}" failed to initialize; ` +
+        "it will not update or render.",
+        this._initError,
+      );
+      try {
+        this.onError(this._initError);
+      } catch (hookErr) {
+        console.error("[jygame] Scene.onError() threw while handling an init failure.", hookErr);
+      }
+      return this._initError;
+    });
   }
+
+  // Resolves once `onEnter()` has settled. Resolves to `undefined` on success
+  // and to the Error on failure — useful for tests and for callers that want
+  // to await a scene transition rather than poll `ready`.
+  whenReady() {
+    return this._initPromise || Promise.resolve();
+  }
+
+  get failed() {
+    return this._initError != null;
+  }
+
+  get initError() {
+    return this._initError || null;
+  }
+
+  // Override to handle a failed `onEnter()` (show an error screen, retry,
+  // fall back to another scene). The failure is logged either way.
+  onError(err) {}
 
   exit() {
     if (this._exited) {
@@ -234,9 +316,9 @@ export class Scene extends EcsScene {
     }
     this._cleanups = [];
 
-    if (this._game && this._game.inputSystem && this._game.inputSystem.contextStack) {
+    if (this._context && this._context.inputSystem && this._context.inputSystem.contextStack) {
       if (this._inputContext) {
-        this._game.inputSystem.contextStack.pop(this._inputContext.name);
+        this._context.inputSystem.contextStack.pop(this._inputContext.name);
         this._inputContext = null;
       }
     }
@@ -262,73 +344,6 @@ export class Scene extends EcsScene {
   resume() {}
   update(dt) {}
 
-  interpolate(alpha) {
-    const w = this._world;
-    if (!w) return;
-
-    const tid = w.registry.getId(Transform);
-    if (tid === null) return;
-
-    if (!this._interpQuery || this._interpWorld !== w) {
-      this._interpQuery = w.queryEngine.createQuery({ all: [tid] });
-      this._interpWorld = w;
-    }
-
-    if (!this._savedPositions) this._savedPositions = new Map();
-    this._savedPositions.clear();
-
-    const tables = w.queryEngine.getTables(this._interpQuery);
-    for (let i = 0; i < tables.length; i++) {
-      const table = tables[i];
-      const count = table.count;
-      if (count === 0) continue;
-
-      const xCol = table.getColumn(tid, "x");
-      const yCol = table.getColumn(tid, "y");
-      const prevXCol = table.getColumn(tid, "_prevX");
-      const prevYCol = table.getColumn(tid, "_prevY");
-      const ids = table.entityIds;
-      if (!xCol || !yCol || !prevXCol || !prevYCol || !ids) continue;
-
-      for (let r = 0; r < count; r++) {
-        const prevX = prevXCol[r];
-        const prevY = prevYCol[r];
-        const currX = xCol[r];
-        const currY = yCol[r];
-
-        if (prevX === 0 && prevY === 0 && (currX !== 0 || currY !== 0)) continue;
-
-        const interpX = prevX + (currX - prevX) * alpha;
-        const interpY = prevY + (currY - prevY) * alpha;
-        if (interpX !== currX || interpY !== currY) {
-          this._savedPositions.set(ids[r], { x: currX, y: currY });
-          xCol[r] = interpX;
-          yCol[r] = interpY;
-        }
-      }
-    }
-  }
-
-  restoreTransforms() {
-    const w = this._world;
-    if (!w || !this._savedPositions || this._savedPositions.size === 0) return;
-
-    const tid = w.registry.getId(Transform);
-    if (tid === null) return;
-
-    for (const [entity, pos] of this._savedPositions) {
-      if (!w.entityManager.isAlive(entity)) continue;
-      const loc = w.entityManager.getLocation(entity);
-      if (!loc) continue;
-      const table = w.archetypeSystem.getTableById(loc.archetype);
-      if (!table) continue;
-      const xCol = table.getColumn(tid, "x");
-      const yCol = table.getColumn(tid, "y");
-      if (xCol) xCol[loc.row] = pos.x;
-      if (yCol) yCol[loc.row] = pos.y;
-    }
-  }
-
   render(ctx) {
     // user-overridable hook — runs before the World renders retained objects
   }
@@ -336,19 +351,19 @@ export class Scene extends EcsScene {
   renderUI() {}
 
   pushScene(scene) {
-    if (this._game) this._game.pushScene(scene);
+    if (this._context) this._context.pushScene(scene);
   }
 
   popScene() {
-    if (this._game) this._game.popScene();
+    if (this._context) this._context.popScene();
   }
 
   replaceScene(scene) {
-    if (this._game) this._game.replaceScene(scene);
+    if (this._context) this._context.replaceScene(scene);
   }
 
   switchScene(scene) {
-    if (this._game) this._game.switchScene(scene);
+    if (this._context) this._context.switchScene(scene);
   }
 
   transitionTo(scene) {

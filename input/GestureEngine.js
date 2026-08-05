@@ -48,10 +48,19 @@ export class GestureEngine extends Device {
     return result;
   }
 
+  // A recognized gesture is an edge, like a button press: it belongs to the
+  // window it was recognized in. Clearing here keeps isActive()/last() from
+  // reporting the same tap in every tick of a catch-up frame.
+  // GestureDispatcher.poll() runs before the tick loop, so callbacks still see
+  // it exactly once.
+  snapshot() {
+    this._results.clear();
+  }
+
   update(queue, dt = 16.67) {
     const pointers = this._pm.getPointers();
 
-    this._results.clear();
+    this.snapshot();
 
     for (const r of this._recognizers) {
       r.update(pointers, dt);

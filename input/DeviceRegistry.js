@@ -55,6 +55,10 @@ export class DeviceRegistry {
     }
   }
 
+  snapshot() {
+    this.forEach(device => device.snapshot());
+  }
+
   update(queue) {
     this.forEach(device => device.update(queue));
   }

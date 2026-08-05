@@ -37,15 +37,21 @@ import { CollisionSystem } from "../../../ecs/systems/CollisionSystem.js";
 import { RenderSystem } from "../../../ecs/systems/RenderSystem.js";
 import { TrailSystem } from "../../../ecs/systems/TrailSystem.js";
 import { CanvasRenderer } from "../../../renderer/CanvasRenderer.js";
+import { SceneContext } from "../../../core/SceneContext.js";
 import { EnemyTag } from "../../../ecs/components/tags/EnemyTag.js";
 import { PlayerTag } from "../../../ecs/components/tags/PlayerTag.js";
 
-function mockGame(scene) {
-  scene._game = scene.game = {
-    ctx: { save() {}, restore() {}, translate() {}, rotate() {}, scale() {}, fillRect() {}, beginPath() {}, arc() {}, fill() {}, drawImage() {}, stroke() {}, moveTo() {}, lineTo() {}, strokeStyle: "", fillStyle: "", lineWidth: 0, getTransform() { return { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }; }, setTransform() {} },
-    width: 800,
-    height: 600,
-  };
+// A Scene now depends on a SceneContext rather than a whole Game, so these
+// mount one directly against a stub renderer host — no Game required.
+function mockCanvasCtx() {
+  return { save() {}, restore() {}, translate() {}, rotate() {}, scale() {}, fillRect() {}, beginPath() {}, arc() {}, fill() {}, drawImage() {}, stroke() {}, moveTo() {}, lineTo() {}, strokeStyle: "", fillStyle: "", lineWidth: 0, getTransform() { return { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }; }, setTransform() {} };
+}
+
+function mockGame(scene, ctx = mockCanvasCtx()) {
+  scene._context = new SceneContext({
+    rendererHost: { renderer: { immediateContext: ctx }, ctx, width: 800, height: 600 },
+  });
+  return scene._context;
 }
 
 // ─── World Creation ──────────────────────────────────────
@@ -123,7 +129,7 @@ describe("Scene — resources", () => {
   it("registers CanvasContext when game is available", () => {
     const scene = new Scene();
     const mockCtx = { save() {}, restore() {}, getTransform() { return { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }; }, setTransform() {} };
-    scene._game = { renderer: { immediateContext: mockCtx }, ctx: mockCtx, width: 800, height: 600 };
+    mockGame(scene, mockCtx);
     scene.enter();
     assert.strictEqual(scene.world.getResource(CanvasContext), mockCtx);
   });

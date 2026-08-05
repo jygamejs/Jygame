@@ -57,11 +57,22 @@ export class Mouse extends Device {
     return this._buttons[button] === 0 && this._prevButtons[button] === 1;
   }
 
-  update(queue) {
-    this._snapshot();
+  // Button edges collapse and the per-window accumulators reset together.
+  // The wheel belongs here too: it is a delta, so leaving it standing would
+  // let a single notch apply once per tick on a catch-up frame — and nothing
+  // in the engine was clearing it at all, so Input.wheel grew for the whole
+  // session rather than reporting this frame's scroll.
+  snapshot() {
+    this._prevButtons.set(this._buttons);
     this._doubleClicked = false;
     this._deltaX = 0;
     this._deltaY = 0;
+    this._wheel = 0;
+    this._wheelH = 0;
+  }
+
+  update(queue) {
+    this.snapshot();
 
     queue.each(event => {
       switch (event.type) {
@@ -82,7 +93,7 @@ export class Mouse extends Device {
   }
 
   _snapshot() {
-    this._prevButtons.set(this._buttons);
+    this.snapshot();
   }
 
   _onPointerDown(data) {

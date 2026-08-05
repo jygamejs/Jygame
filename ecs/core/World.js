@@ -721,8 +721,22 @@ export class World {
     return {
       queue: this._resources.get(RenderQueue),
       trails: this.collectTrailRenderables(),
-      effects: this._effects.slice().sort((a, b) => (a.depth || 0) - (b.depth || 0)),
+      effects: this.sortedEffects(),
     };
+  }
+
+  // Depth-ordered effects, refilled into a persistent array rather than
+  // allocating a fresh slice plus comparator on every access.
+  sortedEffects() {
+    const out = this._sortedEffects || (this._sortedEffects = []);
+    const src = this._effects;
+    out.length = 0;
+    for (let i = 0; i < src.length; i++) out.push(src[i]);
+    if (out.length > 1) {
+      out.sort(this._effectDepthCompare ||
+        (this._effectDepthCompare = (a, b) => (a.depth || 0) - (b.depth || 0)));
+    }
+    return out;
   }
 
   get effects() {
@@ -747,14 +761,22 @@ export class World {
     return this._trailViewCache;
   }
 
+  // Called once per frame by the renderers. The item array and the item
+  // objects are pooled and refilled in place: this used to allocate a fresh
+  // array plus one object per visible trail, every frame.
   collectTrailRenderables() {
+    const items = this._trailItems || (this._trailItems = []);
+    items.length = 0;
+
     const manager = this._resources.get(TrailManager);
-    if (!manager || manager.size === 0) return [];
+    if (!manager || manager.size === 0) return items;
     const cache = this._getTrailView();
-    if (!cache) return [];
+    if (!cache) return items;
+
+    const pool = this._trailItemPool || (this._trailItemPool = []);
+    let used = 0;
 
     const { view, t, tr, v } = cache;
-    const items = [];
     for (const table of view.tables()) {
       if (table.count === 0) continue;
 
@@ -781,17 +803,26 @@ export class World {
         if (sp <= 0) continue;
         const buffer = manager.get(eid);
         if (!buffer || buffer.count < 2) continue;
-        items.push({
-          depth: depthCol ? depthCol[r] : 0,
-          buffer,
-          color: colorCol[r],
-          width: widthCol[r],
-          mode: modeCol[r],
-        });
+
+        let item = pool[used];
+        if (!item) {
+          item = { depth: 0, buffer: null, color: 0, width: 0, mode: 0 };
+          pool[used] = item;
+        }
+        used++;
+        item.depth = depthCol ? depthCol[r] : 0;
+        item.buffer = buffer;
+        item.color = colorCol[r];
+        item.width = widthCol[r];
+        item.mode = modeCol[r];
+        items.push(item);
       }
     }
 
-    if (items.length > 1) items.sort((a, b) => a.depth - b.depth);
+    if (items.length > 1) {
+      items.sort(this._trailDepthCompare ||
+        (this._trailDepthCompare = (a, b) => a.depth - b.depth));
+    }
     return items;
   }
 

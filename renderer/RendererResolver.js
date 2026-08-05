@@ -9,6 +9,9 @@ export class RendererResolver {
     }
 
     switch (renderer) {
+      // "auto" never throws: it degrades until something works. isAvailable()
+      // is a capability probe, not a guarantee — the context can still be
+      // refused — so each attempt is guarded.
       case "auto":
         if (WebGpuRenderer.isAvailable()) {
           try {
@@ -18,7 +21,11 @@ export class RendererResolver {
           }
         }
         if (WebGLRenderer.isAvailable()) {
-          return new WebGLRenderer({ canvas, width, height, options });
+          try {
+            return new WebGLRenderer({ canvas, width, height, options });
+          } catch (err) {
+            // webgl2 context unobtainable — fall through to Canvas
+          }
         }
         return new CanvasRenderer({ canvas, width, height, options });
       case "canvas":
@@ -36,13 +43,20 @@ export class RendererResolver {
 
   // Ordered fallback chain used when a renderer fails to initialize or
   // construct. `renderer` is the option the user passed in.
+  //
+  // Only "auto" has a chain. Naming a renderer is a requirement, not a
+  // preference: a game that asks for WebGL wants to know it cannot have it,
+  // not to be quietly handed a Canvas renderer with different performance and
+  // different capabilities. If explicit names fell back, "webgl" would just be
+  // "auto" starting one rung down, and there would be no way to express a hard
+  // requirement at all.
   static chain(renderer) {
     if (renderer && typeof renderer === "object") return [];
     switch (renderer) {
       case "webgpu":
-        return ["webgpu", "webgl", "canvas"];
+        return ["webgpu"];
       case "webgl":
-        return ["webgl", "canvas"];
+        return ["webgl"];
       case "canvas":
         return ["canvas"];
       case "auto":

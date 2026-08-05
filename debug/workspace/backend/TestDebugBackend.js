@@ -4,6 +4,7 @@ export class TestDebugBackend extends DebugBackend {
   constructor() {
     super();
     this._queue = [];
+    this._commands = [];
     this._open = false;
     this._latency = 0;
   }
@@ -15,11 +16,21 @@ export class TestDebugBackend extends DebugBackend {
   close() {
     this._open = false;
     this._queue = [];
+    this._commands = [];
   }
 
   send(snapshot) {
     if (!this._open) return;
     this._queue.push(snapshot);
+  }
+
+  sendCommand(command) {
+    if (!this._open) return;
+    this._commands.push(command);
+  }
+
+  commands() {
+    return this._commands;
   }
 
   receive(msg) {

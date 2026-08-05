@@ -1,5 +1,7 @@
 import { DeviceRegistry } from "./DeviceRegistry.js";
 import { InputEventQueue } from "./InputEventQueue.js";
+import { EventType } from "./EventType.js";
+import { PointerManager } from "./PointerManager.js";
 
 export class InputSystem {
   constructor(options = {}) {
@@ -9,6 +11,25 @@ export class InputSystem {
     this._contextStack = null;
     this._coordinateSystem = null;
     this._consumers = [];
+    // Per-frame event tallies, reported by Game into the input.* diagnostics
+    // metrics. Counted here rather than pushed to Diagnostics directly so the
+    // input layer keeps no dependency on the debug layer.
+    this._keyEventCount = 0;
+    this._pointerEventCount = 0;
+  }
+
+  get keyEventCount() { return this._keyEventCount; }
+  get pointerEventCount() { return this._pointerEventCount; }
+
+  get activePointerCount() {
+    const pm = this._devices.get(PointerManager);
+    if (!pm) return 0;
+    const pointers = pm.getPointers();
+    let n = 0;
+    for (let i = 0; i < pointers.length; i++) {
+      if (pointers[i].isDown) n++;
+    }
+    return n;
   }
 
   get devices() { return this._devices; }
@@ -17,7 +38,12 @@ export class InputSystem {
   get contextStack() { return this._contextStack; }
   get coordinateSystem() { return this._coordinateSystem; }
 
-  set contextStack(cs) { this._contextStack = cs; }
+  set contextStack(cs) {
+    this._contextStack = cs;
+    // The stack needs live device state so push() can prime a new context
+    // against inputs that are already held.
+    if (cs) cs.devices = this._devices;
+  }
   set coordinateSystem(cs) { this._coordinateSystem = cs; }
 
   addInputConsumer(fn) {
@@ -37,10 +63,32 @@ export class InputSystem {
     if (backend) backend.start();
   }
 
+  // Opens a new sampling window across the whole input stack: action states
+  // and device edge state collapse together. Called once at the top of
+  // update(), and again by the game loop after each fixed tick so that a
+  // single press reads as "just pressed" in exactly one tick — at both the
+  // action level (Input.pressed) and the device level (Input.pointer.justPressed).
   snapshot() {
+    this._devices.snapshot();
     if (this._contextStack) {
       this._contextStack.snapshot();
     }
+  }
+
+  _countEvents() {
+    let keys = 0;
+    let pointers = 0;
+    this._events.each((event) => {
+      const t = event.type;
+      if (t === EventType.KEY_DOWN || t === EventType.KEY_UP) keys++;
+      else if (
+        t === EventType.POINTER_DOWN ||
+        t === EventType.POINTER_UP ||
+        t === EventType.POINTER_MOVE
+      ) pointers++;
+    });
+    this._keyEventCount = keys;
+    this._pointerEventCount = pointers;
   }
 
   update() {
@@ -49,6 +97,8 @@ export class InputSystem {
     if (this._backend) {
       this._backend.poll(this._events);
     }
+
+    this._countEvents();
 
     if (this._consumers.length > 0) {
       this._events.each(event => {

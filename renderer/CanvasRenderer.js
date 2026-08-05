@@ -54,6 +54,13 @@ export class CanvasRenderer extends Renderer {
     try {
       ctx.save();
 
+      // Mirror the camera transform into six scalars as we apply it, so
+      // RenderQueue.execute does not have to call ctx.getTransform() and
+      // allocate a DOMMatrix to read back what we just set.
+      const mat = this._baseMatrix ||
+        (this._baseMatrix = { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 });
+      mat.a = 1; mat.b = 0; mat.c = 0; mat.d = 1; mat.e = 0; mat.f = 0;
+
       const camera = world.getResource(Camera);
       if (camera) {
         const vp = world.getResource(Viewport);
@@ -63,11 +70,20 @@ export class CanvasRenderer extends Renderer {
         ctx.scale(camera.zoom, camera.zoom);
         ctx.rotate(-camera.rotation);
         ctx.translate(-camera.x, -camera.y);
+
+        const z = camera.zoom;
+        const cos = Math.cos(-camera.rotation);
+        const sin = Math.sin(-camera.rotation);
+        // translate(cx,cy) · scale(z,z) · rotate(-rot) · translate(-camX,-camY)
+        const a = z * cos, b = z * sin, c = -z * sin, d = z * cos;
+        mat.a = a; mat.b = b; mat.c = c; mat.d = d;
+        mat.e = cx + a * -camera.x + c * -camera.y;
+        mat.f = cy + b * -camera.x + d * -camera.y;
       }
 
       const queue = world.getResource(RenderQueue);
       if (queue && queue.count > 0) {
-        queue.execute(ctx);
+        queue.execute(ctx, 0xFFFFFFFF, mat);
       }
 
       this._renderTrails(world);
@@ -123,8 +139,10 @@ export class CanvasRenderer extends Renderer {
     const effects = world.effects;
     if (!effects || effects.length === 0) return;
 
-    const ordered = effects.length > 1
-      ? effects.slice().sort((a, b) => (a.depth || 0) - (b.depth || 0))
+    // world.sortedEffects() reuses a persistent array; the old
+    // `.slice().sort(...)` allocated both an array and a comparator per frame.
+    const ordered = effects.length > 1 && typeof world.sortedEffects === "function"
+      ? world.sortedEffects()
       : effects;
 
     for (let i = 0; i < ordered.length; i++) {

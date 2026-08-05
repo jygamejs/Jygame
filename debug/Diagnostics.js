@@ -69,6 +69,8 @@ export class Diagnostics {
     if (!this._insideFrame) return;
     this._insideFrame = false;
 
+    this._discardRunningTimers();
+
     if (!this._active) return;
     this._active = false;
 
@@ -168,6 +170,20 @@ export class Diagnostics {
     return t;
   }
 
+  // begin/end are the allocation-free form of scope(). scope() has to build a
+  // closure for every timed region, which in the frame loop meant well over a
+  // dozen throwaway functions per frame (one per scheduler system, per tick).
+  // Hot paths use begin/end and rely on endFrame() to clean up after a throw;
+  // scope() remains for user code and anywhere convenience beats the garbage.
+  begin(metricId) {
+    this.timer(metricId).start();
+  }
+
+  end(metricId) {
+    const timer = this._timers.get(metricId);
+    if (timer) timer.stop();
+  }
+
   scope(metricId, fn) {
     const timer = this.timer(metricId);
     timer.start();
@@ -175,6 +191,15 @@ export class Diagnostics {
       return fn();
     } finally {
       timer.stop();
+    }
+  }
+
+  // Drops any timer still running at frame end. Without per-region try/finally
+  // a throw mid-frame would otherwise leave a timer started, and its next
+  // stop() would bill the entire gap to that metric.
+  _discardRunningTimers() {
+    for (const timer of this._timers.values()) {
+      if (timer._running) timer.discard();
     }
   }
 

@@ -14,7 +14,7 @@ export { SpatialHash } from "./collision/SpatialHash.js";
 export { CollisionQuery } from "./ecs/collision/CollisionQuery.js";
 export { Sprite } from "./display/Sprite.js";
 export { Group } from "./display/Group.js";
-export { Input, InputContext as OldInputContext } from "./input/Input.js";
+export { Input } from "./input/Input.js";
 export * from "./input/index.js";
 export { LoadingTask } from "./loaders/LoadingTask.js";
 export { ImageLoader } from "./loaders/ImageLoader.js";
@@ -31,7 +31,13 @@ export { ActivePool } from "./memory/ActivePool.js";
 export { Animation } from "./ecs/components/Animation.js";
 export { AnimationClip } from "./ecs/animation/AnimationClip.js";
 export { AnimationPack } from "./ecs/animation/AnimationPack.js";
-export { Trail } from "./ecs/components/Trail.js";
+// Two classes are named Trail: the user-facing effect in display/, and the
+// ECS component it is built on. The curated global API that Runtime installed
+// exposed the display effect as `Trail`, and that is what a game reaches for
+// (`new Trail({ target })`), so it keeps the plain name here. The component is
+// still exported for direct world.add()/query use.
+export { Trail } from "./display/Trail.js";
+export { Trail as TrailComponent } from "./ecs/components/Trail.js";
 export { AnimationSystem } from "./ecs/systems/AnimationSystem.js";
 export { MovementSystem } from "./ecs/systems/MovementSystem.js";
 export { RenderSystem } from "./ecs/systems/RenderSystem.js";
@@ -102,5 +108,3 @@ export { DelayEffect } from "./audio/effects/DelayEffect.js";
 export { CompressorEffect } from "./audio/effects/CompressorEffect.js";
 export { DistortionEffect } from "./audio/effects/DistortionEffect.js";
 export { ReverbEffect } from "./audio/effects/ReverbEffect.js";
-
-export { default } from "./core/Runtime.js";

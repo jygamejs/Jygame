@@ -44,6 +44,15 @@ export class BrowserDebugBackend extends DebugBackend {
     }
   }
 
+  sendCommand(command) {
+    if (!this._channel) return;
+    try {
+      this._channel.postMessage({ type: "command", payload: command });
+    } catch {
+      // Drop silently — game might not be running
+    }
+  }
+
   get connected() { return this._connected; }
   get latency() { return this._latency; }
 }

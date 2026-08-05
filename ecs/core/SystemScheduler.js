@@ -207,10 +207,17 @@ export class SystemScheduler {
         if (m) this._ecsSystemsTotalId = m.id;
       }
 
+      // begin/end rather than scope(): this runs every tick, and the closure
+      // scope() requires was one of the densest allocation sites in the loop.
+      // A throw is covered by Diagnostics.endFrame(), which discards any
+      // timer left running.
       if (diag && this._ecsSystemsTotalId !== undefined) {
-        diag.scope(this._ecsSystemsTotalId, () => {
+        diag.begin(this._ecsSystemsTotalId);
+        try {
           this._executeSystems(diag, dt);
-        });
+        } finally {
+          diag.end(this._ecsSystemsTotalId);
+        }
       } else {
         this._executeSystems(diag, dt);
       }
@@ -226,9 +233,11 @@ export class SystemScheduler {
       if (!system.enabled) continue;
       system._ctx._refresh(dt);
       if (diag && system._diagMetricId !== undefined) {
-        diag.scope(system._diagMetricId, () => {
-          system.update(system._ctx, dt);
-        });
+        // One closure per system per tick, previously. With six default
+        // systems at 60Hz that alone was ~360 throwaway functions a second.
+        diag.begin(system._diagMetricId);
+        system.update(system._ctx, dt);
+        diag.end(system._diagMetricId);
         diag.recordGauge(system._diagEntityMetricId, system._ctx.entityCount);
         diag.recordGauge(system._diagTableMetricId, system._ctx.tables().length);
       } else {

@@ -8,14 +8,13 @@ export class ActionState {
     this._vector = { x: 0, y: 0 };
     this._prevVector = { x: 0, y: 0 };
     this._bufferTimer = 0;
-    this._cycle = 0;
   }
 
   get kind() { return this._kind; }
 
   get pressed() { return this._strength > 0; }
-  get justPressed() { return this._cycle >= 2 && this._strength > 0 && this._prevStrength <= 0; }
-  get justReleased() { return this._cycle >= 2 && this._strength <= 0 && this._prevStrength > 0; }
+  get justPressed() { return this._strength > 0 && this._prevStrength <= 0; }
+  get justReleased() { return this._strength <= 0 && this._prevStrength > 0; }
 
   get strength() { return this._kind === ActionKind.DIGITAL ? (this._strength > 0 ? 1 : 0) : this._strength; }
 
@@ -49,8 +48,15 @@ export class ActionState {
     }
   }
 
+  // justPressed/justReleased are a plain comparison against the snapshotted
+  // previous value. They used to also require two prior evaluations, to stop a
+  // context pushed while its keys were already held from reporting a press
+  // that happened before the context existed. That guard also swallowed
+  // genuine input: an action pressed on the first frame it was ever polled
+  // could never report justPressed at all. ContextStack.push now primes new
+  // contexts against live device state instead, which fixes only the case
+  // that needed fixing.
   _update(strength, vector) {
-    if (this._cycle < 2) this._cycle++;
     this._strength = Math.max(0, Math.min(1, strength));
     if (vector) {
       this._vector.x = vector.x;

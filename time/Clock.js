@@ -40,8 +40,12 @@ export class Clock {
       this._accumulator -= this._fixedDt;
       count++;
     }
+    // Spiral-of-death protection: when the tick cap is hit we drop the
+    // unsimulated backlog, but we keep the sub-step remainder. Zeroing the
+    // accumulator outright would also force `alpha` to 0, adding an
+    // interpolation snap on top of the frame spike that caused the overrun.
     if (this._maxTicks > 0 && count >= this._maxTicks) {
-      this._accumulator = 0;
+      this._accumulator %= this._fixedDt;
     }
     return count;
   }

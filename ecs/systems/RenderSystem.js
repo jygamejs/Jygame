@@ -41,9 +41,9 @@ export class RenderSystem extends System {
 
     const ids = this._diagIds;
     if (diag && ids && ids.populate >= 0) {
-      diag.scope(ids.populate, () => {
-        this._populateQueue(queue, ctx);
-      });
+      diag.begin(ids.populate);
+      this._populateQueue(queue, ctx);
+      diag.end(ids.populate);
     } else {
       this._populateQueue(queue, ctx);
     }
@@ -67,6 +67,14 @@ export class RenderSystem extends System {
 
       const tx = table.getColumn(tid, "x");
       const ty = table.getColumn(tid, "y");
+      // Carried into the command so the render position can be blended at
+      // draw time. Interpolating here rather than mutating the world means
+      // the authoritative transform is never temporarily wrong, and the
+      // queue does not have to be rebuilt after blending.
+      const interp = queue.interpolation;
+      const tpx = interp ? table.getColumn(tid, "_prevX") : null;
+      const tpy = interp ? table.getColumn(tid, "_prevY") : null;
+      const tiv = interp ? table.getColumn(tid, "_interpValid") : null;
       const trot = table.getColumn(tid, "rotation");
       const tsx = table.getColumn(tid, "scaleX");
       const tsy = table.getColumn(tid, "scaleY");
@@ -97,11 +105,16 @@ export class RenderSystem extends System {
           }
         }
 
+        const canInterp = tiv !== null && tiv[r] === 1;
+
         queue.push(
           sourceImage, sx, sy, sw, sh,
           tx[r], ty[r], trot[r], tsx[r], tsy[r],
           rw[r], rh[r], fillCol[r], shape[r], layer[r],
-          !!smoothing[r], depth[r]
+          !!smoothing[r], depth[r],
+          canInterp && tpx ? tpx[r] : tx[r],
+          canInterp && tpy ? tpy[r] : ty[r],
+          canInterp
         );
       }
     }

@@ -1,10 +1,15 @@
 import { describe, it } from "node:test";
 import * as assert from "node:assert";
 
-// ─── Browser environment mock (Game constructor needs a DOM) ───────────────
 
+
+const { Game, Scene, Sprite } = await import("../../../jygame.js");
+const { HeadlessHost } = await import("../../../core/Host.js");
+
+// Transforms the renderer emitted, in draw order.
 const drawn = [];
 
+<<<<<<< HEAD
 function makeElement() {
   return {
     style: {},
@@ -87,9 +92,10 @@ function setupDom() {
 
 setupDom();
 
-const { default: jygame } = await import("../../../jygame.js");
-const { Scene, Sprite } = await import("../../../jygame.js");
+const { Game, Scene, Sprite } = await import("../../../jygame.js");
 
+=======
+>>>>>>> 07d6ec7 (refactor: add host abstraction, scene stack/context and renderer host; make debug streaming opt-in)
 function collectRenderedPositions(interpolation, frames = 20) {
   drawn.length = 0;
 
@@ -103,12 +109,19 @@ function collectRenderedPositions(interpolation, frames = 20) {
     }
   }
 
-  const runtime = jygame({ fps: 15, width: 800, height: 600, interpolation });
+<<<<<<< HEAD
+  const game = new Game({ fps: 15, width: 800, height: 600, interpolation });
+=======
+  const host = new HeadlessHost({ width: 800, height: 600 });
+  const game = new Game({ fps: 15, width: 800, height: 600, interpolation, host });
+  // Record the transforms the renderer emits; HeadlessHost's 2D context is a
+  // no-op, so instrument the one the game actually draws through.
+  game.ctx.setTransform = (a, b, c, d, e, f) => drawn.push({ a, b, c, d, e, f });
+>>>>>>> 07d6ec7 (refactor: add host abstraction, scene stack/context and renderer host; make debug streaming opt-in)
   const scene = new MyScene();
-  runtime.run(scene);
+  game.run(scene);
 
   return new Promise((resolve) => {
-    const game = runtime.game;
     const realDt = 1000 / 60 / 1000;
     const positions = [];
     let frame = 0;
@@ -122,7 +135,7 @@ function collectRenderedPositions(interpolation, frames = 20) {
       if (frame < frames) {
         setTimeout(step, 0);
       } else {
-        runtime.destroy();
+        game.destroy();
         resolve(positions);
       }
     };

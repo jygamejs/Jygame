@@ -16,7 +16,9 @@ export { CaptureResult } from "./CaptureResult.js";
 export { Analysis } from "./Analysis.js";
 export { resolveMetricIds } from "./resolveMetricIds.js";
 
-export { enableDebugWorkspace, takeDebugSnapshot } from "./EnableDebugWorkspace.js";
+export { enableDebugWorkspace, takeDebugSnapshot, isDebugStreaming,
+  DEBUG_SUBSCRIBE, DEBUG_UNSUBSCRIBE, DEBUG_SUBSCRIPTION_TIMEOUT_MS } from "./EnableDebugWorkspace.js";
+export { DebugSession } from "./DebugSession.js";
 
 export { DebugBackend } from "./workspace/backend/DebugBackend.js";
 export { NullDebugBackend } from "./workspace/backend/NullDebugBackend.js";

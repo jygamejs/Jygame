@@ -56,6 +56,7 @@ export { GestureType } from "./GestureType.js";
 export { GestureEvent } from "./GestureEvent.js";
 export { GestureRecognizer } from "./GestureRecognizer.js";
 export { GestureEngine } from "./GestureEngine.js";
+export { GestureDispatcher } from "./GestureDispatcher.js";
 export { TapRecognizer } from "./recognizers/TapRecognizer.js";
 export { DoubleTapRecognizer } from "./recognizers/DoubleTapRecognizer.js";
 export { LongPressRecognizer } from "./recognizers/LongPressRecognizer.js";

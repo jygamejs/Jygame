@@ -25,8 +25,12 @@ export class Keyboard extends Device {
 
   get state() { return this._state; }
 
-  update(queue) {
+  snapshot() {
     this._state.snapshot();
+  }
+
+  update(queue) {
+    this.snapshot();
     queue.each(event => {
       if (event.type === EventType.KEY_DOWN) {
         const code = KeyCode.fromDOMCode(event.data.code);

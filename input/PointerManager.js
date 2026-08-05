@@ -33,16 +33,21 @@ export class PointerManager extends Device {
   }
 
   update(queue, dt = 16.67) {
-    this._snapshotState();
+    this.snapshot();
     queue.each(event => {
       this._processEvent(event, dt);
     });
   }
 
-  _snapshotState() {
+  // Collapses justDown/justUp for every live pointer.
+  snapshot() {
     this._storage.forEachActive((data) => {
       data.wasDown = data.isDown;
     });
+  }
+
+  _snapshotState() {
+    this.snapshot();
   }
 
   _processEvent(event, dt) {

@@ -4,9 +4,14 @@ import { EventType } from "./EventType.js";
 import { Tier } from "./Tier.js";
 
 export class BrowserBackend extends InputBackend {
-  constructor(target) {
+  // `host` supplies the document-scoped listeners (keyboard is bound at the
+  // document, not the canvas). Optional so the backend still works standalone
+  // in a browser, but Game always passes one — that is what lets the whole
+  // engine run with no DOM.
+  constructor(target, host = null) {
     super();
     this._target = target;
+    this._host = host;
     this._attached = false;
     this.__eventQueue = [];
 
@@ -24,11 +29,21 @@ export class BrowserBackend extends InputBackend {
 
   get name() { return "browser"; }
 
+  _onDoc(event, handler) {
+    if (this._host) this._host.onDocument(event, handler);
+    else if (typeof document !== "undefined") document.addEventListener(event, handler);
+  }
+
+  _offDoc(event, handler) {
+    if (this._host) this._host.offDocument(event, handler);
+    else if (typeof document !== "undefined") document.removeEventListener(event, handler);
+  }
+
   start() {
     if (this._attached) return;
     const el = this._target;
-    document.addEventListener("keydown", this._boundKeyDown);
-    document.addEventListener("keyup", this._boundKeyUp);
+    this._onDoc("keydown", this._boundKeyDown);
+    this._onDoc("keyup", this._boundKeyUp);
     el.addEventListener("pointerdown", this._boundPointerDown, { passive: false });
     el.addEventListener("pointermove", this._boundPointerMove, { passive: false });
     el.addEventListener("pointerup", this._boundPointerUp, { passive: false });
@@ -44,8 +59,8 @@ export class BrowserBackend extends InputBackend {
   stop() {
     if (!this._attached) return;
     const el = this._target;
-    document.removeEventListener("keydown", this._boundKeyDown);
-    document.removeEventListener("keyup", this._boundKeyUp);
+    this._offDoc("keydown", this._boundKeyDown);
+    this._offDoc("keyup", this._boundKeyUp);
     el.removeEventListener("pointerdown", this._boundPointerDown);
     el.removeEventListener("pointermove", this._boundPointerMove);
     el.removeEventListener("pointerup", this._boundPointerUp);

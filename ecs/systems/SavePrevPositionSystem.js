@@ -19,12 +19,16 @@ export class SavePrevPositionSystem extends System {
       const y = table.getColumn(tid, "y");
       const prevX = table.getColumn(tid, "_prevX");
       const prevY = table.getColumn(tid, "_prevY");
+      const valid = table.getColumn(tid, "_interpValid");
       if (!x || !y || !prevX || !prevY) continue;
 
       for (let r = 0; r < count; r++) {
         prevX[r] = x[r];
         prevY[r] = y[r];
       }
+
+      // Once prev holds a real position, the row is safe to interpolate.
+      if (valid) valid.fill(1, 0, count);
     }
   }
 }

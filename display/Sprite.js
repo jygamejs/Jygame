@@ -103,7 +103,10 @@ export class Sprite {
     const defaultSmoothing = wld.hasResource("imageSmoothing.default") ? wld.getResource("imageSmoothing.default") : 1;
 
     wld.addMany(eid, Transform, Collider, Renderable, Visible, RenderBounds);
-    wld.set(eid, Transform, { x: x + w / 2, y: y + h / 2, scaleX: 1, scaleY: 1, _prevX: x + w / 2, _prevY: y + h / 2 });
+    // _prevX/_prevY are seeded to the spawn position and marked valid so the
+    // sprite interpolates from where it appeared rather than being skipped
+    // (or, previously, dragged in from the origin) on its first tick.
+    wld.set(eid, Transform, { x: x + w / 2, y: y + h / 2, scaleX: 1, scaleY: 1, _prevX: x + w / 2, _prevY: y + h / 2, _interpValid: 1 });
     wld.set(eid, Collider, { width: w, height: h });
     wld.set(eid, Renderable, { fillColor: 0xffffff, imageSmoothing: defaultSmoothing, layer: Layer.WORLD, nativeWidth: explicitSize ? w : 0, nativeHeight: explicitSize ? h : 0 });
     wld.set(eid, Visible, { value: 1 });

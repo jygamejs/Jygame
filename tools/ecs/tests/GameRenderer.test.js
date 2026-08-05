@@ -119,12 +119,33 @@ describe("Game renderer option", () => {
     assert.strictEqual(instance.destroy.mock.callCount(), 1);
   });
 
+  // Naming a renderer is a hard requirement. A game that asks for WebGL wants
+  // to know it cannot have it — being quietly handed a Canvas renderer with
+  // different performance and capabilities is worse than failing. Only "auto"
+  // degrades; if named renderers fell back, "webgl" would just be "auto"
+  // starting one rung down and a requirement could not be expressed at all.
   it('throws for renderer: "webgl" when no WebGL2 context is available', () => {
     assert.throws(() => makeGame({ renderer: "webgl" }), /WebGL2/);
   });
 
   it('throws for renderer: "webgpu" when no WebGPU context is available', () => {
     assert.throws(() => makeGame({ renderer: "webgpu" }), /WebGPU/);
+  });
+
+  it("throws for an unknown renderer name", () => {
+    assert.throws(() => makeGame({ renderer: "vulkan" }), /Unknown renderer/);
+  });
+
+  it("gives a named renderer no fallback chain", () => {
+    const game = makeGame({ renderer: "canvas" });
+    assert.deepStrictEqual(game.rendererHost.chain, ["canvas"]);
+    game.destroy();
+  });
+
+  it('gives "auto" the full fallback chain', () => {
+    const game = makeGame({ renderer: "auto" });
+    assert.deepStrictEqual(game.rendererHost.chain, ["webgpu", "webgl", "canvas"]);
+    game.destroy();
   });
 });
 

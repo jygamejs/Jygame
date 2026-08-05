@@ -4,10 +4,33 @@ export class ContextStack {
   constructor(evaluator) {
     this._contexts = [];
     this._evaluator = evaluator || new ActionEvaluator();
+    // Wired by InputSystem when the stack is attached. Only needed so that
+    // push() can read the current device state; a standalone stack works
+    // exactly as before.
+    this._devices = null;
   }
 
+  get devices() { return this._devices; }
+  set devices(registry) { this._devices = registry; }
+
+  // Newly pushed contexts are primed against the *current* device state so
+  // that inputs already held at push time do not read as fresh presses on the
+  // context's first evaluation — otherwise a pause menu opened with Escape
+  // sees Escape as justPressed on its very first frame and closes itself.
+  //
+  // Priming evaluates the new context once and immediately snapshots it, so
+  // prev matches what is actually held right now. With no device registry
+  // attached there is nothing to read, and push stays a plain append.
   push(context) {
     this._contexts.push(context);
+    if (!this._devices || !context || !context.actionMap) return;
+
+    const entries = [];
+    for (const entry of context.actionMap.entries()) entries.push(entry);
+    if (entries.length === 0) return;
+
+    this._evaluator.evaluate(entries, this._devices);
+    for (const entry of entries) entry.state.snapshot();
   }
 
   pop(name) {

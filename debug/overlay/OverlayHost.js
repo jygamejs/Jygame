@@ -76,7 +76,7 @@ export class OverlayHost {
     this._commands.register("view:captures:toggle", () => this._toggleView("captures"), "6");
 
     this._commands.register("capture:manual", () => {
-      const diag = this._game._getDiag?.();
+      const diag = this._game.diagnostics;
       if (diag) {
         diag.captureNow();
         const idx = this._captures.length;
@@ -101,7 +101,7 @@ export class OverlayHost {
   show() {
     if (this._visible) return;
     this._visible = true;
-    const diag = this._game._getDiag?.();
+    const diag = this._game.diagnostics;
     if (diag) {
       this._cachedContext = new ViewContext({
         history: diag.history,
@@ -149,7 +149,7 @@ export class OverlayHost {
 
   _currentContext() {
     if (this._cachedContext) return this._cachedContext;
-    const diag = this._game._getDiag?.();
+    const diag = this._game.diagnostics;
     this._cachedContext = new ViewContext({
       history: diag?.history ?? null,
       registry: diag?.metrics ?? null,

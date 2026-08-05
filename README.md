@@ -143,7 +143,7 @@ Full API reference, guides, and examples: [jygame-documentation.vercel.app](http
 
 | Import | Description |
 |---|---|
-| `Game` | Main game loop with fixed timestep, canvas setup, UI layer, scene stack (`pushScene`, `popScene`, `replaceScene`, `peekScene`, `switchScene`), and lifecycle management. Accepts `debug` option (default `true`) — press **Ctrl+F3** to open the debug workspace. Set `debug: false` to strip all debug code for final builds. |
+| `Game` | Main game loop with fixed timestep, canvas setup, UI layer, scene stack (`pushScene`, `popScene`, `replaceScene`, `peekScene`, `switchScene`), and lifecycle management. Accepts `debug` option (default `false`) — set `debug: true` and press **Ctrl+F3** to open the debug workspace. |
 | `Scene` | Engine Scene (extends ECS Scene). Lifecycle hooks (`onEnter`, `onExit`, `onCreate`, `pause`, `resume`, `update`, `interpolate`, `render`, `renderUI`), blocking properties, stack delegators, auto-cleaned event helpers (`on`, `onSwipe`, `onTap`, `cleanup`), and built-in `_actionMap`/`_inputContext` for input. |
 | `DefaultWorldBuilder` | Creates a pre-configured `World` with all engine components, systems, and resources registered. |
 | `Sprite` | Convenience entity wrapper with `Transform`, `Collider`, `Velocity`, `Renderable`, `Visible`. Exposes `x`, `y`, `width`, `height`, `angle`, `scale`, `velocity`, `image`, `style` shorthands. |
@@ -153,7 +153,7 @@ Full API reference, guides, and examples: [jygame-documentation.vercel.app](http
 | `Rect` | AABB rectangle utility with collision, containment, overlap, and anchor helpers. |
 | `Clock` | Fixed-timestep accumulator for deterministic updates. |
 | `Timer` | Countdown timer with optional looping. |
-| `Input`, `OldInputContext` | Legacy input singleton (kept for migration; new code uses the modern Input System below). |
+| `Input` | The input facade. Resolves actions, pointer, touch, wheel and gestures through the Input System below. |
 | `State` | Observable state container with subscribe/unsubscribe. |
 | `Storage` | `localStorage` wrapper with JSON serialization. |
 | `Color`, `Colors` | Color class with parsing, manipulation, and 96 named palettes. |
@@ -221,17 +221,20 @@ Full API reference, guides, and examples: [jygame-documentation.vercel.app](http
 | `SmoothProcessor` | Moving-average filter for analogue input. |
 | `ActionMap` | Collection of named actions, each with a list of bindings and an `ActionState`. `bind(name, binding, kind)` / `getState(name)` / `serialize()` / `static deserialize(data)`. |
 | `InputContext` | Named container for an `ActionMap` with `priority` and `consumePolicy` ("block"/"pass"). |
-| `ContextStack` | Ordered stack of `InputContext`s. Higher-priority contexts shadow lower ones. `evaluate(deviceRegistry)` runs all contexts in priority order. |
+| `ContextStack` | Ordered stack of `InputContext`s. Higher-priority contexts shadow lower ones. `evaluate(deviceRegistry)` runs all contexts in priority order. `push()` primes a new context against live device state, so a key already held when the context opens is not reported as a fresh press. |
+| `GestureDispatcher` | Callback layer over `GestureEngine`. Backs `Input.onTap`/`onSwipe` and `Scene.onTap`/`onSwipe`/`onGesture`; `on(type, cb)` returns an unsubscribe function. |
 | `Space` | Enum: `SCREEN`, `VIEWPORT`, `WORLD`, `UI`. |
 | `CoordinateSystem` | Manages transformations between all four spaces. Supports `project`/`unproject` and `worldToScreen`/`screenToWorld` camera interfaces. |
 
 ### Debug & Diagnostics
 
-The debug system is enabled by default (`debug: true` in the Game constructor). Press **Ctrl+F3** at any time to open the standalone debug workspace in a new window — it displays real-time frame metrics, a system timeline, metric browser, event log, and capture viewer.
+The debug system is opt-in — pass `debug: true` to the Game constructor to enable it. Press **Ctrl+F3** at any time to open the standalone debug workspace in a new window — it displays real-time frame metrics, a system timeline, metric browser, event log, and capture viewer.
 
 Press backtick (`` ` ``) to toggle the in-game overlay, or call `game.debug.show()` programmatically.
 
-To disable all debug overhead for production builds, pass `debug: false` to the Game constructor:
+Snapshot streaming to the workspace is itself opt-in: the game only builds and sends per-frame world snapshots while a workspace window is open and subscribed. With `debug: true` but no workspace attached, the per-frame cost is a single timestamp comparison.
+
+Debug is off by default, but you can also pass it explicitly for production builds:
 
 ```js
 const game = new Game({ parent: "#game", width: 800, height: 600, debug: false });

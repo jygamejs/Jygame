@@ -1,3 +1,13 @@
+// A command's position is stored in three slots per axis:
+//
+//   _curX/_curY   authoritative tick position, written by RenderSystem
+//   _prevX/_prevY previous tick position, written by RenderSystem
+//   x/y           what renderers read, written by applyAlpha()
+//
+// Keeping the output slot separate from the authoritative one is what makes
+// applyAlpha() idempotent: it can be re-run every frame with a fresh alpha
+// without repopulating the queue, so a frame that produces no simulation
+// ticks costs one pass over pooled objects and no ECS work at all.
 export class RenderQueue {
   constructor() {
     this._commands = [];
@@ -5,6 +15,24 @@ export class RenderQueue {
     this._order = [];
     this.imagesDrawn = 0;
     this.primitivesDrawn = 0;
+
+    // When interpolation is disabled there is no reason to carry the extra
+    // endpoints, so push() skips those writes entirely and the queue behaves
+    // exactly as it did before interpolation moved here.
+    this.interpolation = true;
+
+    // Hoisted so sorting does not allocate a comparator per frame. It closes
+    // over the array directly rather than reading this._commands, which would
+    // add a property load to every one of the ~n log n comparisons;
+    // _commands is grown in place and never reassigned, so this stays valid.
+    const cmds = this._commands;
+    this._compare = (a, b) => {
+      const ca = cmds[a];
+      const cb = cmds[b];
+      if (ca.layer !== cb.layer) return ca.layer - cb.layer;
+      if (ca.depth !== cb.depth) return ca.depth - cb.depth;
+      return a - b;
+    };
   }
 
   get count() {
@@ -26,10 +54,10 @@ export class RenderQueue {
     this.primitivesDrawn = 0;
   }
 
-  push(sourceImage, sx, sy, sw, sh, x, y, rotation, scaleX, scaleY, width, height, fillColor, shape, layer, imageSmoothing, depth) {
+  push(sourceImage, sx, sy, sw, sh, x, y, rotation, scaleX, scaleY, width, height, fillColor, shape, layer, imageSmoothing, depth, prevX, prevY, interpolate) {
     let cmd = this._commands[this._count];
     if (!cmd) {
-      cmd = { sourceImage: null, sx: 0, sy: 0, sw: 0, sh: 0, x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, width: 0, height: 0, fillColor: 0, shape: 0, layer: 0, depth: 0, imageSmoothing: true };
+      cmd = { sourceImage: null, sx: 0, sy: 0, sw: 0, sh: 0, x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, width: 0, height: 0, fillColor: 0, shape: 0, layer: 0, depth: 0, imageSmoothing: true, _curX: 0, _curY: 0, _prevX: 0, _prevY: 0, _interp: 0 };
       this._commands[this._count] = cmd;
     }
     cmd.sourceImage = sourceImage;
@@ -37,8 +65,17 @@ export class RenderQueue {
     cmd.sy = sy;
     cmd.sw = sw;
     cmd.sh = sh;
+    // x/y are always written so the queue is readable even if applyAlpha is
+    // never called; applyAlpha overwrites them when interpolation is active.
     cmd.x = x;
     cmd.y = y;
+    if (this.interpolation) {
+      cmd._curX = x;
+      cmd._curY = y;
+      cmd._prevX = prevX !== undefined ? prevX : x;
+      cmd._prevY = prevY !== undefined ? prevY : y;
+      cmd._interp = interpolate ? 1 : 0;
+    }
     cmd.rotation = rotation;
     cmd.scaleX = scaleX;
     cmd.scaleY = scaleY;
@@ -52,6 +89,27 @@ export class RenderQueue {
     this._count++;
   }
 
+  // Blends each command's render position between its previous and current
+  // tick positions. Allocation-free, and safe to call repeatedly on the same
+  // queue contents — it always reads from _prev/_cur and only writes x/y.
+  applyAlpha(alpha) {
+    if (!this.interpolation) return;
+    const cmds = this._commands;
+    const count = this._count;
+    for (let i = 0; i < count; i++) {
+      const cmd = cmds[i];
+      if (cmd._interp === 0) {
+        cmd.x = cmd._curX;
+        cmd.y = cmd._curY;
+        continue;
+      }
+      const px = cmd._prevX;
+      const py = cmd._prevY;
+      cmd.x = px + (cmd._curX - px) * alpha;
+      cmd.y = py + (cmd._curY - py) * alpha;
+    }
+  }
+
   forEachCommandSorted(fn) {
     const count = this._count;
     if (count === 0) return;
@@ -63,21 +121,19 @@ export class RenderQueue {
     const order = this._order;
     order.length = 0;
     for (let i = 0; i < count; i++) order.push(i);
-    order.sort((a, b) => {
-      const ca = cmds[a];
-      const cb = cmds[b];
-      if (ca.layer !== cb.layer) return ca.layer - cb.layer;
-      if (ca.depth !== cb.depth) return ca.depth - cb.depth;
-      return a - b;
-    });
+    order.sort(this._compare);
     for (let n = 0; n < count; n++) {
       fn(cmds[order[n]], order[n]);
     }
   }
 
-  execute(ctx, layerMask = 0xFFFFFFFF) {
+  // `baseMatrix`, when supplied, is the current context transform as six
+  // scalars. Reading it back via ctx.getTransform() allocates a DOMMatrix on
+  // every call — one browser-side allocation per frame, per scene — and the
+  // caller already knows the camera transform it just applied.
+  execute(ctx, layerMask = 0xFFFFFFFF, baseMatrix = null) {
     ctx.save();
-    const mat = ctx.getTransform();
+    const mat = baseMatrix || ctx.getTransform();
     const cache = this._fillStyleCache || (this._fillStyleCache = new Map());
     let lastColor = -1;
     let images = 0, primitives = 0;
@@ -90,13 +146,7 @@ export class RenderQueue {
       order = this._order;
       order.length = 0;
       for (let i = 0; i < count; i++) order.push(i);
-      order.sort((a, b) => {
-        const ca = cmds[a];
-        const cb = cmds[b];
-        if (ca.layer !== cb.layer) return ca.layer - cb.layer;
-        if (ca.depth !== cb.depth) return ca.depth - cb.depth;
-        return a - b;
-      });
+      order.sort(this._compare);
     }
 
     for (let n = 0; n < count; n++) {
