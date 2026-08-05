@@ -148,6 +148,15 @@ export class WebGLRenderer extends Renderer {
     this._batch = new QuadBatch(gl, { maxInstances: options.maxInstances || 4096 });
     this._textures = new TextureCache(gl);
     this._compositeTexture = gl.createTexture();
+    // Without explicit parameters this texture is incomplete (level-0 only,
+    // default min filter requests mipmaps), and sampling an incomplete
+    // texture returns opaque black — which blacked out the whole frame.
+    gl.bindTexture(gl.TEXTURE_2D, this._compositeTexture);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.bindTexture(gl.TEXTURE_2D, null);
 
     this._immediate = new ImmediateCanvas(width, height);
     this._clearColor = [0, 0, 0, 0];
@@ -306,6 +315,16 @@ export class WebGLRenderer extends Renderer {
 
   _flushBatch() {
     if (this._batch.count === 0) return;
+    const gl = this._gl;
+    // `_textures.get()`/`white()` bind the texture they just created, which
+    // may not be the texture the accumulated instances were added under (and
+    // even the `white()` upload rebinds). Re-bind the tracked texture so a
+    // batch is always drawn with the texture its instances belong to —
+    // otherwise a cache-miss upload mid-frame draws the previous sprite with
+    // the next sprite's image.
+    if (this._currentTexture) {
+      gl.bindTexture(gl.TEXTURE_2D, this._currentTexture);
+    }
     const diag = this._diag;
     const ids = this._diagIds;
     const doFlush = () => this._batch.flush();

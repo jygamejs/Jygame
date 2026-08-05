@@ -664,6 +664,14 @@ export class World {
     this._scheduler.remove(system);
   }
 
+  getSystem(SystemClass) {
+    return this._scheduler.getSystem(SystemClass);
+  }
+
+  runSystem(SystemClass, dt = 0) {
+    return this._scheduler.runSystem(SystemClass, dt);
+  }
+
   clearSystems() {
     this._scheduler.clear();
   }

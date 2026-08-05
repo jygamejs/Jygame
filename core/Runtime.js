@@ -44,7 +44,7 @@ import { Rect } from "../geometry/Rect.js";
 import { Timer } from "../time/Timer.js";
 import { State } from "../state/State.js";
 
-// The curated public surface exposed as globals after `jy(options)`.
+// The curated public surface exposed as globals after `jygame(options)`.
 // This is intentionally a subset of the full module API: the classes a
 // game actually builds with. Lower-level pieces (ECS internals, input
 // devices, debug tooling, renderers) remain importable from "jygame".
@@ -213,13 +213,13 @@ export class Runtime {
 
   _requireGame() {
     if (!this.game) {
-      throw new Error("Runtime has been destroyed. Call jy() again to create a new runtime.");
+      throw new Error("Runtime has been destroyed. Call jygame() again to create a new runtime.");
     }
     return this.game;
   }
 }
 
-export function jy(options = {}) {
+export function jygame(options = {}) {
   const opts = { ...options };
   if (opts.globals === undefined) opts.globals = true;
 
@@ -228,13 +228,13 @@ export function jy(options = {}) {
   return defaultRuntime;
 }
 
-jy.createRuntime = function createRuntime(options = {}) {
+jygame.createRuntime = function createRuntime(options = {}) {
   const opts = { ...options };
   if (opts.globals === undefined) opts.globals = false;
   return new Runtime(opts).init();
 };
 
-Object.defineProperty(jy, "game", {
+Object.defineProperty(jygame, "game", {
   get() {
     return defaultRuntime ? defaultRuntime.game : null;
   },
@@ -242,7 +242,7 @@ Object.defineProperty(jy, "game", {
   configurable: true,
 });
 
-Object.defineProperty(jy, "runtime", {
+Object.defineProperty(jygame, "runtime", {
   get() {
     return defaultRuntime;
   },
@@ -265,15 +265,15 @@ const DELEGATED = [
 ];
 
 for (const name of DELEGATED) {
-  jy[name] = function (...args) {
+  jygame[name] = function (...args) {
     const runtime = defaultRuntime;
     if (!runtime) {
       throw new Error(
-        `jy.${name}(): the jygame runtime is not initialized. Call jy(options) first.`,
+        `jygame.${name}(): the jygame runtime is not initialized. Call jygame(options) first.`,
       );
     }
     return runtime[name](...args);
   };
 }
 
-export default jy;
+export default jygame;

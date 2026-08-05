@@ -88,8 +88,10 @@ setupDom();
 
 // ─── Imports (barrel exercises the full module graph) ───────────────────────
 
-const { default: jy } = await import("../../../jygame.js");
+const { default: jygame } = await import("../../../jygame.js");
 const moduleApi = await import("../../../jygame.js");
+import { WebGpuRenderer } from "../../../renderer/WebGpuRenderer.js";
+import { makeMockGL } from "./lib/MockGL.js";
 
 const PUBLIC_NAMES = [
   "Game", "Scene",
@@ -113,51 +115,51 @@ const INTERNAL_NAMES = [
   "Diagnostics", "OverlayHost", "DebugOverlay",
 ];
 
-describe("jy — default export", () => {
+describe("jygame — default export", () => {
   it("is a function", () => {
-    assert.strictEqual(typeof jy, "function");
+    assert.strictEqual(typeof jygame, "function");
   });
 
   it("exposes createRuntime and scene-delegating methods", () => {
-    assert.strictEqual(typeof jy.createRuntime, "function");
+    assert.strictEqual(typeof jygame.createRuntime, "function");
     for (const name of ["run", "pushScene", "popScene", "replaceScene", "switchScene", "destroy"]) {
-      assert.strictEqual(typeof jy[name], "function", `jy.${name}`);
+      assert.strictEqual(typeof jygame[name], "function", `jygame.${name}`);
     }
   });
 });
 
-describe("jy — runtime bootstrap", () => {
+describe("jygame — runtime bootstrap", () => {
   before(() => {
     // Reset any globals leaked by previous tests.
     for (const name of PUBLIC_NAMES) delete globalThis[name];
   });
 
   after(() => {
-    if (jy.runtime) jy.destroy();
+    if (jygame.runtime) jygame.destroy();
   });
 
-  it("does not install globals before jy()", () => {
+  it("does not install globals before jygame()", () => {
     assert.strictEqual(globalThis.Scene, undefined);
     assert.strictEqual(globalThis.Sprite, undefined);
   });
 
-  it("jy(options) creates a Runtime backed by a Game", () => {
-    const runtime = jy({ width: 320, height: 240 });
+  it("jygame(options) creates a Runtime backed by a Game", () => {
+    const runtime = jygame({ width: 320, height: 240 });
     assert.ok(runtime.game);
     assert.strictEqual(runtime.game.width, 320);
     assert.strictEqual(runtime.game.height, 240);
-    jy.destroy();
+    jygame.destroy();
   });
 
-  it("returns the runtime from jy()", () => {
-    const runtime = jy({ width: 100, height: 100 });
-    assert.strictEqual(jy.runtime, runtime);
-    assert.strictEqual(jy.game, runtime.game);
-    jy.destroy();
+  it("returns the runtime from jygame()", () => {
+    const runtime = jygame({ width: 100, height: 100 });
+    assert.strictEqual(jygame.runtime, runtime);
+    assert.strictEqual(jygame.game, runtime.game);
+    jygame.destroy();
   });
 
   it("installs the curated public surface as globals", () => {
-    jy({ width: 100, height: 100 });
+    jygame({ width: 100, height: 100 });
     for (const name of PUBLIC_NAMES) {
       if (name === "Trail") continue; // intentionally the display Trail effect (see below)
       assert.ok(globalThis[name] !== undefined, `global ${name} missing`);
@@ -166,7 +168,7 @@ describe("jy — runtime bootstrap", () => {
   });
 
   it("maps global Trail to the user-facing Trail effect", () => {
-    jy({ width: 100, height: 100 });
+    jygame({ width: 100, height: 100 });
     const Trail = globalThis.Trail;
     assert.strictEqual(typeof Trail, "function");
     assert.strictEqual(typeof Trail.prototype.follow, "function");
@@ -175,73 +177,176 @@ describe("jy — runtime bootstrap", () => {
   });
 
   it("does not install internal engine classes", () => {
-    jy({ width: 100, height: 100 });
+    jygame({ width: 100, height: 100 });
     for (const name of INTERNAL_NAMES) {
       assert.strictEqual(globalThis[name], undefined, `internal ${name} leaked to globals`);
     }
   });
 
-  it("jy.run(scene) mounts the scene on the default runtime", () => {
-    const runtime = jy({ width: 200, height: 200 });
+  it("jygame.run(scene) mounts the scene on the default runtime", () => {
+    const runtime = jygame({ width: 200, height: 200 });
     class MyScene extends globalThis.Scene {}
     const scene = new MyScene();
     runtime.run(scene);
     assert.strictEqual(runtime.scene, scene);
-    jy.destroy();
+    jygame.destroy();
   });
 
-  it("jy.run throws before jy() is called", () => {
-    if (jy.runtime) jy.destroy();
-    assert.throws(() => jy.run(new (globalThis.Scene || class {})()), /not initialized/);
+  it("jygame.run throws before jygame() is called", () => {
+    if (jygame.runtime) jygame.destroy();
+    assert.throws(() => jygame.run(new (globalThis.Scene || class {})()), /not initialized/);
   });
 
   it("destroy() restores pre-existing globals", () => {
     globalThis.Scene = "sentinel";
-    const runtime = jy({ width: 100, height: 100 });
+    const runtime = jygame({ width: 100, height: 100 });
     assert.notStrictEqual(globalThis.Scene, "sentinel");
     runtime.destroy();
     assert.strictEqual(globalThis.Scene, "sentinel");
     delete globalThis.Scene;
   });
 
-  it("calling jy() twice replaces the previous runtime", () => {
-    const a = jy({ width: 100, height: 100 });
+  it("calling jygame() twice replaces the previous runtime", () => {
+    const a = jygame({ width: 100, height: 100 });
     const gameA = a.game;
-    const b = jy({ width: 200, height: 200 });
+    const b = jygame({ width: 200, height: 200 });
     assert.notStrictEqual(a, b);
     assert.strictEqual(gameA._running, false);
-    assert.strictEqual(jy.runtime, b);
-    jy.destroy();
+    assert.strictEqual(jygame.runtime, b);
+    jygame.destroy();
   });
 });
 
-describe("jy.createRuntime — isolated runtimes", () => {
+describe("jygame — forwards Game options", () => {
   before(() => {
-    if (jy.runtime) jy.destroy();
+    if (jygame.runtime) jygame.destroy();
   });
 
   after(() => {
-    if (jy.runtime) jy.destroy();
+    if (jygame.runtime) jygame.destroy();
+  });
+
+  it("forwards width, height, fps, maxTicks", () => {
+    const runtime = jygame({ width: 640, height: 360, fps: 30, maxTicks: 2 });
+    const game = runtime.game;
+    assert.strictEqual(game.width, 640);
+    assert.strictEqual(game.height, 360);
+    assert.strictEqual(game.clock.fps, 30);
+    assert.strictEqual(game.clock.maxTicks, 2);
+    jygame.destroy();
+  });
+
+  it("forwards debug, interpolation, autoPause, imageSmoothing", () => {
+    const runtime = jygame({
+      width: 100,
+      height: 100,
+      debug: false,
+      interpolation: false,
+      autoPause: false,
+      imageSmoothing: false,
+    });
+    const game = runtime.game;
+    assert.strictEqual(game._debug, false);
+    assert.strictEqual(game._interpolation, false);
+    assert.strictEqual(game._visibilityHandler, null);
+    assert.strictEqual(game._imageSmoothing, false);
+    jygame.destroy();
+  });
+
+  it("forwards parent as a CSS selector", () => {
+    const container = makeElement();
+    const appended = [];
+    container.appendChild = (el) => appended.push(el);
+    document.querySelector = (sel) => (sel === "#game" ? container : null);
+    try {
+      const runtime = jygame({ parent: "#game", width: 100, height: 100 });
+      assert.ok(appended.includes(runtime.game.canvas));
+      assert.ok(appended.includes(runtime.game.domLayer));
+      jygame.destroy();
+    } finally {
+      document.querySelector = () => null;
+    }
+  });
+
+  it("forwards scaleToFit", () => {
+    const runtime = jygame({ width: 200, height: 100, scaleToFit: true });
+    assert.ok(runtime.game._viewport);
+    assert.strictEqual(runtime.game._viewport.width, 200);
+    assert.strictEqual(runtime.game._viewport.height, 100);
+    jygame.destroy();
+  });
+
+  it("forwards renderer selection", () => {
+    const runtime = jygame({ width: 100, height: 100, renderer: "canvas" });
+    assert.strictEqual(runtime.game.renderer.constructor.name, "CanvasRenderer");
+    jygame.destroy();
+  });
+
+  it("defaults to the canvas renderer when renderer is omitted", () => {
+    const { CanvasRenderer } = moduleApi;
+    const runtime = jygame({ width: 100, height: 100 });
+    assert.ok(runtime.game.renderer instanceof CanvasRenderer);
+    jygame.destroy();
+  });
+
+  it("auto renderer prefers WebGL when it is available", () => {
+    const { WebGLRenderer } = moduleApi;
+    const origWebgl = WebGLRenderer.isAvailable;
+    const origWebgpu = WebGpuRenderer.isAvailable;
+    const origCreateElement = document.createElement;
+    document.createElement = (tag) => {
+      const el = makeElement();
+      el.getContext = (kind) => (kind === "webgl2" ? makeMockGL().gl : kind === "2d" ? makeContext() : null);
+      return el;
+    };
+    WebGLRenderer.isAvailable = () => true;
+    WebGpuRenderer.isAvailable = () => false;
+    try {
+      const runtime = jygame({ width: 100, height: 100, renderer: "auto" });
+      assert.ok(runtime.game.renderer instanceof WebGLRenderer);
+      jygame.destroy();
+    } finally {
+      document.createElement = origCreateElement;
+      WebGLRenderer.isAvailable = origWebgl;
+      WebGpuRenderer.isAvailable = origWebgpu;
+    }
+  });
+
+  it("treats globals as a runtime-only option", () => {
+    const runtime = jygame({ width: 100, height: 100, globals: false });
+    assert.strictEqual(runtime.globals, false);
+    assert.strictEqual(globalThis.Scene, undefined);
+    jygame.destroy();
+  });
+});
+
+describe("jygame.createRuntime — isolated runtimes", () => {
+  before(() => {
+    if (jygame.runtime) jygame.destroy();
+  });
+
+  after(() => {
+    if (jygame.runtime) jygame.destroy();
   });
 
   it("creates a runtime without installing globals by default", () => {
-    const runtime = jy.createRuntime({ width: 100, height: 100 });
+    const runtime = jygame.createRuntime({ width: 100, height: 100 });
     assert.ok(runtime.game);
     assert.strictEqual(globalThis.Scene, undefined);
-    assert.strictEqual(jy.runtime, null);
+    assert.strictEqual(jygame.runtime, null);
     runtime.destroy();
   });
 
   it("respects globals: true", () => {
-    const runtime = jy.createRuntime({ width: 100, height: 100, globals: true });
+    const runtime = jygame.createRuntime({ width: 100, height: 100, globals: true });
     assert.ok(globalThis.Scene !== undefined);
     runtime.destroy();
     assert.strictEqual(globalThis.Scene, undefined);
   });
 
   it("isolated runtimes run scenes independently", () => {
-    const a = jy.createRuntime({ width: 100, height: 100 });
-    const b = jy.createRuntime({ width: 200, height: 200 });
+    const a = jygame.createRuntime({ width: 100, height: 100 });
+    const b = jygame.createRuntime({ width: 200, height: 200 });
     const AScene = moduleApi.Scene;
     const sceneA = new AScene();
     a.run(sceneA);

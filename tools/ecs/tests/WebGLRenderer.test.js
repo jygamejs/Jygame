@@ -63,6 +63,18 @@ describe("WebGLRenderer", () => {
     assert.ok(calls.disable.includes(gl.DEPTH_TEST));
   });
 
+  it("composite texture is complete (non-mipmapped LINEAR min filter)", () => {
+    const { gl, calls } = makeMockGL();
+    new WebGLRenderer({ context: gl, width: 800, height: 600 });
+    const hasLinearMin = calls.texParameteri.some(
+      (c) => c.pname === gl.TEXTURE_MIN_FILTER && c.value === gl.LINEAR,
+    );
+    assert.ok(
+      hasLinearMin,
+      "an incomplete composite texture samples opaque black, blacking out the frame",
+    );
+  });
+
   it("render(world) batches a sprite command into one instanced draw", () => {
     const { gl, calls } = makeMockGL();
     const renderer = new WebGLRenderer({ context: gl, width: 800, height: 600 });
@@ -74,6 +86,34 @@ describe("WebGLRenderer", () => {
     assert.strictEqual(draws.length, 1);
     assert.strictEqual(draws[0].instanceCount, 1);
     assert.strictEqual(draws[0].count, 4);
+  });
+
+  it("draws each batch with its own texture when textures upload mid-frame", () => {
+    const { gl, calls } = makeMockGL();
+    const renderer = new WebGLRenderer({ context: gl, width: 800, height: 600 });
+    const { world, queue } = makeWorld();
+
+    const imgA = { width: 8, height: 8, naturalWidth: 8, naturalHeight: 8 };
+    const imgB = { width: 8, height: 8, naturalWidth: 8, naturalHeight: 8 };
+    queue.push(imgA, 0, 0, 8, 8, 10, 10, 0, 1, 1, 8, 8, 0xffffff, 0, 1, true, 0);
+    queue.push(imgB, 0, 0, 8, 8, 50, 10, 0, 1, 1, 8, 8, 0xffffff, 0, 1, true, 0);
+
+    // Cache-miss upload binds the new texture; without a re-bind the first
+    // sprite's batch is drawn with the second sprite's texture.
+    const drawnWith = [];
+    const origDraw = gl.drawArraysInstanced;
+    gl.drawArraysInstanced = (mode, first, count, instanceCount) => {
+      drawnWith.push(gl._boundTexture ? gl._boundTexture.id : null);
+      return origDraw(mode, first, count, instanceCount);
+    };
+
+    renderer.render(world);
+
+    const texA = renderer._textures._cache.get(imgA).texture;
+    const texB = renderer._textures._cache.get(imgB).texture;
+    assert.strictEqual(drawnWith.length, 2);
+    assert.strictEqual(drawnWith[0], texA.id, "first sprite must draw with its own texture");
+    assert.strictEqual(drawnWith[1], texB.id, "second sprite must draw with its own texture");
   });
 
   it("primitive instance data carries position, size, color, depth and shape", () => {

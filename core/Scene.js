@@ -12,6 +12,7 @@ import { InputContext } from "../input/actions/InputContext.js";
 import { ActionMap } from "../input/actions/ActionMap.js";
 import { BindingCompiler } from "../input/facade/BindingCompiler.js";
 import { Transform } from "../ecs/components/Transform.js";
+import { RenderSystem } from "../ecs/systems/RenderSystem.js";
 import { AudioListener } from "../audio/AudioListener.js";
 import { ParticleEffect } from "../particles/ParticleEffect.js";
 
@@ -183,6 +184,30 @@ export class Scene extends EcsScene {
     const map = compiler.compile(rawInput);
 
     this._actionMap = map;
+  }
+
+  // Re-point the world's renderer-bound resources at the game's current
+  // renderer. Called by Game when a renderer fallback swaps the renderer
+  // after the scene has already entered.
+  _refreshRendererResources() {
+    if (!this._game || !this._world) return;
+    const renderer = this._game.renderer;
+    if (!renderer) return;
+    const immediate = renderer.immediateContext;
+    if (immediate) {
+      this._world.setResource(CanvasContext, immediate);
+    }
+    this._world.setResource(Renderer, renderer);
+  }
+
+  // Rebuilds the RenderQueue from the world's current transforms. Called by
+  // the Game right after interpolation has blended transform positions, so
+  // the renderers draw the smoothed positions instead of the pre-interpolation
+  // values the RenderSystem captured during world.update().
+  _populateRenderQueue() {
+    const w = this._world;
+    if (!w || typeof w.runSystem !== "function") return;
+    w.runSystem(RenderSystem);
   }
 
   enter() {

@@ -141,6 +141,29 @@ export class SystemScheduler {
     return this._systems.indexOf(system) !== -1;
   }
 
+  getSystem(SystemClass) {
+    if (typeof SystemClass !== 'function') {
+      throw new TypeError(
+        'SystemScheduler.getSystem failed: expected a System class, got ' + typeof SystemClass + '.'
+      );
+    }
+    for (let i = 0; i < this._systems.length; i++) {
+      if (this._systems[i] instanceof SystemClass) return this._systems[i];
+    }
+    return null;
+  }
+
+  // Runs a single registered system once (refreshing its context), without
+  // touching the rest of the update loop. Used by the Game to repopulate the
+  // render queue after interpolation has blended transforms.
+  runSystem(SystemClass, dt = 0) {
+    const system = this.getSystem(SystemClass);
+    if (!system || !system._ctx || !system.enabled) return false;
+    system._ctx._refresh(dt);
+    system.update(system._ctx, dt);
+    return true;
+  }
+
   clear() {
     if (this._insideUpdate) {
       throw new Error(

@@ -22,8 +22,23 @@ import { OverlayHost } from "../debug/overlay/OverlayHost.js";
 import { enableDebugWorkspace, takeDebugSnapshot } from "../debug/EnableDebugWorkspace.js";
 import { RendererResolver } from "../renderer/RendererResolver.js";
 
+const _RENDERER_NAMES = {
+  webgpu: "WebGPU",
+  webgl: "WebGL",
+  canvas: "Canvas",
+};
+
+function _rendererLabel(kind) {
+  if (!kind) return "Renderer";
+  return _RENDERER_NAMES[kind] || kind;
+}
+
+function _errorMessage(err) {
+  return err && err.message ? err.message : String(err);
+}
+
 export class Game {
-  constructor({ parent, width = 800, height = 600, fps = 60, maxTicks = 5, autoPause = true, scaleToFit = null, debug = true, interpolation = true, imageSmoothing = true, renderer = "canvas" }) {
+  constructor({ parent, width = 800, height = 600, fps = 60, maxTicks = 5, autoPause = true, scaleToFit = null, debug = true, interpolation = true, imageSmoothing = true,    renderer = "canvas" }) {
     const container = typeof parent === "string"
       ? document.querySelector(parent)
       : document.body;
@@ -59,16 +74,21 @@ export class Game {
       options: { imageSmoothing },
     });
 
+    // Ordered fallback chain (e.g. WebGPU → WebGL → Canvas). When the
+    // resolved renderer fails to initialize (or construct), Game walks the
+    // chain and logs each fallback instead of silently keeping a broken
+    // renderer.
+    this._rendererChain = RendererResolver.chain(renderer);
+    this._rendererIndex = Math.max(
+      0,
+      this._rendererChain.indexOf(RendererResolver.kindOf(this.renderer)),
+    );
+
     if (this.renderer && typeof this.renderer.initialize === "function") {
-      this.renderer.initialize().catch((err) => {
-        console.warn(
-          "[jygame] renderer initialization failed:",
-          err && err.message ? err.message : err,
-        );
-      });
+      this._initRenderer(this.renderer);
     }
 
-    this.ctx = this.renderer.immediateContext;
+    this.ctx = this.renderer ? this.renderer.immediateContext : null;
     if (this.ctx) {
       this.ctx.imageSmoothingEnabled = imageSmoothing;
     }
@@ -79,6 +99,7 @@ export class Game {
     this._sceneOps = [];
     this._updating = false;
     this._running = false;
+    this._destroyed = false;
     this._paused = false;
     this._lastTime = 0;
     this._rafId = null;
@@ -196,6 +217,141 @@ export class Game {
     target.style.marginTop = marginV + "px";
     target.style.marginBottom = marginV + "px";
     this.renderer.resize(this.width, this.height);
+  }
+
+  _initRenderer(instance) {
+    let init;
+    try {
+      init = instance.initialize();
+    } catch (err) {
+      this._fallbackRenderer(instance, _errorMessage(err));
+      return;
+    }
+    Promise.resolve(init).catch((err) => {
+      this._fallbackRenderer(instance, _errorMessage(err));
+    });
+  }
+
+  _fallbackRenderer(failed, reason) {
+    if (this._destroyed) return;
+    const chain = this._rendererChain;
+    let i = this._rendererIndex + 1;
+    while (i < chain.length) {
+      const kind = chain[i];
+      // A renderer that reached its constructor (e.g. WebGPU calling
+      // `canvas.getContext("webgpu")`) permanently claims the canvas's context
+      // mode, so every fallback attempt needs its own fresh canvas or the next
+      // `getContext(...)` returns null and the renderer silently no-ops.
+      const fresh = this._createCanvas();
+      let next;
+      try {
+        next = RendererResolver.resolveKind(kind, {
+          canvas: fresh,
+          width: this.width,
+          height: this.height,
+          options: { imageSmoothing: this._imageSmoothing },
+        });
+      } catch (err) {
+        this._logRendererFallback(kind, _errorMessage(err), chain[i + 1]);
+        i++;
+        continue;
+      }
+      this._logRendererFallback(RendererResolver.kindOf(failed) || kind, reason, kind);
+      this._installRenderer(next, i, fresh);
+      if (typeof next.initialize === "function") {
+        this._initRenderer(next);
+      }
+      return;
+    }
+    this._destroyRenderer(failed);
+    this.renderer = null;
+    this.ctx = null;
+    this._logRendererFallback(RendererResolver.kindOf(failed), reason, null);
+  }
+
+  _installRenderer(next, index, freshCanvas) {
+    if (this._destroyed) {
+      this._destroyRenderer(next);
+      return;
+    }
+    this._destroyRenderer(this.renderer);
+    if (freshCanvas && freshCanvas !== this.canvas) {
+      this._replaceCanvas(freshCanvas);
+    }
+    this._rendererIndex = index;
+    this.renderer = next;
+    this.ctx = next ? next.immediateContext : null;
+    if (this.ctx) {
+      this.ctx.imageSmoothingEnabled = this._imageSmoothing;
+    }
+    this._refreshSceneRendererResources();
+    console.info(`[jygame] Using ${_rendererLabel(this._rendererChain[index])} renderer.`);
+  }
+
+  _createCanvas() {
+    const canvas = document.createElement("canvas");
+    canvas.width = this.width;
+    canvas.height = this.height;
+    if (this.canvas) {
+      canvas.className = this.canvas.className;
+      canvas.id = this.canvas.id;
+      if (typeof canvas.style.cssText === "string" && typeof this.canvas.style.cssText === "string") {
+        canvas.style.cssText = this.canvas.style.cssText;
+      }
+    }
+    return canvas;
+  }
+
+  _replaceCanvas(fresh) {
+    const old = this.canvas;
+    const parent = old ? old.parentNode || old.parentElement : null;
+    if (parent && old !== fresh) {
+      if (typeof parent.replaceChild === "function") {
+        try {
+          parent.replaceChild(fresh, old);
+        } catch (err) {
+          /* fall through to append fallback below */
+        }
+      }
+      if (fresh.parentNode !== parent) {
+        if (old && old.parentNode === parent && typeof parent.removeChild === "function") {
+          parent.removeChild(old);
+        }
+        if (typeof parent.appendChild === "function") {
+          parent.appendChild(fresh);
+        }
+      }
+    }
+    this.canvas = fresh;
+  }
+
+  _logRendererFallback(kind, reason, toKind) {
+    const from = _rendererLabel(kind);
+    if (toKind) {
+      console.info(
+        `[jygame] ${from} unavailable (${reason}) — falling back to ${_rendererLabel(toKind)}.`,
+      );
+    } else {
+      console.warn(`[jygame] ${from} unavailable (${reason}); no fallback renderer available.`);
+    }
+  }
+
+  _destroyRenderer(renderer) {
+    if (renderer && typeof renderer.destroy === "function") {
+      try {
+        renderer.destroy();
+      } catch (err) {
+        /* ignore renderer teardown errors during fallback */
+      }
+    }
+  }
+
+  _refreshSceneRendererResources() {
+    for (const scene of this._sceneStack) {
+      if (scene && typeof scene._refreshRendererResources === "function") {
+        scene._refreshRendererResources();
+      }
+    }
   }
 
   resize(width, height) {
@@ -497,6 +653,18 @@ export class Game {
     }
   }
 
+  // Rebuild render queues from the freshly interpolated transforms so the
+  // renderers draw smoothed positions. Without this, the RenderQueue would
+  // hold the pre-interpolation values captured during world.update().
+  _repopulateRenderQueues(start) {
+    for (let i = start; i < this._sceneStack.length; i++) {
+      const scene = this._sceneStack[i];
+      if (scene && typeof scene._populateRenderQueue === "function") {
+        scene._populateRenderQueue();
+      }
+    }
+  }
+
   _restoreSceneTransforms(start) {
     for (let i = start; i < this._sceneStack.length; i++) {
       this._sceneStack[i].restoreTransforms?.();
@@ -651,6 +819,7 @@ export class Game {
     const renderStart = this._findBlockingIndex("blocksRenderBelow");
     if (this._interpolation) {
       this._interpolateScenes(alpha, renderStart);
+      this._repopulateRenderQueues(renderStart);
     }
 
     this.renderer.beginFrame();
@@ -680,6 +849,7 @@ export class Game {
 
   destroy() {
     this._running = false;
+    this._destroyed = true;
     if (this._rafId) cancelAnimationFrame(this._rafId);
     if (this._visibilityHandler) {
       document.removeEventListener("visibilitychange", this._visibilityHandler);
