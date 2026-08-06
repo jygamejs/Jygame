@@ -9,91 +9,10 @@ import * as assert from "node:assert";
 //   5. Interpolation used (0, 0) as a "not yet seeded" sentinel.
 //   6. Clock.tick zeroed the accumulator on tick-cap, forcing alpha to 0.
 
-<<<<<<< HEAD
-// ─── Browser environment mock (Game constructor needs a DOM) ───────────────
-
-function makeElement() {
-  return {
-    style: {},
-    className: "",
-    width: 0,
-    height: 0,
-    innerHTML: "",
-    _listeners: {},
-    addEventListener(type, fn) {
-      (this._listeners[type] = this._listeners[type] || []).push(fn);
-    },
-    removeEventListener(type, fn) {
-      const list = this._listeners[type] || [];
-      const i = list.indexOf(fn);
-      if (i !== -1) list.splice(i, 1);
-    },
-    appendChild() {},
-    append() {},
-    remove() {},
-    querySelector() { return null; },
-  };
-}
-
-function makeContext() {
-  return {
-    imageSmoothingEnabled: true,
-    clearRect() {}, save() {}, restore() {}, translate() {}, rotate() {}, scale() {},
-    fillRect() {}, drawImage() {}, beginPath() {}, arc() {}, fill() {}, stroke() {},
-    moveTo() {}, lineTo() {},
-    getTransform() { return { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }; },
-    setTransform() {},
-  };
-}
-
-function setupDom() {
-  const body = makeElement();
-  const canvas = makeElement();
-  canvas.width = 800;
-  canvas.height = 600;
-  const ctx = makeContext();
-  canvas.getContext = (kind) => (kind === "2d" ? ctx : null);
-
-  globalThis.document = {
-    body,
-    documentElement: makeElement(),
-    createElement: (tag) => (tag === "canvas" ? canvas : makeElement()),
-    querySelector: () => null,
-    addEventListener() {},
-    removeEventListener() {},
-    hidden: false,
-  };
-  globalThis.window = {
-    addEventListener() {},
-    removeEventListener() {},
-    innerWidth: 1920,
-    innerHeight: 1080,
-    devicePixelRatio: 1,
-    open() {},
-  };
-  globalThis.getComputedStyle = () => ({
-    position: "relative",
-    getPropertyValue: () => "",
-    removeProperty() {},
-  });
-  globalThis.ResizeObserver = class { observe() {} disconnect() {} };
-  globalThis.requestAnimationFrame = () => 0;
-  globalThis.cancelAnimationFrame = () => {};
-  globalThis.localStorage = {
-    getItem: () => null, setItem() {}, removeItem() {}, clear() {},
-  };
-}
-
-setupDom();
-
-=======
->>>>>>> 07d6ec7 (refactor: add host abstraction, scene stack/context and renderer host; make debug streaming opt-in)
 const {
   Game, Scene, Clock, Diagnostics, DefaultWorldBuilder,
   Transform, Renderable, RenderBounds, Visible, RenderSystem, Sprite,
 } = await import("../../../jygame.js");
-<<<<<<< HEAD
-=======
 
 // The engine runs on a Host, so these drive it with HeadlessHost — no DOM
 // globals, no hand-rolled element mocks.
@@ -104,7 +23,6 @@ const { HeadlessHost } = await import("../../../core/Host.js");
 function newGame(opts = {}) {
   return new Game({ host: new HeadlessHost({ width: 320, height: 240 }), ...opts });
 }
->>>>>>> 07d6ec7 (refactor: add host abstraction, scene stack/context and renderer host; make debug streaming opt-in)
 const { SavePrevPositionSystem } =
   await import("../../../ecs/systems/SavePrevPositionSystem.js");
 const { RenderQueue } = await import("../../../ecs/render/RenderQueue.js");
@@ -257,11 +175,7 @@ describe("Scene: async init failures are surfaced (bug 4)", () => {
       onError(err) { hookErr = err; }
     }
 
-<<<<<<< HEAD
-    game = new Game({ width: 320, height: 240 });
-=======
     game = newGame();
->>>>>>> 07d6ec7 (refactor: add host abstraction, scene stack/context and renderer host; make debug streaming opt-in)
     const scene = new BadScene();
     game.run(scene);
 
@@ -282,11 +196,7 @@ describe("Scene: async init failures are surfaced (bug 4)", () => {
       async onEnter() {}
     }
 
-<<<<<<< HEAD
-    game = new Game({ width: 320, height: 240 });
-=======
     game = newGame();
->>>>>>> 07d6ec7 (refactor: add host abstraction, scene stack/context and renderer host; make debug streaming opt-in)
     const scene = new GoodScene();
     game.run(scene);
 
@@ -310,11 +220,7 @@ describe("Debug is opt-in and streaming is gated", () => {
 
   it("defaults to debug off", async () => {
     class S extends Scene { async onEnter() {} }
-<<<<<<< HEAD
-    game = new Game({ width: 320, height: 240 });
-=======
     game = newGame();
->>>>>>> 07d6ec7 (refactor: add host abstraction, scene stack/context and renderer host; make debug streaming opt-in)
     const scene = new S();
     game.run(scene);
     await scene.whenReady();
@@ -327,29 +233,17 @@ describe("Debug is opt-in and streaming is gated", () => {
 
   it("with debug on but no workspace attached, frames do no snapshot work", async () => {
     class S extends Scene { async onEnter() { new Sprite(0, 0, 8, 8); } }
-<<<<<<< HEAD
-    game = new Game({ width: 320, height: 240, debug: true });
-=======
     game = newGame({ debug: true });
->>>>>>> 07d6ec7 (refactor: add host abstraction, scene stack/context and renderer host; make debug streaming opt-in)
     const scene = new S();
     game.run(scene);
     await scene.whenReady();
 
-<<<<<<< HEAD
-    assert.ok(game._snapshotBuilder, "debug: true still installs the builder");
-
-    let built = 0;
-    const realBuild = game._snapshotBuilder.build.bind(game._snapshotBuilder);
-    game._snapshotBuilder.build = (...a) => { built++; return realBuild(...a); };
-=======
     assert.ok(game.debugSession, "debug: true still installs a debug session");
 
     let built = 0;
     const builder = game.debugSession.builder;
     const realBuild = builder.build.bind(builder);
     builder.build = (...a) => { built++; return realBuild(...a); };
->>>>>>> 07d6ec7 (refactor: add host abstraction, scene stack/context and renderer host; make debug streaming opt-in)
 
     for (let i = 0; i < 10; i++) game._frame(null, 1, 1 / 60);
 
@@ -360,28 +254,17 @@ describe("Debug is opt-in and streaming is gated", () => {
 
   it("streams once a workspace subscribes", async () => {
     class S extends Scene { async onEnter() { new Sprite(0, 0, 8, 8); } }
-<<<<<<< HEAD
-    game = new Game({ width: 320, height: 240, debug: true });
-=======
     game = newGame({ debug: true });
->>>>>>> 07d6ec7 (refactor: add host abstraction, scene stack/context and renderer host; make debug streaming opt-in)
     const scene = new S();
     game.run(scene);
     await scene.whenReady();
 
     let built = 0;
-<<<<<<< HEAD
-    const realBuild = game._snapshotBuilder.build.bind(game._snapshotBuilder);
-    game._snapshotBuilder.build = (...a) => { built++; return realBuild(...a); };
-
-    game._debugBackend._handler({ type: "command", payload: "debug:subscribe" });
-=======
     const builder = game.debugSession.builder;
     const realBuild = builder.build.bind(builder);
     builder.build = (...a) => { built++; return realBuild(...a); };
 
     game.debugSession.backend._handler({ type: "command", payload: "debug:subscribe" });
->>>>>>> 07d6ec7 (refactor: add host abstraction, scene stack/context and renderer host; make debug streaming opt-in)
     for (let i = 0; i < 3; i++) game._frame(null, 1, 1 / 60);
 
     assert.strictEqual(built, 3, "a subscribed workspace should receive every frame");
@@ -402,11 +285,7 @@ describe("Game: scene stack and renderer guards (bugs 1-3)", () => {
     class A extends Scene { async onEnter() {} }
     class B extends Scene { async onEnter() {} }
 
-<<<<<<< HEAD
-    game = new Game({ width: 320, height: 240, debug: true });
-=======
     game = newGame({ debug: true });
->>>>>>> 07d6ec7 (refactor: add host abstraction, scene stack/context and renderer host; make debug streaming opt-in)
 
     const first = new A();
     game.run(first);
@@ -431,22 +310,13 @@ describe("Game: scene stack and renderer guards (bugs 1-3)", () => {
   it("survives a frame with no renderer (bug 2)", async () => {
     class S extends Scene { async onEnter() {} }
 
-<<<<<<< HEAD
-    game = new Game({ width: 320, height: 240 });
-=======
     game = newGame();
->>>>>>> 07d6ec7 (refactor: add host abstraction, scene stack/context and renderer host; make debug streaming opt-in)
     const scene = new S();
     game.run(scene);
     await scene.whenReady();
 
-<<<<<<< HEAD
-    // What _fallbackRenderer does when the whole chain is exhausted.
-    game.renderer = null;
-=======
     // What RendererHost does when the whole fallback chain is exhausted.
     game.rendererHost.renderer = null;
->>>>>>> 07d6ec7 (refactor: add host abstraction, scene stack/context and renderer host; make debug streaming opt-in)
 
     assert.doesNotThrow(
       () => game._frame(null, 1, 1 / 60),
@@ -466,11 +336,7 @@ describe("Game: scene stack and renderer guards (bugs 1-3)", () => {
   it("does not empty the scene stack on two deferred pops (bug 3)", async () => {
     class S extends Scene { async onEnter() {} }
 
-<<<<<<< HEAD
-    game = new Game({ width: 320, height: 240 });
-=======
     game = newGame();
->>>>>>> 07d6ec7 (refactor: add host abstraction, scene stack/context and renderer host; make debug streaming opt-in)
 
     const a = new S();
     game.run(a);
@@ -483,17 +349,6 @@ describe("Game: scene stack and renderer guards (bugs 1-3)", () => {
 
     // Both pops are issued mid-update, so both pass the call-time depth check
     // and get queued; the second is only invalid once the first has run.
-<<<<<<< HEAD
-    game._updating = true;
-    game.popScene();
-    game.popScene();
-    game._updating = false;
-
-    assert.doesNotThrow(() => game._flushSceneOps(), "flush must not escape into the frame loop");
-    assert.strictEqual(game.sceneCount, 1, "the last scene must survive");
-    assert.ok(game.scene, "a top scene must still be present");
-    assert.strictEqual(game._sceneOps.length, 0, "the queue must be fully drained");
-=======
     game.scenes.updating = true;
     game.popScene();
     game.popScene();
@@ -503,7 +358,6 @@ describe("Game: scene stack and renderer guards (bugs 1-3)", () => {
     assert.strictEqual(game.sceneCount, 1, "the last scene must survive");
     assert.ok(game.scene, "a top scene must still be present");
     assert.strictEqual(game.scenes.pendingOpCount, 0, "the queue must be fully drained");
->>>>>>> 07d6ec7 (refactor: add host abstraction, scene stack/context and renderer host; make debug streaming opt-in)
     assert.ok(
       captured.error.some((a) => String(a[0]).includes('Deferred scene op "pop" failed')),
       "the rejected op should be reported",

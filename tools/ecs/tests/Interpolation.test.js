@@ -9,93 +9,6 @@ const { HeadlessHost } = await import("../../../core/Host.js");
 // Transforms the renderer emitted, in draw order.
 const drawn = [];
 
-<<<<<<< HEAD
-function makeElement() {
-  return {
-    style: {},
-    className: "",
-    width: 0,
-    height: 0,
-    innerHTML: "",
-    _listeners: {},
-    addEventListener(type, fn) {
-      (this._listeners[type] = this._listeners[type] || []).push(fn);
-    },
-    removeEventListener(type, fn) {
-      const list = this._listeners[type] || [];
-      const i = list.indexOf(fn);
-      if (i !== -1) list.splice(i, 1);
-    },
-    appendChild() {},
-    append() {},
-    remove() {},
-    querySelector() { return null; },
-  };
-}
-
-function makeContext() {
-  return {
-    imageSmoothingEnabled: true,
-    set imageSmoothingEnabled(v) { this._imageSmoothingEnabled = v; },
-    clearRect() {}, save() {}, restore() {}, translate() {}, rotate() {}, scale() {},
-    fillRect() {}, drawImage() {}, beginPath() {}, arc() {}, fill() {}, stroke() {},
-    moveTo() {}, lineTo() {},
-    getTransform() { return { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }; },
-    setTransform(a, b, c, d, e, f) { drawn.push({ a, b, c, d, e, f }); },
-  };
-}
-
-function setupDom() {
-  const body = makeElement();
-  const canvas = makeElement();
-  canvas.width = 800;
-  canvas.height = 600;
-  canvas.style.display = "block";
-  const ctx = makeContext();
-  canvas.getContext = (kind) => (kind === "2d" ? ctx : null);
-
-  globalThis.document = {
-    body,
-    documentElement: makeElement(),
-    createElement: (tag) => (tag === "canvas" ? canvas : makeElement()),
-    querySelector: () => null,
-    addEventListener() {},
-    removeEventListener() {},
-    hidden: false,
-  };
-  globalThis.window = {
-    addEventListener() {},
-    removeEventListener() {},
-    innerWidth: 1920,
-    innerHeight: 1080,
-    devicePixelRatio: 1,
-    open() {},
-  };
-  globalThis.getComputedStyle = () => ({
-    position: "relative",
-    getPropertyValue: () => "",
-    removeProperty() {},
-  });
-  globalThis.ResizeObserver = class {
-    observe() {}
-    disconnect() {}
-  };
-  globalThis.requestAnimationFrame = () => 0;
-  globalThis.cancelAnimationFrame = () => {};
-  globalThis.localStorage = {
-    getItem: () => null,
-    setItem() {},
-    removeItem() {},
-    clear() {},
-  };
-}
-
-setupDom();
-
-const { Game, Scene, Sprite } = await import("../../../jygame.js");
-
-=======
->>>>>>> 07d6ec7 (refactor: add host abstraction, scene stack/context and renderer host; make debug streaming opt-in)
 function collectRenderedPositions(interpolation, frames = 20) {
   drawn.length = 0;
 
@@ -109,15 +22,11 @@ function collectRenderedPositions(interpolation, frames = 20) {
     }
   }
 
-<<<<<<< HEAD
-  const game = new Game({ fps: 15, width: 800, height: 600, interpolation });
-=======
   const host = new HeadlessHost({ width: 800, height: 600 });
   const game = new Game({ fps: 15, width: 800, height: 600, interpolation, host });
   // Record the transforms the renderer emits; HeadlessHost's 2D context is a
   // no-op, so instrument the one the game actually draws through.
   game.ctx.setTransform = (a, b, c, d, e, f) => drawn.push({ a, b, c, d, e, f });
->>>>>>> 07d6ec7 (refactor: add host abstraction, scene stack/context and renderer host; make debug streaming opt-in)
   const scene = new MyScene();
   game.run(scene);
 

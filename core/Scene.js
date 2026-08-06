@@ -168,15 +168,9 @@ export class Scene extends EcsScene {
       // Tells the queue whether to carry per-command interpolation endpoints.
       // With interpolation off those writes are pure overhead.
       const queue = this._world.getResource(RenderQueue);
-<<<<<<< HEAD
-      if (queue) queue.interpolation = this._game._interpolation !== false;
-
-      if (this._game.inputSystem && this._game.inputSystem.contextStack) {
-=======
       if (queue) queue.interpolation = this._context.interpolation !== false;
 
       if (this._context.inputSystem && this._context.inputSystem.contextStack) {
->>>>>>> 07d6ec7 (refactor: add host abstraction, scene stack/context and renderer host; make debug streaming opt-in)
         this._compileInputBindings();
         if (!this._actionMap) {
           this._actionMap = new ActionMap();

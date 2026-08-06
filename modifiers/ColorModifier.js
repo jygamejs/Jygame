@@ -79,6 +79,15 @@ export class ColorModifier {
     return d;
   }
 
+  clone() {
+    return new ColorModifier({
+      from: this._fromArg,
+      to: this._toArg,
+      stops: this._stopsArg,
+      priority: this.priority
+    });
+  }
+
   toJSON() {
     const obj = { type: "ColorModifier" };
     if (this._stopsArg) {

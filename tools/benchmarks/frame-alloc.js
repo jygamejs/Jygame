@@ -16,69 +16,10 @@
 
 import { divider } from "./runner.js";
 
-<<<<<<< HEAD
-// ─── Minimal DOM so the Game constructor can run under Node ───────────────
-
-function makeElement() {
-  return {
-    style: {}, className: "", width: 0, height: 0, innerHTML: "",
-    _listeners: {},
-    addEventListener(t, f) { (this._listeners[t] = this._listeners[t] || []).push(f); },
-    removeEventListener() {},
-    appendChild() {}, append() {}, remove() {}, querySelector() { return null; },
-  };
-}
-
-function makeContext() {
-  return {
-    imageSmoothingEnabled: true,
-    clearRect() {}, save() {}, restore() {}, translate() {}, rotate() {}, scale() {},
-    fillRect() {}, drawImage() {}, beginPath() {}, arc() {}, fill() {}, stroke() {},
-    moveTo() {}, lineTo() {},
-    // Deliberately returns a fresh object each call, like the real
-    // CanvasRenderingContext2D returning a new DOMMatrix.
-    getTransform() { return { a: 1, b: 0, c: 0, d: 1, e: 0, f: 0 }; },
-    setTransform() {},
-  };
-}
-
-function setupDom() {
-  const canvas = makeElement();
-  canvas.width = 1280;
-  canvas.height = 720;
-  const ctx = makeContext();
-  canvas.getContext = (k) => (k === "2d" ? ctx : null);
-
-  globalThis.document = {
-    body: makeElement(),
-    documentElement: makeElement(),
-    createElement: (tag) => (tag === "canvas" ? canvas : makeElement()),
-    querySelector: () => null,
-    addEventListener() {}, removeEventListener() {},
-    hidden: false,
-  };
-  globalThis.window = {
-    addEventListener() {}, removeEventListener() {},
-    innerWidth: 1280, innerHeight: 720, devicePixelRatio: 1, open() {},
-  };
-  globalThis.getComputedStyle = () => ({
-    position: "relative", getPropertyValue: () => "", removeProperty() {},
-  });
-  globalThis.ResizeObserver = class { observe() {} disconnect() {} };
-  globalThis.requestAnimationFrame = () => 0;
-  globalThis.cancelAnimationFrame = () => {};
-  globalThis.localStorage = { getItem: () => null, setItem() {}, removeItem() {}, clear() {} };
-}
-
-setupDom();
-
-const { Game, Scene, Sprite } = await import("../../jygame.js");
-=======
 
 
 const { Game, Scene, Sprite } = await import("../../jygame.js");
 const { HeadlessHost } = await import("../../core/Host.js");
->>>>>>> 07d6ec7 (refactor: add host abstraction, scene stack/context and renderer host; make debug streaming opt-in)
 
 function gc() {
   if (typeof global !== "undefined" && global.gc) global.gc();
@@ -107,10 +48,7 @@ async function buildGame(entityCount, { debug, interpolation }) {
   const game = new Game({
     width: 1280, height: 720, fps: 60,
     debug, interpolation,
-<<<<<<< HEAD
-=======
     host: new HeadlessHost({ width: 1280, height: 720 }),
->>>>>>> 07d6ec7 (refactor: add host abstraction, scene stack/context and renderer host; make debug streaming opt-in)
   });
   const scene = new BenchScene();
   game.run(scene);
