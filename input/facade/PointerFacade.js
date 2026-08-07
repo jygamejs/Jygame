@@ -23,12 +23,18 @@ export class PointerFacade {
 
   get x() {
     const ptr = this._getPrimary();
-    return ptr ? ptr.position.x : 0;
+    if (!ptr) return 0;
+    const cs = this._cs;
+    if (cs) return cs.toViewport(ptr.position).x;
+    return ptr.position.x;
   }
 
   get y() {
     const ptr = this._getPrimary();
-    return ptr ? ptr.position.y : 0;
+    if (!ptr) return 0;
+    const cs = this._cs;
+    if (cs) return cs.toViewport(ptr.position).y;
+    return ptr.position.y;
   }
 
   get worldX() {
@@ -36,7 +42,7 @@ export class PointerFacade {
     if (!ptr) return 0;
     const cs = this._cs;
     if (cs) {
-      const world = cs.toWorld(ptr.position);
+      const world = cs.toWorld(cs.toViewport(ptr.position));
       return world.x;
     }
     return ptr.position.x;
@@ -47,7 +53,7 @@ export class PointerFacade {
     if (!ptr) return 0;
     const cs = this._cs;
     if (cs) {
-      const world = cs.toWorld(ptr.position);
+      const world = cs.toWorld(cs.toViewport(ptr.position));
       return world.y;
     }
     return ptr.position.y;

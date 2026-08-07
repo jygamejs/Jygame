@@ -14,8 +14,8 @@ export class Scene {
   get world() {
     if (!this._world) {
       this._world = this._createWorld();
-      this.onCreate();
     }
+    this._ensureCreated();
     return this._world;
   }
 
@@ -25,6 +25,16 @@ export class Scene {
 
   _createWorld() {
     return new World();
+  }
+
+  // The single authority for the "created" state. Every entry point that
+  // makes a scene usable (lazy world creation, SceneManager add/replace,
+  // engine mount) funnels through here so `onCreate()` runs exactly once
+  // regardless of how or how many times the world is touched.
+  _ensureCreated() {
+    if (this._created) return;
+    this._created = true;
+    this.onCreate();
   }
 
   onCreate() {}

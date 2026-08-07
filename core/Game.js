@@ -47,7 +47,10 @@ export class Game {
       width,
       height,
       imageSmoothing,
-      onRendererChanged: () => { if (this.scenes) this.scenes.refreshRendererResources(); },
+      onRendererChanged: () => {
+        if (this.scenes) this.scenes.refreshRendererResources();
+        this._syncInputCanvasRect();
+      },
     });
 
     this.domLayer = this.host.createElement("div");
@@ -141,6 +144,13 @@ export class Game {
       this.host.onDocument("visibilitychange", this._visibilityHandler);
     }
 
+    // The pointer pipeline reports client/viewport coordinates, so the
+    // coordinate system needs the canvas's real position on the page. Re-read
+    // it whenever layout could move the canvas (mount, resize).
+    this._syncInputRectHandler = () => this._syncInputCanvasRect();
+    this.host.onWindow("resize", this._syncInputRectHandler);
+    this._syncInputCanvasRect();
+
     // Everything a Scene is allowed to see. Built last so it can close over
     // the fully wired renderer host, input system and stack.
     this.sceneContext = new SceneContext({
@@ -173,6 +183,21 @@ export class Game {
     if (this.inputSystem && this.inputSystem.coordinateSystem) {
       this.inputSystem.coordinateSystem.canvasRect = { x: 0, y: 0, width, height };
     }
+    this._syncInputCanvasRect();
+  }
+
+  // Keeps the input coordinate system's canvas position in step with the
+  // canvas's actual location on the page, so Input.pointer can convert client
+  // coords to canvas space. Only x/y are corrected — width/height stay the
+  // logical size the game was created/resized to. No-op in headless hosts
+  // whose canvas reports a zero rect.
+  _syncInputCanvasRect() {
+    const canvas = this.canvas;
+    const cs = this.inputSystem && this.inputSystem.coordinateSystem;
+    if (!canvas || !cs || typeof canvas.getBoundingClientRect !== "function") return;
+    const r = canvas.getBoundingClientRect();
+    const prev = cs.canvasRect;
+    cs.canvasRect = { x: r.left, y: r.top, width: prev.width, height: prev.height };
   }
 
   enableDebugWorkspace(backend) {
@@ -538,6 +563,10 @@ export class Game {
     if (this._focusHandler) {
       this.host.offWindow("focus", this._focusHandler);
       this._focusHandler = null;
+    }
+    if (this._syncInputRectHandler) {
+      this.host.offWindow("resize", this._syncInputRectHandler);
+      this._syncInputRectHandler = null;
     }
     this.scenes.reset();
     if (this.inputSystem) {

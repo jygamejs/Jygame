@@ -208,6 +208,33 @@ describe("Scene: async init failures are surfaced (bug 4)", () => {
   });
 });
 
+describe("Scene: onCreate fires exactly once across every entry path", () => {
+  let restore;
+  let game;
+
+  beforeEach(() => { restore = silenceConsole(); });
+  afterEach(() => {
+    if (game) { try { game.destroy(); } catch {} game = null; }
+    restore();
+  });
+
+  it("the engine enter() path runs onCreate exactly once", async () => {
+    let createCalls = 0;
+    class S extends Scene {
+      onCreate() { createCalls += 1; }
+    }
+
+    game = newGame();
+    const scene = new S();
+    game.run(scene);
+    await scene.whenReady();
+
+    scene.world;
+    scene.world;
+    assert.strictEqual(createCalls, 1);
+  });
+});
+
 describe("Debug is opt-in and streaming is gated", () => {
   let restore;
   let game;

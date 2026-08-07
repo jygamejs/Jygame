@@ -146,10 +146,7 @@ export class Scene extends EcsScene {
   }
 
   async _initScene() {
-    if (!this._created) {
-      this.onCreate();
-      this._created = true;
-    }
+    this._ensureCreated();
 
     if (this._context) {
       const immediate = this._context.renderer

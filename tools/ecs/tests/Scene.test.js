@@ -96,6 +96,32 @@ describe("SceneManager — lifecycle hooks", () => {
     assert.deepStrictEqual(calls, ["create", "enter"]);
   });
 
+  it("onCreate fires exactly once even when the world is touched repeatedly", () => {
+    let createCalls = 0;
+    class TestScene extends Scene {
+      onCreate() { createCalls += 1; }
+    }
+    const s = new TestScene("T");
+    s.world;
+    s.world;
+    s.world;
+    assert.strictEqual(createCalls, 1);
+  });
+
+  it("onCreate fires exactly once across SceneManager add and world access", () => {
+    let createCalls = 0;
+    class TestScene extends Scene {
+      onCreate() { createCalls += 1; }
+    }
+    const s = new TestScene("T");
+    const mgr = new SceneManager();
+    mgr.add(s);
+    mgr.start("T");
+    s.world;
+    s.world;
+    assert.strictEqual(createCalls, 1);
+  });
+
   it("change calls exit on old and enter on new", () => {
     const calls = [];
     class A extends Scene {

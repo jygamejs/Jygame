@@ -3,6 +3,19 @@
  */
 const _registry = Symbol("registry");
 
+// Runs a scene's creation hook exactly once. Real Scene instances own the
+// "created" state via `_ensureCreated()`. Duck-typed scenes (plain objects
+// that only implement the public hooks) fall back to the historical
+// `onCreate()` + `_created` behavior so they keep working unmodified.
+function ensureCreated(scene) {
+  if (typeof scene._ensureCreated === "function") {
+    scene._ensureCreated();
+  } else if (!scene._created) {
+    scene._created = true;
+    scene.onCreate();
+  }
+}
+
 function addScene(mgr, scene) {
   const map = mgr[_registry];
   if (map.has(scene.name)) {
@@ -11,8 +24,7 @@ function addScene(mgr, scene) {
     );
   }
   map.set(scene.name, scene);
-  scene.onCreate();
-  scene._created = true;
+  ensureCreated(scene);
 }
 
 function removeScene(mgr, name) {
@@ -142,10 +154,7 @@ export class SceneManager {
 
     if (this._stack.length === 0) {
       this._stack.push(scene);
-      if (!scene._created) {
-        scene.onCreate();
-        scene._created = true;
-      }
+      ensureCreated(scene);
       scene.onEnter();
       this._emitEvent("Transition", name);
       this._recordTransition();
@@ -161,10 +170,7 @@ export class SceneManager {
       current._created = false;
     }
 
-    if (!scene._created) {
-      scene.onCreate();
-      scene._created = true;
-    }
+    ensureCreated(scene);
     this._stack.push(scene);
     scene.onEnter();
     this._emitEvent("Transition", name);
