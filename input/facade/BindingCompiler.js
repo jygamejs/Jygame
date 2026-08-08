@@ -6,7 +6,7 @@ import { GestureBinding } from "../actions/GestureBinding.js";
 import { ChordBinding } from "../actions/ChordBinding.js";
 import { CompositeBinding } from "../actions/CompositeBinding.js";
 import { GestureType } from "../GestureType.js";
-import { resolveKeyCode, resolveMouseButton, resolveGesture } from "./KeyStrings.js";
+import { resolveKeyboardIdentifier, resolveMouseButton, resolveGesture } from "./KeyStrings.js";
 
 export class BindingCompiler {
   compile(bindings) {
@@ -76,7 +76,9 @@ export class BindingCompiler {
 
   _expandMovementPattern(str) {
     const u = str.toUpperCase().replace(/[^A-Z]/g, "");
-    if (u === "WASD") return { up: "W", down: "S", left: "A", right: "D" };
+    // WASD expands to physical codes so the shorthand keeps its
+    // layout-independent meaning, exactly as before.
+    if (u === "WASD") return { up: "KeyW", down: "KeyS", left: "KeyA", right: "KeyD" };
     if (u === "ARROWKEYS" || u === "ARROWS") return { up: "UP", down: "DOWN", left: "LEFT", right: "RIGHT" };
     return null;
   }
@@ -113,9 +115,11 @@ export class BindingCompiler {
       const items = Array.isArray(val) ? val : [val];
       for (const item of items) {
         if (typeof item === "string") {
-          const kc = resolveKeyCode(item.toUpperCase());
-          if (kc !== null) {
-            subs.push({ binding: new KeyBinding(kc), vector: vec });
+          const resolved = resolveKeyboardIdentifier(item);
+          if (resolved && resolved.kind === "physical") {
+            subs.push({ binding: new KeyBinding(resolved.keyCode), vector: vec });
+          } else if (resolved && resolved.kind === "logical") {
+            subs.push({ binding: new KeyBinding(null, resolved.key), vector: vec });
           }
         }
       }
@@ -125,15 +129,19 @@ export class BindingCompiler {
   }
 
   _compileChord(map, name, binding) {
-    const keyCode = resolveKeyCode(binding.key);
-    if (keyCode === null) return;
-    const chord = new ChordBinding(keyCode, {
+    const resolved = resolveKeyboardIdentifier(binding.key);
+    if (!resolved) return;
+    const options = {
       ctrl: !!binding.ctrl,
       shift: !!binding.shift,
       alt: !!binding.alt,
       meta: !!binding.meta,
-    });
-    map.bind(name, chord, ActionKind.DIGITAL);
+    };
+    if (resolved.kind === "physical") {
+      map.bind(name, new ChordBinding(resolved.keyCode, options), ActionKind.DIGITAL);
+    } else {
+      map.bind(name, new ChordBinding(null, options, resolved.key), ActionKind.DIGITAL);
+    }
   }
 
   _compileString(map, name, str, add = false) {
@@ -145,9 +153,9 @@ export class BindingCompiler {
       return;
     }
 
-    const kc = resolveKeyCode(upper);
-    if (kc !== null) {
-      const kb = new KeyBinding(kc);
+    const resolved = resolveKeyboardIdentifier(str);
+    if (resolved && resolved.kind === "physical") {
+      const kb = new KeyBinding(resolved.keyCode);
       if (add) { map.addBinding(name, kb); }
       else { map.bind(name, kb, ActionKind.DIGITAL); }
       return;
@@ -159,6 +167,12 @@ export class BindingCompiler {
       if (add) { map.addBinding(name, mbBinding); }
       else { map.bind(name, mbBinding, ActionKind.DIGITAL); }
       return;
+    }
+
+    if (resolved && resolved.kind === "logical") {
+      const kb = new KeyBinding(null, resolved.key);
+      if (add) { map.addBinding(name, kb); }
+      else { map.bind(name, kb, ActionKind.DIGITAL); }
     }
   }
 

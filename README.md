@@ -281,6 +281,11 @@ You never tell Jygame which keyboard layout the player uses. The browser
 already exposes both concepts — `event.code` (position) and `event.key`
 (value) — and Jygame passes both through directly.
 
+Action bindings follow the exact same convention: a Scene's `input` map or
+`Input.bind("jump", "KeyW")` accepts physical and logical identifiers exactly
+like the query methods, and the `"wasd"` / `"arrowkeys"` movement shorthands
+keep their physical, layout-independent meaning.
+
 ### Debug & Diagnostics
 
 The debug system is opt-in — pass `debug: true` to the Game constructor to enable it. Press **Ctrl+F3** at any time to open the standalone debug workspace in a new window — it displays real-time frame metrics, a system timeline, metric browser, event log, and capture viewer.

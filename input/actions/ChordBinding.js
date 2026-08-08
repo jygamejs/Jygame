@@ -3,9 +3,10 @@ import { Keyboard } from "../Keyboard.js";
 import { Modifier } from "../Modifier.js";
 
 export class ChordBinding extends Binding {
-  constructor(keyCode, options = {}) {
+  constructor(keyCode, options = {}, key = null) {
     super();
     this._keyCode = keyCode;
+    this._key = key;
     this._ctrl = !!options.ctrl;
     this._shift = !!options.shift;
     this._alt = !!options.alt;
@@ -14,6 +15,8 @@ export class ChordBinding extends Binding {
 
   get type() { return "chord"; }
   get keyCode() { return this._keyCode; }
+  get key() { return this._key; }
+  get isLogical() { return this._key !== null; }
 
   evaluate(deviceRegistry) {
     const kb = deviceRegistry.get(Keyboard);
@@ -24,11 +27,14 @@ export class ChordBinding extends Binding {
     if (this._alt && !(kb.modifiers & Modifier.ALT)) return 0;
     if (this._meta && !(kb.modifiers & Modifier.META)) return 0;
 
+    if (this._key !== null) {
+      return kb.isLogicalDown(this._key) ? 1 : 0;
+    }
     return kb.isDown(this._keyCode) ? 1 : 0;
   }
 
   serialize() {
-    return {
+    const data = {
       ...super.serialize(),
       keyCode: this._keyCode,
       ctrl: this._ctrl,
@@ -36,6 +42,8 @@ export class ChordBinding extends Binding {
       alt: this._alt,
       meta: this._meta,
     };
+    if (this._key !== null) data.key = this._key;
+    return data;
   }
 
   static deserialize(data) {
@@ -44,7 +52,7 @@ export class ChordBinding extends Binding {
       shift: data.shift,
       alt: data.alt,
       meta: data.meta,
-    });
+    }, data.key ?? null);
   }
 }
 

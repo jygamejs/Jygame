@@ -254,13 +254,16 @@ export class StringResolver {
     if (!this._system || !this._system.contextStack) return;
 
     if (typeof binding === "string") {
-      const kc = resolveKeyCode(binding.toUpperCase());
-      if (kc === null) return;
+      const resolved = resolveKeyboardIdentifier(binding);
+      if (!resolved) return;
 
       for (const ctx of this._system.contextStack._contexts) {
         const bindings = ctx.actionMap.getBindings(name);
         for (const b of bindings) {
-          if (b.keyCode === kc) {
+          const matches = resolved.kind === "physical"
+            ? b.keyCode === resolved.keyCode
+            : b.key === resolved.key;
+          if (matches) {
             ctx.actionMap.removeBinding(name, b);
             return;
           }
@@ -285,9 +288,9 @@ export class StringResolver {
     for (const ctx of this._system.contextStack._contexts) {
       for (const entry of ctx.actionMap.entries()) {
         result[entry.name] = entry.bindings.map(b => {
-          if (b.type === "key") return { type: "key", keyCode: b.keyCode };
+          if (b.type === "key") return { type: "key", keyCode: b.keyCode, ...(b.key != null ? { key: b.key } : {}) };
           if (b.type === "composite") return { type: "composite", kind: b.kind, subBindings: b.subBindings };
-          if (b.type === "chord") return { type: "chord", keyCode: b.keyCode };
+          if (b.type === "chord") return { type: "chord", keyCode: b.keyCode, ...(b.key != null ? { key: b.key } : {}) };
           return { type: b.type };
         });
       }
