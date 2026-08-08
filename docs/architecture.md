@@ -455,7 +455,8 @@ _renderScenes:
 | `update(dt)` | Each frame if not blocked from below |
 | `interpolate(alpha)` | Each frame, follows same rules as update |
 | `render(ctx)` | Each frame if not blocked from below |
-| `renderUI()` | Called after push/pop/switch to refresh DOM |
+| `renderUI(ctx)` | Each frame if not blocked from below — canvas foreground, above retained objects |
+| `renderDOM()` | Called after push/pop/switch to refresh DOM |
 | `pushScene` / `popScene` / `replaceScene` / `switchScene` | Stack management delegated to `this.game` |
 
 ### Lifecycle Safety

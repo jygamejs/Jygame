@@ -97,7 +97,7 @@ export class SceneStack {
 
   applyUI(scene) {
     if (!scene || !scene.root) return;
-    const html = scene.renderUI();
+    const html = scene.renderDOM();
     if (html !== undefined && html !== null) {
       scene.root.innerHTML = html;
       scene._lastUIHTML = html;
@@ -251,11 +251,16 @@ export class SceneStack {
   render(renderer, start) {
     for (let i = start; i < this._scenes.length; i++) {
       const scene = this._scenes[i];
-      scene.render(renderer.immediateContext);
+      const ctx = renderer.immediateContext;
+      scene.render(ctx);
       if (scene.world) {
         renderer.render(scene.world);
       }
-      const html = scene.renderUI();
+      // Foreground canvas layer, above the retained objects, below the DOM
+      // overlay. Like render(ctx) it is screen space — the camera does not
+      // transform it.
+      scene.renderUI(ctx);
+      const html = scene.renderDOM();
       if (html !== undefined && html !== null && html !== scene._lastUIHTML && scene.root) {
         scene.root.innerHTML = html;
         scene._lastUIHTML = html;

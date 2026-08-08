@@ -339,7 +339,16 @@ export class Scene extends EcsScene {
     // user-overridable hook — runs before the World renders retained objects
   }
 
-  renderUI() {}
+  // Foreground canvas hook. Runs after the World's retained objects, so it
+  // draws above them, but still in screen space — the camera does not
+  // transform it. Use it for canvas overlays that must sit on top of the
+  // action. Anything that belongs to the DOM layer goes in renderDOM().
+  renderUI(ctx) {}
+
+  // The scene's DOM layer. Returns an HTML string patched into `root`, a
+  // transparent overlay above the canvas. On-canvas interface drawing belongs
+  // in renderUI(ctx), not here.
+  renderDOM() {}
 
   pushScene(scene) {
     if (this._context) this._context.pushScene(scene);

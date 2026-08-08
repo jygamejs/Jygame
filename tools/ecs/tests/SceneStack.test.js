@@ -369,21 +369,39 @@ describe("SceneStack — queries and iteration", () => {
 });
 
 describe("SceneStack — UI", () => {
-  it("applies renderUI output to the scene root on mount", () => {
+  it("applies renderDOM output to the scene root on mount", () => {
     const stack = makeStack();
     class UIScene extends Scene {
-      renderUI() { return "<p>hello</p>"; }
+      renderDOM() { return "<p>hello</p>"; }
     }
     const scene = new UIScene();
     stack.start(scene);
     assert.strictEqual(scene.root.innerHTML, "<p>hello</p>");
   });
 
+  it("render() runs render, retained world, renderUI(ctx), then renderDOM", () => {
+    const stack = makeStack();
+    const calls = [];
+    const ctx = createHeadlessContext2D();
+    const renderer = { immediateContext: ctx, render: (world) => calls.push("world") };
+    class UIScene extends Scene {
+      render(c) { calls.push("render"); }
+      renderUI(c) { calls.push("renderUI"); assert.strictEqual(c, ctx); }
+      renderDOM() { calls.push("renderDOM"); return "<p></p>"; }
+    }
+    const scene = new UIScene();
+    stack.start(scene);
+
+    calls.length = 0;
+    stack.render(renderer, 0);
+    assert.deepStrictEqual(calls, ["render", "world", "renderUI", "renderDOM"]);
+  });
+
   it("render() only rewrites the DOM when the markup actually changed", () => {
     const stack = makeStack();
     let html = "<p>one</p>";
     class UIScene extends Scene {
-      renderUI() { return html; }
+      renderDOM() { return html; }
     }
     const scene = new UIScene();
     stack.start(scene);
@@ -420,7 +438,7 @@ describe("SceneStack — UI", () => {
     const stack = makeStack();
     let n = 0;
     class UIScene extends Scene {
-      renderUI() { n++; return "<p></p>"; }
+      renderDOM() { n++; return "<p></p>"; }
     }
     const a = new UIScene();
     const b = new UIScene();

@@ -403,14 +403,16 @@ describe("Scene — render pipeline", () => {
     assert.deepStrictEqual(calls, ["scene", "world"]);
   });
 
-  it("renderUI() remains DOM-based and takes no canvas context", () => {
+  it("renderUI(ctx) draws after retained objects; renderDOM() returns HTML", () => {
     class UIScene extends Scene {
-      renderUI() {
+      renderUI(ctx) { assert.ok(ctx); return undefined; }
+      renderDOM() {
         return "<div id=\"score\">0</div>";
       }
     }
     const scene = new UIScene();
-    assert.strictEqual(scene.renderUI(), "<div id=\"score\">0</div>");
+    assert.strictEqual(scene.renderDOM(), "<div id=\"score\">0</div>");
+    assert.strictEqual(scene.renderUI(mockRenderCtx()), undefined);
   });
 
   it("renderer.render applies camera transform when Camera resource is set", () => {
