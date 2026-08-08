@@ -123,8 +123,26 @@ const DOM_TO_KEY_CODE = {
   "Help": codes.HELP,
 };
 
+// Case-insensitive index over the canonical DOM codes, so an identifier can
+// be recognised as a physical key regardless of how it is cased ("KeyW",
+// "keyw", "KEYW" all map to KEY_W). This is the single canonical set of
+// physical KeyboardEvent.code values — nothing else in the engine maintains a
+// second list.
+const UPPER_DOM_TO_KEY_CODE = {};
+for (const domCode of Object.keys(DOM_TO_KEY_CODE)) {
+  UPPER_DOM_TO_KEY_CODE[domCode.toUpperCase()] = DOM_TO_KEY_CODE[domCode];
+}
+
 codes.fromDOMCode = function (domCode) {
   return DOM_TO_KEY_CODE[domCode] ?? -1;
+};
+
+// Recognises a physical KeyboardEvent.code by name, ignoring case. Returns -1
+// when the identifier is not one of the canonical physical codes, so callers
+// can fall back to logical-key (event.key) resolution.
+codes.resolveDOMCode = function (name) {
+  if (!name) return -1;
+  return UPPER_DOM_TO_KEY_CODE[name.toUpperCase()] ?? -1;
 };
 
 codes.fromName = function (name) {

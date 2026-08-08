@@ -185,7 +185,7 @@ Full API reference, guides, and examples: [jygame-documentation.vercel.app](http
 | `TestBackend` | Programmatic backend for injecting events in tests. |
 | `KeyCode` | Enum of all physical key codes (e.g. `KEY_W`, `SPACE`, `ARROW_UP`). |
 | `Modifier` | Bitmask flags: `SHIFT`, `CTRL`, `ALT`, `META`. |
-| `Keyboard` | Device. Tracks `pressed`/`justPressed`/`justReleased`/`repeat` for every key. |
+| `Keyboard` | Device. Tracks `pressed`/`justPressed`/`justReleased`/`repeat` for every physical key, plus the logical `event.key` value of each press. |
 | `MouseButton` | Enum: `LEFT`, `MIDDLE`, `RIGHT`, `BACK`, `FORWARD`. |
 | `Mouse` | Device. Tracks button states, position, and wheel delta. `resetWheel()` to clear. |
 | `PointerType` | Enum: `MOUSE`, `TOUCH`, `PEN`. |
@@ -225,6 +225,61 @@ Full API reference, guides, and examples: [jygame-documentation.vercel.app](http
 | `GestureDispatcher` | Callback layer over `GestureEngine`. Backs `Input.onTap`/`onSwipe` and `Scene.onTap`/`onSwipe`/`onGesture`; `on(type, cb)` returns an unsubscribe function. |
 | `Space` | Enum: `SCREEN`, `VIEWPORT`, `WORLD`, `UI`. |
 | `CoordinateSystem` | Manages transformations between all four spaces. Supports `project`/`unproject` and `worldToScreen`/`screenToWorld` camera interfaces. |
+
+#### Physical vs logical keys
+
+`Input.pressed`, `Input.down` and `Input.released` accept both **physical**
+keyboard codes and **logical** keyboard keys. The identifier you pass decides
+which one is queried — there is no second API and no keyboard-layout setting.
+
+```js
+"KeyW" // physical — the key position represented by KeyboardEvent.code
+"W"    // logical — the key value represented by KeyboardEvent.key
+```
+
+```js
+// Physical — useful when the game cares about where the key is on the
+// keyboard. Layout-independent, so "KeyW" is the same physical position on
+// QWERTY, AZERTY, QWERTZ, Dvorak, ...
+Input.down("KeyW")
+Input.pressed("KeyA")
+Input.released("Space")
+
+// Logical — useful when the actual key value the keyboard produces matters.
+// On a French AZERTY keyboard, the key labelled "M" reports event.key === "m"
+// but event.code === "Semicolon"; the engine never needs to know the layout.
+Input.pressed("M")
+Input.down("m")
+```
+
+Physical input answers *"which physical key was pressed?"* (`KeyboardEvent.code`);
+logical input answers *"what key value did the keyboard produce?"*
+(`KeyboardEvent.key`). The two are genuinely independent, and the same key
+event can be read either way:
+
+```js
+Input.pressed("KeyM") // physical: true when event.code === "KeyM"
+Input.pressed("M")    // logical:  true when event.key === "M"
+```
+
+Resolution rules:
+
+- An identifier that matches a recognized physical `KeyboardEvent.code`
+  (`KeyA`…`KeyZ`, `Digit0`…`Digit9`, `Space`, `Enter`, `Tab`, `Escape`,
+  `ArrowUp`, `ShiftLeft`, `F1`…`F12`, `Semicolon`, `Numpad0`, …) queries the
+  physical state. Matching is case-insensitive (`"keyw"` works), but a made-up
+  name like `"KeyFoo"` is not a physical code.
+- Everything else queries the logical state against the exact `event.key`
+  value. Logical keys are **case-sensitive** — `"m"` and `"M"` are different
+  logical values, exactly as the browser reports them.
+- Stable special keys (`Tab`, `Enter`, `Escape`, `Space`, `ArrowUp`,
+  `Backspace`, `Shift`, …) keep working exactly as before.
+- Long-standing aliases such as `"UP"`, `"ARROW_UP"`, `"SPACE"`, `"SHIFT"`,
+  `"PAGE_UP"` still resolve to their physical keys.
+
+You never tell Jygame which keyboard layout the player uses. The browser
+already exposes both concepts — `event.code` (position) and `event.key`
+(value) — and Jygame passes both through directly.
 
 ### Debug & Diagnostics
 

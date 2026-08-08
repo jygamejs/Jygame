@@ -109,6 +109,22 @@ addKey("BACKSLASH", KeyCode.BACKSLASH);
 addKey("BRACKET_LEFT", KeyCode.BRACKET_LEFT);
 addKey("BRACKET_RIGHT", KeyCode.BRACKET_RIGHT);
 
+// The printable punctuation characters themselves, so a binding can be written
+// the way it reads (`debug: ","`) rather than only by its long name
+// ("COMMA"). addKey() uppercases, which leaves these characters unchanged.
+addKey("`", KeyCode.BACKQUOTE);
+addKey(" ", KeyCode.SPACE);
+addKey("-", KeyCode.MINUS);
+addKey("=", KeyCode.EQUAL);
+addKey(";", KeyCode.SEMICOLON);
+addKey("'", KeyCode.QUOTE);
+addKey(",", KeyCode.COMMA);
+addKey(".", KeyCode.PERIOD);
+addKey("/", KeyCode.SLASH);
+addKey("\\", KeyCode.BACKSLASH);
+addKey("[", KeyCode.BRACKET_LEFT);
+addKey("]", KeyCode.BRACKET_RIGHT);
+
 addMouse("LEFT_MOUSE", MouseButton.LEFT);
 addMouse("MOUSE_LEFT", MouseButton.LEFT);
 addMouse("RIGHT_MOUSE", MouseButton.RIGHT);
@@ -138,6 +154,37 @@ addGesture("PAN", GestureType.PAN);
 export function resolveKeyCode(str) {
   if (!str) return null;
   return STRING_TO_KEYCODE.get(str.toUpperCase()) ?? null;
+}
+
+// The single keyboard-identifier resolver shared by Input.pressed / down /
+// released / value. An identifier resolves to a physical key (compared
+// against KeyboardEvent.code) when it is a recognised physical code, and to a
+// logical key (compared against KeyboardEvent.key) otherwise.
+//
+// Returns { kind: "physical", keyCode } or { kind: "logical", key }, or null
+// for an empty identifier. The logical branch deliberately keeps the caller's
+// exact casing — KeyboardEvent.key is case-sensitive ("m" vs "M").
+export function resolveKeyboardIdentifier(str) {
+  if (!str) return null;
+
+  const keyCode = KeyCode.resolveDOMCode(str);
+  if (keyCode >= 0) {
+    return { kind: "physical", keyCode };
+  }
+
+  // Legacy physical aliases that are not themselves KeyboardEvent.code values
+  // ("UP", "ARROW_UP", "PAGE_UP", "BACKTICK", "SHIFT", ...) stay physical so
+  // existing identifiers keep working. Single printable characters ("M", "W",
+  // ";", "1", ...) are NOT physical aliases: they are the key values a
+  // keyboard produces, so they resolve logically. This is what fixes the
+  // AZERTY "M" problem without a naive startsWith("Key") check.
+  const upper = str.toUpperCase();
+  const alias = STRING_TO_KEYCODE.get(upper);
+  if (alias !== undefined && upper.length !== 1) {
+    return { kind: "physical", keyCode: alias };
+  }
+
+  return { kind: "logical", key: str };
 }
 
 export function resolveMouseButton(str) {

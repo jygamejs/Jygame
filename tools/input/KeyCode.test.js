@@ -70,6 +70,25 @@ describe("KeyCode.fromDOMCode", () => {
   });
 });
 
+describe("KeyCode.resolveDOMCode", () => {
+  it("recognises physical codes ignoring case", () => {
+    assert.strictEqual(KeyCode.resolveDOMCode("KeyW"), KeyCode.KEY_W);
+    assert.strictEqual(KeyCode.resolveDOMCode("keyw"), KeyCode.KEY_W);
+    assert.strictEqual(KeyCode.resolveDOMCode("KEYW"), KeyCode.KEY_W);
+    assert.strictEqual(KeyCode.resolveDOMCode("Space"), KeyCode.SPACE);
+    assert.strictEqual(KeyCode.resolveDOMCode("ARROWUP"), KeyCode.ARROW_UP);
+  });
+
+  it("returns -1 for anything that is not a physical code", () => {
+    assert.strictEqual(KeyCode.resolveDOMCode("M"), -1);
+    assert.strictEqual(KeyCode.resolveDOMCode("KeyFoo"), -1);
+    assert.strictEqual(KeyCode.resolveDOMCode("Semicolon"), KeyCode.SEMICOLON);
+    assert.strictEqual(KeyCode.resolveDOMCode("UP"), -1);
+    assert.strictEqual(KeyCode.resolveDOMCode(""), -1);
+    assert.strictEqual(KeyCode.resolveDOMCode(null), -1);
+  });
+});
+
 describe("KeyCode.fromName", () => {
   it("maps 'KEY_A' to KEY_A", () => {
     assert.strictEqual(KeyCode.fromName("KEY_A"), KeyCode.KEY_A);

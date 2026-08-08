@@ -6,7 +6,7 @@ import { ActionKind } from "../ActionKind.js";
 import { ActionMap } from "../actions/ActionMap.js";
 import { InputContext } from "../actions/InputContext.js";
 import { BindingCompiler } from "./BindingCompiler.js";
-import { resolveKeyCode, resolveMouseButton, resolveGesture } from "./KeyStrings.js";
+import { resolveKeyboardIdentifier, resolveMouseButton, resolveGesture } from "./KeyStrings.js";
 
 export class StringResolver {
   constructor(inputSystem) {
@@ -93,9 +93,9 @@ export class StringResolver {
     const state = this._findActionState(name);
     if (state) return state.pressed;
 
-    const kc = resolveKeyCode(upper);
-    if (kc !== null) {
-      return this._queryKeyboard(kc, (kb, code) => kb.isDown(code));
+    const resolved = resolveKeyboardIdentifier(name);
+    if (resolved && resolved.kind === "physical") {
+      return this._queryKeyboard(resolved.keyCode, (kb, code) => kb.isDown(code));
     }
 
     const mb = resolveMouseButton(upper);
@@ -103,7 +103,15 @@ export class StringResolver {
       return this._queryMouse(mb, (mouse, btn) => mouse.isDown(btn));
     }
 
-    return this._queryGesture(name, "down");
+    if (resolveGesture(upper)) {
+      return this._queryGesture(name, "down");
+    }
+
+    if (resolved) {
+      return this._queryKeyboard(resolved.key, (kb, key) => kb.isLogicalDown(key));
+    }
+
+    return false;
   }
 
   pressed(name) {
@@ -113,9 +121,9 @@ export class StringResolver {
     const state = this._findActionState(name);
     if (state) return state.justPressed;
 
-    const kc = resolveKeyCode(upper);
-    if (kc !== null) {
-      return this._queryKeyboard(kc, (kb, code) => kb.justPressed(code));
+    const resolved = resolveKeyboardIdentifier(name);
+    if (resolved && resolved.kind === "physical") {
+      return this._queryKeyboard(resolved.keyCode, (kb, code) => kb.justPressed(code));
     }
 
     const mb = resolveMouseButton(upper);
@@ -123,7 +131,15 @@ export class StringResolver {
       return this._queryMouse(mb, (mouse, btn) => mouse.justPressed(btn));
     }
 
-    return this._queryGesture(name, "pressed");
+    if (resolveGesture(upper)) {
+      return this._queryGesture(name, "pressed");
+    }
+
+    if (resolved) {
+      return this._queryKeyboard(resolved.key, (kb, key) => kb.logicalJustPressed(key));
+    }
+
+    return false;
   }
 
   released(name) {
@@ -133,9 +149,9 @@ export class StringResolver {
     const state = this._findActionState(name);
     if (state) return state.justReleased;
 
-    const kc = resolveKeyCode(upper);
-    if (kc !== null) {
-      return this._queryKeyboard(kc, (kb, code) => kb.justReleased(code));
+    const resolved = resolveKeyboardIdentifier(name);
+    if (resolved && resolved.kind === "physical") {
+      return this._queryKeyboard(resolved.keyCode, (kb, code) => kb.justReleased(code));
     }
 
     const mb = resolveMouseButton(upper);
@@ -143,7 +159,15 @@ export class StringResolver {
       return this._queryMouse(mb, (mouse, btn) => mouse.justReleased(btn));
     }
 
-    return this._queryGesture(name, "released");
+    if (resolveGesture(upper)) {
+      return this._queryGesture(name, "released");
+    }
+
+    if (resolved) {
+      return this._queryKeyboard(resolved.key, (kb, key) => kb.logicalJustReleased(key));
+    }
+
+    return false;
   }
 
   value(name) {
@@ -158,9 +182,9 @@ export class StringResolver {
       return mouse ? mouse.wheel : 0;
     }
 
-    const kc = resolveKeyCode(upper);
-    if (kc !== null) {
-      return this._queryKeyboard(kc, (kb, code) => kb.isDown(code) ? 1 : 0);
+    const resolved = resolveKeyboardIdentifier(name);
+    if (resolved && resolved.kind === "physical") {
+      return this._queryKeyboard(resolved.keyCode, (kb, code) => kb.isDown(code) ? 1 : 0);
     }
 
     const mb = resolveMouseButton(upper);
@@ -168,7 +192,15 @@ export class StringResolver {
       return this._queryMouse(mb, (mouse, btn) => mouse.isDown(btn) ? 1 : 0);
     }
 
-    return this._queryGesture(name, "value");
+    if (resolveGesture(upper)) {
+      return this._queryGesture(name, "value");
+    }
+
+    if (resolved) {
+      return this._queryKeyboard(resolved.key, (kb, key) => kb.isLogicalDown(key) ? 1 : 0);
+    }
+
+    return 0;
   }
 
   axis(name) {
