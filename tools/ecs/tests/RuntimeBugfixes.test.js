@@ -255,7 +255,10 @@ describe("Debug is opt-in and streaming is gated", () => {
     assert.strictEqual(game._debug, false, "debug must be opt-in");
     assert.ok(!game._debugBackend, "no debug backend should be installed");
     assert.ok(!game._snapshotBuilder, "no snapshot builder should be installed");
-    assert.strictEqual(game.debug, null, "the overlay accessor should stay null");
+    assert.ok(game.debug, "game.debug is never null");
+    assert.strictEqual(game.debug.visible, false);
+    assert.strictEqual(game.debug.commands, null);
+    assert.doesNotThrow(() => game.debug.toggle(), "a disabled debug call must not crash");
   });
 
   it("with debug on but no workspace attached, frames do no snapshot work", async () => {

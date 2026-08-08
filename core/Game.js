@@ -81,6 +81,8 @@ export class Game {
     this._diagIds = null;
     this._diagWorld = null;
     this._debugControls = null;
+    this._disabledDebug = null;
+    this._debugWarned = false;
     this.debugSession = null;
     this._frameCount = 0;
     // Bound once: rAF is re-armed every frame, so an inline arrow here would
@@ -236,12 +238,43 @@ export class Game {
     return this._frameCount;
   }
 
+  // game.debug is never null. When debug is disabled it is a safe no-op
+  // facade: methods do nothing and the first user-facing call (show/toggle)
+  // warns once, explaining how to enable the overlay — instead of a cryptic
+  // "Cannot read properties of null" TypeError killing the game loop.
   get debug() {
-    if (!this._debug) return null;
+    if (!this._debug) return this._disabledDebugFacade();
     if (!this._debugOverlay) {
       this._debugOverlay = new OverlayHost(this);
     }
     return this._debugOverlay;
+  }
+
+  _disabledDebugFacade() {
+    if (this._disabledDebug) return this._disabledDebug;
+    const game = this;
+    this._disabledDebug = {
+      get visible() { return false; },
+      get commands() { return null; },
+      get selection() { return null; },
+      get context() { return null; },
+      show() { this._warnDisabled(); },
+      toggle() { this._warnDisabled(); },
+      hide() {},
+      update() {},
+      render() {},
+      destroy() {},
+      _warnDisabled() {
+        if (game._debugWarned) return;
+        game._debugWarned = true;
+        if (typeof console !== "undefined") {
+          console.warn(
+            "[jygame] game.debug is disabled. Pass `debug: true` to the Game constructor to enable the debug overlay.",
+          );
+        }
+      },
+    };
+    return this._disabledDebug;
   }
 
   get isPaused() {

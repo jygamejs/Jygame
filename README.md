@@ -287,6 +287,8 @@ The debug system is opt-in — pass `debug: true` to the Game constructor to ena
 
 Press backtick (`` ` ``) to toggle the in-game overlay, or call `game.debug.show()` programmatically.
 
+`game.debug` is never null — with debug disabled it is a safe no-op, so `game.debug.toggle()` in game code warns once instead of crashing the loop.
+
 Snapshot streaming to the workspace is itself opt-in: the game only builds and sends per-frame world snapshots while a workspace window is open and subscribed. With `debug: true` but no workspace attached, the per-frame cost is a single timestamp comparison.
 
 Debug is off by default, but you can also pass it explicitly for production builds:
