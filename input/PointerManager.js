@@ -89,6 +89,11 @@ export class PointerManager extends Device {
     pd.twist = data.twist ?? 0;
     pd.width = data.width ?? 1;
     pd.height = data.height ?? 1;
+    // A fresh press starts from the up state. Slots are reused after a
+    // release, so a stale wasDown from the previous occupant would otherwise
+    // suppress justDown on the very next click (wasDown is only snapshotted
+    // for *active* pointers, so the released slot is never re-synced).
+    pd.wasDown = false;
     pd.isDown = true;
     pd.startTime = performance.now();
     pd.distance = 0;

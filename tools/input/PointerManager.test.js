@@ -183,4 +183,25 @@ describe("PointerManager", () => {
     pm.update(queueWith(pointerEvent(EventType.POINTER_UP, { pointerId: 1 })));
     assert.strictEqual(pm.getPointer(1), null);
   });
+
+  it("justDown is true again when a reused slot is pressed", () => {
+    const pm = new PointerManager();
+
+    // First click.
+    pm.update(queueWith(pointerEvent(EventType.POINTER_DOWN, { pointerId: 1 })));
+    assert.strictEqual(pm.getPointer(1).justDown, true);
+
+    // A frame passes while held: wasDown is snapshotted to true.
+    pm.update(queueWith());
+    assert.strictEqual(pm.getPointer(1).justDown, false);
+
+    // Release; the slot is recycled but keeps its stale wasDown.
+    pm.update(queueWith(pointerEvent(EventType.POINTER_UP, { pointerId: 1 })));
+
+    // Second click reuses the same slot. A fresh press must read justDown
+    // regardless of the slot's history (regression: it used to stay false
+    // because wasDown was only re-synced for *active* pointers).
+    pm.update(queueWith(pointerEvent(EventType.POINTER_DOWN, { pointerId: 1 })));
+    assert.strictEqual(pm.getPointer(1).justDown, true);
+  });
 });
