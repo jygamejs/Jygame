@@ -186,7 +186,7 @@ Full API reference, guides, and examples: [jygame-documentation.vercel.app](http
 | `KeyCode` | Enum of all physical key codes (e.g. `KEY_W`, `SPACE`, `ARROW_UP`). |
 | `Modifier` | Bitmask flags: `SHIFT`, `CTRL`, `ALT`, `META`. |
 | `Keyboard` | Device. Tracks `pressed`/`justPressed`/`justReleased`/`repeat` for every physical key, plus the logical `event.key` value of each press. |
-| `Gamepad` | Device. Polls the Web Gamepad API, diffs button edges and axes per frame, and tracks up to 4 pads by index. |
+| `Gamepad` | Device. Polls the Web Gamepad API, diffs button edges and axes per frame, and tracks up to 4 pads by index. Toggleable via `enabled`; emits `GAMEPAD_*` events; supports minimum-config filtering and axis move thresholds. |
 | `GamepadButton` | Enum of standard button indices (`A`, `B`, `X`, `Y`, `LB`, `RB`, `LT`, `RT`, `BACK`, `START`, `GUIDE`, `LSB`, `RSB`, `DPAD_*`). |
 | `GamepadAxis` | Enum of axis indices (`LEFT_X`, `LEFT_Y`, `RIGHT_X`, `RIGHT_Y`). |
 | `GamepadState` | Per-pad button/axis state with digital edges and analog values. |
@@ -317,6 +317,31 @@ if (Input.gamepad.pressed(GamepadButton.A, 0)) { this.jump(); }
 const pad = Input.gamepad.get(0);   // { id, buttons: { a: { pressed, value }, ... }, sticks }
 const dir = Input.gamepad.stick(0, "left");     // dead-zoned
 ```
+
+Polling can be toggled, filtered and observed:
+
+```js
+Input.gamepad.enabled = false;   // stop the per-frame poll (default is on)
+Input.gamepad.axisMoveThreshold = 0.1; // below this, "axis" events stay silent
+
+// ignore junk devices (touchpads, mice, web cameras)
+Input.gamepad.setMinimumGamepadConfiguration({ axis: 4, buttons: 8 });
+
+// scripted responses, Excalibur-style
+const stop = Input.gamepad.on("button", (e) => {
+  if (e.gamepadIndex === 0 && e.button === GamepadButton.A) this.jump();
+});
+Input.gamepad.on("axis", (e) => {
+  if (e.axis === GamepadAxis.LEFT_X) this.steer(e.value);
+});
+stop(); // unsubscribe
+```
+
+Query helpers accept a per-call threshold for touchy controllers:
+`Input.gamepad.value(GamepadButton.RT, 0, 0.7)` reads a trigger as 0 below
+0.7, `Input.gamepad.axis(0, GamepadAxis.LEFT_X, 0.2)` ignores stick drift,
+and `Input.gamepad.isDown(GamepadButton.RT, 0, 0.7)` treats a button as
+pressed only once it reaches the value.
 
 Sticks and triggers are analog: triggers carry their pull strength through
 `value()` and stay "down" while pressed, and sticks apply a radial dead zone

@@ -10,6 +10,9 @@ export class GamepadState {
     this._prevButtons = new Uint8Array(GamepadButton.BUTTON_COUNT);
     this._values = new Float32Array(GamepadButton.BUTTON_COUNT);
     this._axes = new Float32Array(GamepadAxis.AXIS_COUNT);
+    // Last axis value that fired an "axis" event, so a steady stick does not
+    // re-emit every frame. Written by the Gamepad device.
+    this._axisEventValue = new Float32Array(GamepadAxis.AXIS_COUNT);
     this._connected = false;
     this._id = null;
     this._mapping = "";
@@ -26,6 +29,7 @@ export class GamepadState {
     this._prevButtons.fill(0);
     this._values.fill(0);
     this._axes.fill(0);
+    this._axisEventValue.fill(0);
     this._connected = true;
     this._id = id;
     this._mapping = mapping;
@@ -39,6 +43,7 @@ export class GamepadState {
     this._buttons.fill(0);
     this._values.fill(0);
     this._axes.fill(0);
+    this._axisEventValue.fill(0);
   }
 
   isDown(button) {

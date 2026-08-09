@@ -26,12 +26,52 @@ export class GamepadFacade {
     return this._gp ? this._gp.deadZone : 0;
   }
 
+  // Polling is a per-frame cost the game may not need. enabled defaults to
+  // true (gamepads just work); set it to false to stop polling entirely.
+  get enabled() {
+    return this._gp ? this._gp.enabled : false;
+  }
+
+  set enabled(value) {
+    if (this._gp) this._gp.enabled = value;
+  }
+
+  // The absolute axis value at which "axis" events start firing.
+  get axisMoveThreshold() {
+    return this._gp ? this._gp.axisMoveThreshold : 0;
+  }
+
+  set axisMoveThreshold(value) {
+    if (this._gp) this._gp.axisMoveThreshold = value;
+  }
+
+  // Filters out devices the browser reports as gamepads but the game does not
+  // want (touchpads, mice, web cameras).
+  setMinimumGamepadConfiguration(config) {
+    if (this._gp) this._gp.setMinimumGamepadConfiguration(config);
+  }
+
+  // Subscription surface, mirroring Excalibur's gamepads.on. Types:
+  //   "connect"    → { gamepadIndex, id, mapping }
+  //   "disconnect" → { gamepadIndex }
+  //   "button"     → { gamepadIndex, button, value, pressed }
+  //   "axis"       → { gamepadIndex, axis, value }
+  // Returns an unsubscribe function.
+  on(type, callback) {
+    const gp = this._gp;
+    if (!gp) return () => {};
+    return gp.on(type, callback);
+  }
+
   connected(index = 0) {
     return this._gp ? this._gp.isConnected(index) : false;
   }
 
-  isDown(button, index = 0) {
-    return this._gp ? this._gp.isDown(index, button) : false;
+  // Digital press. Pass a threshold to count the button as down when its
+  // analog value reaches it (useful for touchy triggers), instead of the
+  // browser's own pressed flag.
+  isDown(button, index = 0, threshold) {
+    return this._gp ? this._gp.isDown(index, button, threshold) : false;
   }
 
   pressed(button, index = 0) {
@@ -42,9 +82,10 @@ export class GamepadFacade {
     return this._gp ? this._gp.justReleased(index, button) : false;
   }
 
-  // Analog button value (0..1); meaningful for the LT/RT triggers.
-  value(button, index = 0) {
-    return this._gp ? this._gp.value(index, button) : 0;
+  // Analog button value (0..1); meaningful for the LT/RT triggers. With a
+  // threshold the value is suppressed below it.
+  value(button, index = 0, threshold) {
+    return this._gp ? this._gp.value(index, button, threshold) : 0;
   }
 
   // Dead-zoned stick vector for "left" or "right".
@@ -52,9 +93,10 @@ export class GamepadFacade {
     return this._gp ? this._gp.stick(index, side) : { x: 0, y: 0 };
   }
 
-  // Raw axis position for a GamepadAxis index.
-  axis(index = 0, axisIndex = 0) {
-    return this._gp ? this._gp.axis(index, axisIndex) : 0;
+  // Raw axis position for a GamepadAxis index. With a threshold, values
+  // inside it read as 0.
+  axis(index = 0, axisIndex = 0, threshold) {
+    return this._gp ? this._gp.axis(index, axisIndex, threshold) : 0;
   }
 
   // A plain structured snapshot of one pad, or null when it is not connected.

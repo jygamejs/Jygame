@@ -14,4 +14,5 @@ export const EventType = Object.freeze({
   GAMEPAD_DISCONNECTED: "gamepaddisconnected",
   GAMEPAD_BUTTON_DOWN: "gamepadbuttondown",
   GAMEPAD_BUTTON_UP: "gamepadbuttonup",
+  GAMEPAD_AXIS: "gamepadaxis",
 });
