@@ -13,6 +13,10 @@ import { GestureType } from "../GestureType.js";
 import { resolveKeyboardIdentifier, resolveGamepadIdentifier, resolveMouseButton, resolveGesture } from "./KeyStrings.js";
 
 export class BindingCompiler {
+  constructor() {
+    this._warnedNames = new Set();
+  }
+
   compile(bindings) {
     const map = new ActionMap();
     if (!bindings) return map;
@@ -24,7 +28,34 @@ export class BindingCompiler {
     return map;
   }
 
+  // Actions are resolved before raw device/gesture identifiers, so a name
+  // like "PAD_A" or "tap" silently shadows the built-in identifier it
+  // collides with. That's a deliberate rule (action-first), but it should not
+  // be a silent surprise — warn once per name. A multi-character name that
+  // only resolves as a logical key ("jump") is not a collision; a single
+  // character ("m") is, because that is a real logical-key query.
+  _warnReservedName(name) {
+    if (!name || this._warnedNames.has(name)) return;
+    const upper = name.toUpperCase();
+    const kb = resolveKeyboardIdentifier(name);
+    const reserved = (kb && kb.kind === "physical")
+      || resolveGamepadIdentifier(upper)
+      || resolveMouseButton(upper)
+      || resolveGesture(upper)
+      || (kb && kb.kind === "logical" && name.length === 1);
+    if (!reserved) return;
+    this._warnedNames.add(name);
+    if (typeof console !== "undefined") {
+      console.warn(
+        `[jygame] the action "${name}" shadows the built-in input identifier "${name}". ` +
+        "Actions are checked before raw device/gesture names, so queries for " +
+        `"${name}" will return this action — rename it to avoid the collision.`,
+      );
+    }
+  }
+
   _compileOne(map, name, binding) {
+    this._warnReservedName(name);
     if (typeof binding === "string") {
       if (this._isMovementPattern(binding)) {
         this._compileVector(map, name, this._expandMovementPattern(binding));

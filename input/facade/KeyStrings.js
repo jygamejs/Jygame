@@ -209,22 +209,28 @@ for (const [str, info] of [...STRING_TO_GAMEPAD_AXIS]) {
   STRING_TO_GAMEPAD_AXIS.set("GAMEPAD_" + str.slice(4), info);
 }
 
-// Resolves a gamepad identifier to { kind, button|side|axis, gamepadIndex }.
-export function resolveGamepadIdentifier(str) {
-  if (!str) return null;
-  const upper = str.toUpperCase();
-  const btn = STRING_TO_GAMEPAD_BUTTON.get(upper);
-  if (btn) return { kind: "button", ...btn };
-  const stick = STRING_TO_GAMEPAD_STICK.get(upper);
-  if (stick) return { kind: "stick", ...stick };
-  const axis = STRING_TO_GAMEPAD_AXIS.get(upper);
-  if (axis) return { kind: "axis", ...axis };
-  return null;
-}
-
 export function resolveKeyCode(str) {
   if (!str) return null;
   return STRING_TO_KEYCODE.get(str.toUpperCase()) ?? null;
+}
+
+// ─── Resolved-identifier cache ─────────────────────────────────────────────
+// Classifying a raw identifier is a pure function of the string: "PAD_A" is
+// always gamepad button A, "KeyW" always the physical W. Input queries in a
+// hot loop pass the same handful of strings every frame, so memoising the
+// classification removes the per-call toUpperCase + Map lookups without
+// changing the string-based API. The caches are bounded: past the limit they
+// simply reset, since a game only ever names a finite set of identifiers.
+const RESOLVE_CACHE_LIMIT = 256;
+const _keyboardResolveCache = new Map();
+const _gamepadResolveCache = new Map();
+const _mouseResolveCache = new Map();
+const _gestureResolveCache = new Map();
+
+function cacheResult(map, key, result) {
+  if (map.size >= RESOLVE_CACHE_LIMIT) map.clear();
+  map.set(key, result);
+  return result;
 }
 
 // The single keyboard-identifier resolver shared by Input.pressed / down /
@@ -237,7 +243,12 @@ export function resolveKeyCode(str) {
 // exact casing — KeyboardEvent.key is case-sensitive ("m" vs "M").
 export function resolveKeyboardIdentifier(str) {
   if (!str) return null;
+  const cached = _keyboardResolveCache.get(str);
+  if (cached !== undefined) return cached;
+  return cacheResult(_keyboardResolveCache, str, resolveKeyboardIdentifierUncached(str));
+}
 
+function resolveKeyboardIdentifierUncached(str) {
   const keyCode = KeyCode.resolveDOMCode(str);
   if (keyCode >= 0) {
     return { kind: "physical", keyCode };
@@ -260,12 +271,32 @@ export function resolveKeyboardIdentifier(str) {
 
 export function resolveMouseButton(str) {
   if (!str) return null;
-  return STRING_TO_MOUSE.get(str.toUpperCase()) ?? null;
+  const upper = str.toUpperCase();
+  if (_mouseResolveCache.has(upper)) return _mouseResolveCache.get(upper);
+  return cacheResult(_mouseResolveCache, upper, STRING_TO_MOUSE.get(upper) ?? null);
 }
 
 export function resolveGesture(str) {
   if (!str) return null;
-  return STRING_TO_GESTURE.get(str.toUpperCase()) ?? null;
+  const upper = str.toUpperCase();
+  if (_gestureResolveCache.has(upper)) return _gestureResolveCache.get(upper);
+  return cacheResult(_gestureResolveCache, upper, STRING_TO_GESTURE.get(upper) ?? null);
+}
+
+export function resolveGamepadIdentifier(str) {
+  if (!str) return null;
+  const upper = str.toUpperCase();
+  if (_gamepadResolveCache.has(upper)) return _gamepadResolveCache.get(upper);
+  const result = (() => {
+    const btn = STRING_TO_GAMEPAD_BUTTON.get(upper);
+    if (btn) return { kind: "button", ...btn };
+    const stick = STRING_TO_GAMEPAD_STICK.get(upper);
+    if (stick) return { kind: "stick", ...stick };
+    const axis = STRING_TO_GAMEPAD_AXIS.get(upper);
+    if (axis) return { kind: "axis", ...axis };
+    return null;
+  })();
+  return cacheResult(_gamepadResolveCache, upper, result);
 }
 
 export function isKeyName(str) {
