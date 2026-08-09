@@ -54,6 +54,12 @@ export class Host {
 
   observeResize(callback) { return { disconnect() {} }; }
 
+  // The Gamepad device polls this each frame instead of reaching for
+  // navigator directly. Returns an array of Gamepad-like snapshots indexed by
+  // gamepad.index (null for empty slots), the shape navigator.getGamepads()
+  // produces.
+  getGamepads() { return []; }
+
   // ─── Misc ───────────────────────────────────────────
 
   // Used by the debug workspace, which opens a generated page in a new window.
@@ -122,6 +128,13 @@ export class BrowserHost extends Host {
     const observer = new ResizeObserver(callback);
     observer.observe(document.documentElement);
     return observer;
+  }
+
+  getGamepads() {
+    if (typeof navigator !== "undefined" && typeof navigator.getGamepads === "function") {
+      return navigator.getGamepads();
+    }
+    return [];
   }
 
   openWindow(url, name) {
@@ -264,12 +277,23 @@ export class HeadlessHost extends Host {
     this._documentListeners = new Map();
     this._resizeCallbacks = new Set();
     this._selectors = new Map();
+    this._gamepads = [];
     this.hiddenValue = false;
     this.openedWindows = [];
     this.createdObjectURLs = [];
   }
 
   get body() { return this._body; }
+
+  // Test hook: feed fake Gamepad snapshots to any Gamepad device polling this
+  // host. The array is indexed by gamepad.index, like navigator.getGamepads().
+  setGamepads(pads) {
+    this._gamepads = pads || [];
+  }
+
+  getGamepads() {
+    return this._gamepads;
+  }
 
   createElement(tag) {
     const el = new HeadlessElement(tag);

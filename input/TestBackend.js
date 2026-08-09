@@ -7,6 +7,7 @@ export class TestBackend extends InputBackend {
   constructor() {
     super();
     this._events = [];
+    this._gamepads = [];
   }
 
   get name() { return "test"; }
@@ -19,6 +20,16 @@ export class TestBackend extends InputBackend {
       queue.push(event, tier);
     }
     this._events = [];
+  }
+
+  // Fake Gamepad snapshots for a Gamepad device wired to read this backend
+  // (new Gamepad(() => backend.gamepads)). Indexed by gamepad.index, like
+  // navigator.getGamepads().
+  get gamepads() { return this._gamepads; }
+
+  setGamepads(pads) {
+    this._gamepads = pads || [];
+    return this;
   }
 
   keyDown(key, options = {}) {

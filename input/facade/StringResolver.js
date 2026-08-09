@@ -1,12 +1,13 @@
 import { Keyboard } from "../Keyboard.js";
 import { Mouse } from "../Mouse.js";
+import { Gamepad } from "../Gamepad.js";
 import { GestureEngine } from "../GestureEngine.js";
 import { GestureType } from "../GestureType.js";
 import { ActionKind } from "../ActionKind.js";
 import { ActionMap } from "../actions/ActionMap.js";
 import { InputContext } from "../actions/InputContext.js";
 import { BindingCompiler } from "./BindingCompiler.js";
-import { resolveKeyboardIdentifier, resolveMouseButton, resolveGesture } from "./KeyStrings.js";
+import { resolveKeyboardIdentifier, resolveGamepadIdentifier, resolveMouseButton, resolveGesture } from "./KeyStrings.js";
 
 export class StringResolver {
   constructor(inputSystem) {
@@ -37,6 +38,42 @@ export class StringResolver {
     const kb = this._devices ? this._devices.get(Keyboard) : null;
     if (!kb) return false;
     return fn(kb, keyCode);
+  }
+
+  // Routes a resolved gamepad identifier ({ kind, gamepadIndex, ... }) to the
+  // right query. Buttons are digital with full edges; sticks and scalar axes
+  // answer down/value/axis and have no pressed/released edges.
+  _queryGamepad(resolved, kind) {
+    const gp = this._devices ? this._devices.get(Gamepad) : null;
+    if (!gp) return kind === "value" ? 0 : kind === "axis" ? { x: 0, y: 0 } : false;
+    const idx = resolved.gamepadIndex ?? 0;
+
+    if (resolved.kind === "button") {
+      if (kind === "down") return gp.isDown(idx, resolved.button);
+      if (kind === "pressed") return gp.justPressed(idx, resolved.button);
+      if (kind === "released") return gp.justReleased(idx, resolved.button);
+      if (kind === "value") return gp.value(idx, resolved.button);
+      return { x: 0, y: 0 };
+    }
+
+    if (resolved.kind === "stick") {
+      const v = gp.stick(idx, resolved.side);
+      const mag = Math.sqrt(v.x * v.x + v.y * v.y);
+      if (kind === "down") return mag > 0;
+      if (kind === "value") return Math.min(1, mag);
+      if (kind === "axis") return v;
+      return false;
+    }
+
+    if (resolved.kind === "axis") {
+      const v = gp.axis(idx, resolved.axis);
+      if (kind === "down") return Math.abs(v) > gp.deadZone;
+      if (kind === "value") return Math.min(1, Math.abs(v));
+      if (kind === "axis") return { x: v, y: 0 };
+      return false;
+    }
+
+    return kind === "value" ? 0 : kind === "axis" ? { x: 0, y: 0 } : false;
   }
 
   _queryMouse(button, fn) {
@@ -98,6 +135,11 @@ export class StringResolver {
       return this._queryKeyboard(resolved.keyCode, (kb, code) => kb.isDown(code));
     }
 
+    const gpad = resolveGamepadIdentifier(upper);
+    if (gpad) {
+      return this._queryGamepad(gpad, "down");
+    }
+
     const mb = resolveMouseButton(upper);
     if (mb !== null) {
       return this._queryMouse(mb, (mouse, btn) => mouse.isDown(btn));
@@ -126,6 +168,11 @@ export class StringResolver {
       return this._queryKeyboard(resolved.keyCode, (kb, code) => kb.justPressed(code));
     }
 
+    const gpad = resolveGamepadIdentifier(upper);
+    if (gpad) {
+      return this._queryGamepad(gpad, "pressed");
+    }
+
     const mb = resolveMouseButton(upper);
     if (mb !== null) {
       return this._queryMouse(mb, (mouse, btn) => mouse.justPressed(btn));
@@ -152,6 +199,11 @@ export class StringResolver {
     const resolved = resolveKeyboardIdentifier(name);
     if (resolved && resolved.kind === "physical") {
       return this._queryKeyboard(resolved.keyCode, (kb, code) => kb.justReleased(code));
+    }
+
+    const gpad = resolveGamepadIdentifier(upper);
+    if (gpad) {
+      return this._queryGamepad(gpad, "released");
     }
 
     const mb = resolveMouseButton(upper);
@@ -187,6 +239,11 @@ export class StringResolver {
       return this._queryKeyboard(resolved.keyCode, (kb, code) => kb.isDown(code) ? 1 : 0);
     }
 
+    const gpad = resolveGamepadIdentifier(upper);
+    if (gpad) {
+      return this._queryGamepad(gpad, "value");
+    }
+
     const mb = resolveMouseButton(upper);
     if (mb !== null) {
       return this._queryMouse(mb, (mouse, btn) => mouse.isDown(btn) ? 1 : 0);
@@ -212,6 +269,11 @@ export class StringResolver {
         return { x: state.vector.x, y: state.vector.y };
       }
       return { x: 0, y: 0 };
+    }
+
+    const gpad = resolveGamepadIdentifier(name.toUpperCase());
+    if (gpad) {
+      return this._queryGamepad(gpad, "axis");
     }
 
     const gestureResult = this._queryGesture(name, "axis");

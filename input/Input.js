@@ -1,6 +1,7 @@
 import { StringResolver } from "./facade/StringResolver.js";
 import { PointerFacade } from "./facade/PointerFacade.js";
 import { TouchFacade } from "./facade/TouchFacade.js";
+import { GamepadFacade } from "./facade/GamepadFacade.js";
 import { GestureDispatcher } from "./GestureDispatcher.js";
 import { GestureType } from "./GestureType.js";
 import { Mouse } from "./Mouse.js";
@@ -16,6 +17,7 @@ let _system = null;
 let _resolver = null;
 let _pointerFacade = null;
 let _touchFacade = null;
+let _gamepadFacade = null;
 let _gestures = new GestureDispatcher(null);
 
 function getResolver() {
@@ -33,12 +35,18 @@ function getTouch() {
   return _touchFacade;
 }
 
+function getGamepad() {
+  if (!_gamepadFacade) _gamepadFacade = new GamepadFacade(_system);
+  return _gamepadFacade;
+}
+
 export const Input = {
   setSystem(system) {
     _system = system;
     _resolver = new StringResolver(system);
     _pointerFacade = new PointerFacade(system);
     _touchFacade = new TouchFacade(system);
+    _gamepadFacade = new GamepadFacade(system);
     _gestures.setSystem(system);
   },
 
@@ -110,6 +118,10 @@ export const Input = {
 
   get touch() {
     return getTouch();
+  },
+
+  get gamepad() {
+    return getGamepad();
   },
 
   get gestures() {

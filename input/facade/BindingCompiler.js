@@ -5,8 +5,12 @@ import { MouseButtonBinding } from "../actions/MouseButtonBinding.js";
 import { GestureBinding } from "../actions/GestureBinding.js";
 import { ChordBinding } from "../actions/ChordBinding.js";
 import { CompositeBinding } from "../actions/CompositeBinding.js";
+import { GamepadButtonBinding } from "../actions/GamepadButtonBinding.js";
+import { GamepadAxisBinding } from "../actions/GamepadAxisBinding.js";
+import { GamepadStickBinding } from "../actions/GamepadStickBinding.js";
+import { GamepadButton } from "../GamepadButton.js";
 import { GestureType } from "../GestureType.js";
-import { resolveKeyboardIdentifier, resolveMouseButton, resolveGesture } from "./KeyStrings.js";
+import { resolveKeyboardIdentifier, resolveGamepadIdentifier, resolveMouseButton, resolveGesture } from "./KeyStrings.js";
 
 export class BindingCompiler {
   compile(bindings) {
@@ -71,7 +75,10 @@ export class BindingCompiler {
 
   _isMovementPattern(str) {
     const u = str.toUpperCase().replace(/[^A-Z]/g, "");
-    return u === "WASD" || u === "ARROWKEYS" || u === "ARROWS";
+    return u === "WASD" || u === "ARROWKEYS" || u === "ARROWS"
+      || u === "PADSTICK" || u === "PADSTICKS"
+      || u === "PADD" || u === "PADDPAD" || u === "DPAD"
+      || u === "PAD" || u === "PADMOVE";
   }
 
   _expandMovementPattern(str) {
@@ -80,12 +87,33 @@ export class BindingCompiler {
     // layout-independent meaning, exactly as before.
     if (u === "WASD") return { up: "KeyW", down: "KeyS", left: "KeyA", right: "KeyD" };
     if (u === "ARROWKEYS" || u === "ARROWS") return { up: "UP", down: "DOWN", left: "LEFT", right: "RIGHT" };
+    // Gamepad: "padstick" is the left stick, "padd" is the d-pad, "pad" is
+    // both. Combined with `["padstick", "padd"]`, mirroring wasd/arrowkeys.
+    if (u === "PADSTICK" || u === "PADSTICKS") return { stick: "left" };
+    if (u === "PADD" || u === "PADDPAD" || u === "DPAD") {
+      return {
+        up: "PAD_DPAD_UP",
+        down: "PAD_DPAD_DOWN",
+        left: "PAD_DPAD_LEFT",
+        right: "PAD_DPAD_RIGHT",
+      };
+    }
+    if (u === "PAD" || u === "PADMOVE") {
+      return {
+        stick: "left",
+        up: "PAD_DPAD_UP",
+        down: "PAD_DPAD_DOWN",
+        left: "PAD_DPAD_LEFT",
+        right: "PAD_DPAD_RIGHT",
+      };
+    }
     return null;
   }
 
   _mergeMovementPatterns(patterns) {
     const result = {};
     for (const p of patterns) {
+      if (p.stick && !result.stick) result.stick = p.stick;
       for (const dir of ["up", "down", "left", "right"]) {
         if (p[dir]) {
           if (!result[dir]) result[dir] = [];
@@ -103,6 +131,11 @@ export class BindingCompiler {
 
   _compileVector(map, name, binding) {
     const subs = [];
+    if (binding.stick) {
+      subs.push({
+        binding: new GamepadStickBinding(binding.stick === "right" ? "right" : "left", 0),
+      });
+    }
     const dirs = [
       { key: "up",    vec: [0, -1] },
       { key: "down",  vec: [0, 1] },
@@ -114,13 +147,19 @@ export class BindingCompiler {
       if (!val) continue;
       const items = Array.isArray(val) ? val : [val];
       for (const item of items) {
-        if (typeof item === "string") {
-          const resolved = resolveKeyboardIdentifier(item);
-          if (resolved && resolved.kind === "physical") {
-            subs.push({ binding: new KeyBinding(resolved.keyCode), vector: vec });
-          } else if (resolved && resolved.kind === "logical") {
-            subs.push({ binding: new KeyBinding(null, resolved.key), vector: vec });
+        if (typeof item !== "string") continue;
+        const gpad = resolveGamepadIdentifier(item.toUpperCase());
+        if (gpad) {
+          if (gpad.kind === "button") {
+            subs.push({ binding: new GamepadButtonBinding(gpad.button, gpad.gamepadIndex), vector: vec });
           }
+          continue;
+        }
+        const resolved = resolveKeyboardIdentifier(item);
+        if (resolved && resolved.kind === "physical") {
+          subs.push({ binding: new KeyBinding(resolved.keyCode), vector: vec });
+        } else if (resolved && resolved.kind === "logical") {
+          subs.push({ binding: new KeyBinding(null, resolved.key), vector: vec });
         }
       }
     }
@@ -161,6 +200,27 @@ export class BindingCompiler {
       return;
     }
 
+    const gpad = resolveGamepadIdentifier(upper);
+    if (gpad) {
+      let binding = null;
+      let kind = ActionKind.DIGITAL;
+      if (gpad.kind === "button") {
+        binding = new GamepadButtonBinding(gpad.button, gpad.gamepadIndex);
+        if (GamepadButton.isTrigger(gpad.button)) kind = ActionKind.ANALOG;
+      } else if (gpad.kind === "axis") {
+        binding = new GamepadAxisBinding(gpad.axis, gpad.gamepadIndex);
+        kind = ActionKind.ANALOG;
+      } else if (gpad.kind === "stick") {
+        binding = new GamepadStickBinding(gpad.side, gpad.gamepadIndex);
+        kind = ActionKind.VECTOR2;
+      }
+      if (binding) {
+        if (add) { map.addBinding(name, binding); }
+        else { map.bind(name, binding, kind); }
+        return;
+      }
+    }
+
     const mb = resolveMouseButton(upper);
     if (mb !== null) {
       const mbBinding = new MouseButtonBinding(mb);
@@ -189,7 +249,10 @@ export class BindingCompiler {
 export function inferActionKind(binding) {
   if (typeof binding === "string") {
     const u = binding.toUpperCase().replace(/[^A-Z]/g, "");
-    if (u === "WASD" || u === "ARROWKEYS" || u === "ARROWS") return ActionKind.VECTOR2;
+    if (u === "WASD" || u === "ARROWKEYS" || u === "ARROWS"
+      || u === "PADSTICK" || u === "PADSTICKS"
+      || u === "PADD" || u === "PADDPAD" || u === "DPAD"
+      || u === "PAD" || u === "PADMOVE") return ActionKind.VECTOR2;
     if (resolveGesture(binding.toUpperCase())) {
       const info = resolveGesture(binding.toUpperCase());
       if (info.type === GestureType.PINCH) return ActionKind.ANALOG;

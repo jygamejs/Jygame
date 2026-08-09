@@ -153,7 +153,7 @@ Full API reference, guides, and examples: [jygame-documentation.vercel.app](http
 | `Rect` | AABB rectangle utility with collision, containment, overlap, and anchor helpers. |
 | `Clock` | Fixed-timestep accumulator for deterministic updates. |
 | `Timer` | Countdown timer with optional looping. |
-| `Input` | The input facade. Resolves actions, pointer, touch, wheel and gestures through the Input System below. |
+| `Input` | The input facade. Resolves actions, pointer, touch, gamepad, wheel and gestures through the Input System below. |
 | `State` | Observable state container with subscribe/unsubscribe. |
 | `Storage` | `localStorage` wrapper with JSON serialization. |
 | `Color`, `Colors` | Color class with parsing, manipulation, and 96 named palettes. |
@@ -177,15 +177,19 @@ Full API reference, guides, and examples: [jygame-documentation.vercel.app](http
 | `InputSystem` | Orchestrates per-frame input: `snapshot()` → `backend.poll()` → notify consumers → `devices.update()` → `contextStack.evaluate()` → `events.clear()`. |
 | `InputEvent` | Typed event with data payload and metadata. |
 | `InputEventQueue` | Bounded FIFO queue with tier-aware prioritisation. |
-| `EventType` | Enum: `KEY_DOWN`, `KEY_UP`, `POINTER_DOWN`, `POINTER_MOVE`, `POINTER_UP`, `WHEEL`, `COMPOSITION_*`, `GESTURE`. |
+| `EventType` | Enum: `KEY_DOWN`, `KEY_UP`, `POINTER_DOWN`, `POINTER_MOVE`, `POINTER_UP`, `WHEEL`, `COMPOSITION_*`, `GESTURE`, `GAMEPAD_*`. |
 | `Device` | Base class for input devices. Each device `update(queue)` peeks at events read-only. |
 | `DeviceRegistry` | Maps device types to instances. `get(ClassType)` / `getAll(ClassType)`. |
 | `InputBackend` | Abstract backend. `start()` / `stop()` / `poll(queue)`. |
 | `BrowserBackend` | DOM backend — binds `keydown`/`keyup`/`pointer*`/`wheel`/`composition*` on a target element. |
-| `TestBackend` | Programmatic backend for injecting events in tests. |
+| `TestBackend` | Programmatic backend for injecting events in tests. Also accepts fake gamepad snapshots via `setGamepads(pads)`. |
 | `KeyCode` | Enum of all physical key codes (e.g. `KEY_W`, `SPACE`, `ARROW_UP`). |
 | `Modifier` | Bitmask flags: `SHIFT`, `CTRL`, `ALT`, `META`. |
 | `Keyboard` | Device. Tracks `pressed`/`justPressed`/`justReleased`/`repeat` for every physical key, plus the logical `event.key` value of each press. |
+| `Gamepad` | Device. Polls the Web Gamepad API, diffs button edges and axes per frame, and tracks up to 4 pads by index. |
+| `GamepadButton` | Enum of standard button indices (`A`, `B`, `X`, `Y`, `LB`, `RB`, `LT`, `RT`, `BACK`, `START`, `GUIDE`, `LSB`, `RSB`, `DPAD_*`). |
+| `GamepadAxis` | Enum of axis indices (`LEFT_X`, `LEFT_Y`, `RIGHT_X`, `RIGHT_Y`). |
+| `GamepadState` | Per-pad button/axis state with digital edges and analog values. |
 | `MouseButton` | Enum: `LEFT`, `MIDDLE`, `RIGHT`, `BACK`, `FORWARD`. |
 | `Mouse` | Device. Tracks button states, position, and wheel delta. `resetWheel()` to clear. |
 | `PointerType` | Enum: `MOUSE`, `TOUCH`, `PEN`. |
@@ -211,8 +215,9 @@ Full API reference, guides, and examples: [jygame-documentation.vercel.app](http
 | `ChordBinding` | Combines multiple bindings with optional modifers — all must be active. |
 | `CompositeBinding` | Aggregates sub-bindings with per-direction vectors, normalised to unit circle. Ideal for WASD + Arrow stick emulation. |
 | `GestureBinding` | Matches a `GestureType` (e.g. swipe, pinch). |
-| `GamepadButtonBinding` | Gamepad button binding. |
-| `GamepadAxisBinding` | Gamepad axis binding. |
+| `GamepadButtonBinding` | Gamepad button binding. Evaluates the button's analog value (0–1); digital buttons read 0/1, triggers carry their strength. |
+| `GamepadAxisBinding` | Gamepad axis binding. Evaluates the axis magnitude (0–1). |
+| `GamepadStickBinding` | Gamepad stick as a 2D vector binding for VECTOR2 actions. |
 | `ActionEvaluator` | Runs bindings through optional processors, picks the highest-strength result, and updates the corresponding `ActionState`. |
 | `Processor` | Base class for post-processing binding strength/vector. |
 | `DeadZoneProcessor` | Discards values below a threshold. |
@@ -285,6 +290,54 @@ Action bindings follow the exact same convention: a Scene's `input` map or
 `Input.bind("jump", "KeyW")` accepts physical and logical identifiers exactly
 like the query methods, and the `"wasd"` / `"arrowkeys"` movement shorthands
 keep their physical, layout-independent meaning.
+
+### Gamepad
+
+Controllers arrive through the Web Gamepad API and are exposed both by name
+and through `Input.gamepad`. A connected pad answers the query methods with
+`"PAD_*"` identifiers (and `"GAMEPAD_*"` aliases), defaulting to gamepad 0:
+
+```js
+if (Input.pressed("PAD_A"))   { this.jump(); }
+if (Input.down("PAD_LB"))     { /* shoulder held */ }
+const throttle = Input.value("PAD_RT");        // analog 0–1
+const dir = Input.axis("PAD_LEFT_STICK");      // dead-zoned { x, y }
+```
+
+Button names: `PAD_A/B/X/Y`, `PAD_LB/RB`, `PAD_LT/RT`, `PAD_BACK/START/GUIDE`,
+`PAD_LSB/RSB`, `PAD_DPAD_UP/DOWN/LEFT/RIGHT`. Sticks: `PAD_LEFT_STICK` /
+`PAD_RIGHT_STICK` (via `axis()`), or the scalar axes `PAD_LEFT_X/Y`,
+`PAD_RIGHT_X/Y` (via `value()`).
+
+`Input.gamepad` is the structured view — handy for multi-pad games and
+rebinding UIs:
+
+```js
+if (Input.gamepad.pressed(GamepadButton.A, 0)) { this.jump(); }
+const pad = Input.gamepad.get(0);   // { id, buttons: { a: { pressed, value }, ... }, sticks }
+const dir = Input.gamepad.stick(0, "left");     // dead-zoned
+```
+
+Sticks and triggers are analog: triggers carry their pull strength through
+`value()` and stay "down" while pressed, and sticks apply a radial dead zone
+(0.2 by default) before reporting a vector. Gamepad identifiers also work in
+bindings — `jump: "PAD_A"` in a Scene's `input` or `Input.bind("move",
+"PAD_LEFT_STICK")` for a vector action. Multiple gamepads are addressed by
+index through `Input.gamepad` (bindings target gamepad 0).
+
+Movement has shorthands too, mirroring `"wasd"` / `"arrowkeys"`:
+
+```js
+input: {
+  move: ["padstick", "padd"],   // left stick + d-pad both drive "move"
+  // or: "pad" (left stick + d-pad), "padstick" (stick only), "padd" (d-pad only)
+}
+```
+
+`"padstick"` is the left stick (analog 360°), `"padd"` is the d-pad (digital
+4/8-direction), and `"pad"` means both. They mix freely with the keyboard
+shorthands — `["wasd", "padstick"]` gives you keyboard and stick movement on
+the same action.
 
 ### Debug & Diagnostics
 

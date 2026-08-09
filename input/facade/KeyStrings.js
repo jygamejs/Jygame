@@ -1,10 +1,15 @@
 import { KeyCode } from "../KeyCode.js";
 import { MouseButton } from "../MouseButton.js";
 import { GestureType } from "../GestureType.js";
+import { GamepadButton } from "../GamepadButton.js";
+import { GamepadAxis } from "../GamepadAxis.js";
 
 const STRING_TO_KEYCODE = new Map();
 const STRING_TO_MOUSE = new Map();
 const STRING_TO_GESTURE = new Map();
+const STRING_TO_GAMEPAD_BUTTON = new Map();
+const STRING_TO_GAMEPAD_STICK = new Map();
+const STRING_TO_GAMEPAD_AXIS = new Map();
 
 function addKey(str, code) {
   const upper = str.toUpperCase();
@@ -137,7 +142,6 @@ addMouse("MOUSE_FORWARD", MouseButton.FORWARD);
 function addGesture(str, type, options = {}) {
   STRING_TO_GESTURE.set(str.toUpperCase(), { type, options });
 }
-
 addGesture("TAP", GestureType.TAP);
 addGesture("DOUBLE_TAP", GestureType.DOUBLE_TAP);
 addGesture("LONG_PRESS", GestureType.LONG_PRESS);
@@ -150,6 +154,73 @@ addGesture("SWIPE_DOWN", GestureType.SWIPE, { direction: "down" });
 addGesture("PINCH", GestureType.PINCH);
 addGesture("ROTATE", GestureType.ROTATE);
 addGesture("PAN", GestureType.PAN);
+
+// ─── Gamepad ───────────────────────────────────────────────────────────────
+// Buttons default to gamepad index 0. The "PAD_*" names are primary; every
+// one is also accepted with a "GAMEPAD_*" prefix (PAD_A ↔ GAMEPAD_A).
+
+function addPadButton(str, button, gamepadIndex = 0) {
+  STRING_TO_GAMEPAD_BUTTON.set(str.toUpperCase(), { button, gamepadIndex });
+}
+
+addPadButton("PAD_A", GamepadButton.A);
+addPadButton("PAD_B", GamepadButton.B);
+addPadButton("PAD_X", GamepadButton.X);
+addPadButton("PAD_Y", GamepadButton.Y);
+addPadButton("PAD_LB", GamepadButton.LB);
+addPadButton("PAD_RB", GamepadButton.RB);
+addPadButton("PAD_LT", GamepadButton.LT);
+addPadButton("PAD_RT", GamepadButton.RT);
+addPadButton("PAD_BACK", GamepadButton.BACK);
+addPadButton("PAD_START", GamepadButton.START);
+addPadButton("PAD_GUIDE", GamepadButton.GUIDE);
+addPadButton("PAD_LSB", GamepadButton.LSB);
+addPadButton("PAD_RSB", GamepadButton.RSB);
+addPadButton("PAD_DPAD_UP", GamepadButton.DPAD_UP);
+addPadButton("PAD_DPAD_DOWN", GamepadButton.DPAD_DOWN);
+addPadButton("PAD_DPAD_LEFT", GamepadButton.DPAD_LEFT);
+addPadButton("PAD_DPAD_RIGHT", GamepadButton.DPAD_RIGHT);
+
+function addPadStick(str, side, gamepadIndex = 0) {
+  STRING_TO_GAMEPAD_STICK.set(str.toUpperCase(), { side, gamepadIndex });
+}
+
+addPadStick("PAD_LEFT_STICK", "left");
+addPadStick("PAD_RIGHT_STICK", "right");
+
+function addPadAxis(str, axis, gamepadIndex = 0) {
+  STRING_TO_GAMEPAD_AXIS.set(str.toUpperCase(), { axis, gamepadIndex });
+}
+
+addPadAxis("PAD_LEFT_X", GamepadAxis.LEFT_X);
+addPadAxis("PAD_LEFT_Y", GamepadAxis.LEFT_Y);
+addPadAxis("PAD_RIGHT_X", GamepadAxis.RIGHT_X);
+addPadAxis("PAD_RIGHT_Y", GamepadAxis.RIGHT_Y);
+
+// GAMEPAD_* aliases for every PAD_* name. Iterate over a snapshot: adding
+// entries to a Map while iterating it runs away (new keys are visited too).
+for (const [str, info] of [...STRING_TO_GAMEPAD_BUTTON]) {
+  STRING_TO_GAMEPAD_BUTTON.set("GAMEPAD_" + str.slice(4), info);
+}
+for (const [str, info] of [...STRING_TO_GAMEPAD_STICK]) {
+  STRING_TO_GAMEPAD_STICK.set("GAMEPAD_" + str.slice(4), info);
+}
+for (const [str, info] of [...STRING_TO_GAMEPAD_AXIS]) {
+  STRING_TO_GAMEPAD_AXIS.set("GAMEPAD_" + str.slice(4), info);
+}
+
+// Resolves a gamepad identifier to { kind, button|side|axis, gamepadIndex }.
+export function resolveGamepadIdentifier(str) {
+  if (!str) return null;
+  const upper = str.toUpperCase();
+  const btn = STRING_TO_GAMEPAD_BUTTON.get(upper);
+  if (btn) return { kind: "button", ...btn };
+  const stick = STRING_TO_GAMEPAD_STICK.get(upper);
+  if (stick) return { kind: "stick", ...stick };
+  const axis = STRING_TO_GAMEPAD_AXIS.get(upper);
+  if (axis) return { kind: "axis", ...axis };
+  return null;
+}
 
 export function resolveKeyCode(str) {
   if (!str) return null;

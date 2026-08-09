@@ -14,6 +14,10 @@ export { KeyCode } from "./KeyCode.js";
 export { Modifier } from "./Modifier.js";
 export { Keyboard } from "./Keyboard.js";
 export { KeyboardState } from "./KeyboardState.js";
+export { Gamepad } from "./Gamepad.js";
+export { GamepadState } from "./GamepadState.js";
+export { GamepadButton } from "./GamepadButton.js";
+export { GamepadAxis } from "./GamepadAxis.js";
 
 export { PointerType } from "./PointerType.js";
 export { Pointer } from "./Pointer.js";
@@ -38,6 +42,7 @@ export { CompositeBinding } from "./actions/CompositeBinding.js";
 export { GestureBinding } from "./actions/GestureBinding.js";
 export { GamepadButtonBinding } from "./actions/GamepadButtonBinding.js";
 export { GamepadAxisBinding } from "./actions/GamepadAxisBinding.js";
+export { GamepadStickBinding } from "./actions/GamepadStickBinding.js";
 export { ActionEvaluator } from "./actions/ActionEvaluator.js";
 export { Processor } from "./actions/processors/Processor.js";
 export { DeadZoneProcessor } from "./actions/processors/DeadZoneProcessor.js";

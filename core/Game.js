@@ -6,6 +6,7 @@ import { ContextStack } from "../input/actions/ContextStack.js";
 import { CoordinateSystem } from "../input/CoordinateSystem.js";
 import { Keyboard } from "../input/Keyboard.js";
 import { Mouse } from "../input/Mouse.js";
+import { Gamepad } from "../input/Gamepad.js";
 import { PointerManager } from "../input/PointerManager.js";
 import { TouchSurface } from "../input/TouchSurface.js";
 import { Stylus } from "../input/Stylus.js";
@@ -102,6 +103,7 @@ export class Game {
     // Register standard input devices
     this.inputSystem.devices.register(new Keyboard());
     this.inputSystem.devices.register(new Mouse());
+    this.inputSystem.devices.register(new Gamepad(this.host));
     this.inputSystem.devices.register(new PointerManager());
     this.inputSystem.devices.register(new TouchSurface());
     this.inputSystem.devices.register(new Stylus());

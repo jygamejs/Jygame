@@ -10,4 +10,8 @@ export const EventType = Object.freeze({
   COMPOSITION_START: "compositionstart",
   COMPOSITION_UPDATE: "compositionupdate",
   COMPOSITION_END: "compositionend",
+  GAMEPAD_CONNECTED: "gamepadconnected",
+  GAMEPAD_DISCONNECTED: "gamepaddisconnected",
+  GAMEPAD_BUTTON_DOWN: "gamepadbuttondown",
+  GAMEPAD_BUTTON_UP: "gamepadbuttonup",
 });

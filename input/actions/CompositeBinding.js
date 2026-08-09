@@ -21,8 +21,18 @@ export class CompositeBinding extends Binding {
     for (const sb of this._subBindings) {
       const strength = sb.binding.evaluate(deviceRegistry);
       if (strength > 0) {
-        sx += sb.vector[0] * strength;
-        sy += sb.vector[1] * strength;
+        if (sb.vector) {
+          // Static unit direction scaled by strength (keyboard keys, d-pad).
+          sx += sb.vector[0] * strength;
+          sy += sb.vector[1] * strength;
+        } else {
+          // Dynamic vector (e.g. an analog stick) already carries magnitude.
+          const dyn = sb.binding.vector;
+          if (dyn) {
+            sx += dyn.x;
+            sy += dyn.y;
+          }
+        }
         hasActive = true;
       }
     }

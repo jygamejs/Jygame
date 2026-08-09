@@ -1,5 +1,9 @@
 import { Binding, registerBinding } from "./Binding.js";
+import { Gamepad } from "../Gamepad.js";
 
+// Evaluates the button's analog value (0..1). Digital buttons report 0 or 1,
+// so this is a plain on/off for them; triggers (LT/RT) carry their analog
+// strength through, which is what a binding like throttle: "PAD_RT" wants.
 export class GamepadButtonBinding extends Binding {
   constructor(button, gamepadIndex = 0) {
     super();
@@ -12,7 +16,9 @@ export class GamepadButtonBinding extends Binding {
   get gamepadIndex() { return this._gamepadIndex; }
 
   evaluate(deviceRegistry) {
-    return 0;
+    const gp = deviceRegistry.get(Gamepad);
+    if (!gp) return 0;
+    return gp.value(this._gamepadIndex, this._button);
   }
 
   serialize() {
