@@ -21,7 +21,7 @@ const ALL_COMPONENTS = [
   { cls: Velocity, schema: { x: "f32", y: "f32" }, hasSchema: true },
   { cls: Collider, schema: { width: "f32", height: "f32" }, hasSchema: true, checkSchema: false },
   { cls: Renderable, schema: { image: "u16", fillColor: "u32", shape: "u8", layer: "i16", imageSmoothing: "u8" }, hasSchema: true, checkSchema: false },
-  { cls: Animation, schema: { clipId: "u16", frameIndex: "u32", elapsed: "f32", isPlaying: "u8", speed: "f32" }, hasSchema: true },
+  { cls: Animation, schema: { clipId: "u16", frameIndex: "u32", elapsed: "f32", isPlaying: "u8", speed: "f32", mode: "u8", loop: "u8" }, hasSchema: true },
   { cls: Visible, schema: { value: "u8" }, hasSchema: true },
   { cls: RenderBounds, schema: { width: "f32", height: "f32" }, hasSchema: true },
   { cls: Trail, schema: { enabled: "u8", maxPoints: "u16", spacing: "f32", width: "f32", color: "u32", mode: "u8", depth: "f32" }, hasSchema: true },

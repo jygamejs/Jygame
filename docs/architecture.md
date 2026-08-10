@@ -20,7 +20,7 @@ The scheduler runs all systems each frame via `world.update(dt)`.
 | `Renderable` | `{draw(ctx,w,h), image, style}` | Per-row references |
 | `Visible` | `{visible: uint8}` | SoA column |
 | `RenderBounds` | `{x: float64, y: float64, w: float64, h: float64}` | SoA columns |
-| `Animation` | `{current: string, frame: uint32, elapsed: float64, playing: uint8}` | Mixed columns |
+| `Animation` | `{clipId: u16, frameIndex: u32, elapsed: f32, isPlaying: u8, speed: f32, mode: u8, loop: u8}` | SoA columns |
 | `Trail` | `{maxLength: uint32, interval: float64, elapsed: float64, points: ref}` | Mixed |
 | `Parent` | `{entity: uint32}` | SoA column |
 | `Children` | (empty — tag component) | None |
@@ -201,9 +201,14 @@ AnimationSystem (extends System)
 ```
 
 - Operates via `ctx.queries.get(Animation, Renderable)` — no manual entity collection
-- `while (elapsed >= frameTime)` loop — catches up frames after spikes
 - Per-clip FPS (no global animation speed)
-- Non-looping clips stop on last frame, fire callback once
+- `Animation.mode` distinguishes persistent (`NORMAL`), one-shot (`ONCE`),
+  queued (`QUEUED`), and forced (`FORCED`) playback; `Animation.loop` overrides
+  the clip default (0 = respect clip, 1 = force finite, 2 = force loop)
+- Non-looping clips stop on last frame; when they end the system advances the
+  queue or resumes the latest persistent request, then fires `onComplete`
+- Playback intent (names, queue) lives in the `AnimationPlayback` resource so
+  the Sprite facade and the system share one controller
 - Writes `Renderable.image` directly — RenderSystem is unaware of AnimationSystem
 
 ### RenderSystem

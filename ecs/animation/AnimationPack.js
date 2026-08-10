@@ -290,14 +290,17 @@ export class AnimationPack {
   static _generateGridRects(anim, fw, fh, margin, spacing, columns) {
     const rects = [];
     const cols = columns;
+    const startRow = anim.row ?? 0;
+    const startCol = anim.column ?? 0;
     for (let i = 0; i < anim.frames; i++) {
       let col, row;
       if (cols !== undefined) {
-        col = i % cols;
-        row = Math.floor(i / cols);
+        const index = startRow * cols + startCol + i;
+        col = index % cols;
+        row = Math.floor(index / cols);
       } else {
         col = (anim.column !== undefined) ? anim.column + i : i;
-        row = anim.row ?? 0;
+        row = startRow;
       }
       rects.push({
         x: margin + col * (fw + spacing),

@@ -8,6 +8,7 @@ import {
   Collider,
   Renderable,
   Animation,
+  AnimationCallbacks,
   AnimationClip,
   AnimationClipRegistry,
   AnimationSystem,
@@ -462,6 +463,48 @@ describe("AnimationSystem — frame advancement", () => {
     world.update(0.3);
     const a = world.getComponent(e, Animation);
     assert.strictEqual(a.frameIndex, 1);
+  });
+
+  it("onComplete fires once when non-looping clip finishes", () => {
+    const world = createWorld();
+    const registry = new AnimationClipRegistry();
+    registry.register("clip", new AnimationClip({ frames: [1, 2, 3], fps: 10, loop: false }));
+    const clipId = registry.getId("clip");
+    const callbacks = new AnimationCallbacks();
+    world.setResource(AnimationClipRegistry, registry);
+    world.setResource(AnimationCallbacks, callbacks);
+    world.addSystem(new AnimationSystem());
+    const e = createEntity(world, [[Animation, { clipId, isPlaying: 1, speed: 1 }], [Renderable]]);
+    let fired = 0;
+    callbacks.set(e, () => fired++);
+    world.update(0.3);
+    assert.strictEqual(fired, 1);
+    world.update(0.3);
+    assert.strictEqual(fired, 1);
+  });
+
+  it("onComplete does not fire for looping clips", () => {
+    const world = createWorld();
+    const registry = new AnimationClipRegistry();
+    registry.register("clip", new AnimationClip({ frames: [1, 2], fps: 10, loop: true }));
+    const clipId = registry.getId("clip");
+    const callbacks = new AnimationCallbacks();
+    world.setResource(AnimationClipRegistry, registry);
+    world.setResource(AnimationCallbacks, callbacks);
+    world.addSystem(new AnimationSystem());
+    const e = createEntity(world, [[Animation, { clipId, isPlaying: 1, speed: 1 }], [Renderable]]);
+    let fired = 0;
+    callbacks.set(e, () => fired++);
+    world.update(0.5);
+    world.update(0.5);
+    assert.strictEqual(fired, 0);
+  });
+
+  it("onComplete handles missing callback registry", () => {
+    const { world, e } = setup(10, [1, 2, 3], false);
+    world.update(0.3);
+    const a = world.getComponent(e, Animation);
+    assert.strictEqual(a.isPlaying, 0);
   });
 
   it("non-looping clip holds last frame on large dt", () => {

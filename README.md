@@ -130,6 +130,8 @@ Full API reference, guides, and examples: [jygame-documentation.vercel.app](http
 | `TrailBuffer` | Point history buffer for a single trail. |
 | `AnimationClip` | Frame sequence descriptor with per-clip FPS. |
 | `AnimationClipRegistry` | Global registry of named animation clips. |
+| `AnimationCallbacks` | Per-entity completion observers for the animation system. |
+| `AnimationPlayback` | Per-entity playback intent (persistent request, one-shot, forced, queue). |
 | `HierarchyGraph` | Manages parent-child relationships and dirty-set propagation. |
 | `EventChannel` | Typed event channel for entity-component events. |
 | `Events` | High-level event API for watching component add/remove/change. |
@@ -561,6 +563,32 @@ resources (SpatialHash, RenderQueue, AnimationClipRegistry, etc.).
 `Sprite` is a convenience wrapper that creates an ECS entity with
 Transform, Collider, Velocity, Renderable, and Visible components.
 Exposes `x`, `y`, `width`, `height`, `velocity`, `style`, `image` shorthands.
+
+Animated sprites are driven through `sprite.animation`, which distinguishes
+**persistent intent** from **temporary actions**:
+
+```js
+// Persistent requests are safe to issue every frame.
+king.animation.play(Input.down("move") ? "run" : "idle");
+
+// One-shot actions play to completion, then resume the latest request.
+if (Input.pressed("jump")) king.animation.playOnce("jump");
+
+// Higher-priority states override normal playback and cannot be interrupted.
+king.animation.play("hit", { force: true });
+king.animation.play("death", { force: true, resume: false });
+
+// Sequences play in order, then normal playback resumes.
+king.animation.playOnce("attack1");
+king.animation.queue("attack2");
+king.animation.queue("attack3");
+```
+
+`play()` never restarts an already-active clip; `playOnce()` always plays a
+clip exactly once (even looping clips) and then resumes the latest persistent
+request. `onComplete(cb)` fires with the completed clip name each time a finite
+playback ends. The AnimationSystem owns the transition, so gameplay code does
+not need to track jump/attack state.
 
 `Group` is a pure entity container (iterable). Collision queries delegate
 to `CollisionSystem`. Optional `SpatialHash` acceleration.

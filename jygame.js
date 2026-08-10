@@ -31,6 +31,7 @@ export { ActivePool } from "./memory/ActivePool.js";
 export { Animation } from "./ecs/components/Animation.js";
 export { AnimationClip } from "./ecs/animation/AnimationClip.js";
 export { AnimationPack } from "./ecs/animation/AnimationPack.js";
+export { AnimationPlayback } from "./ecs/animation/AnimationPlayback.js";
 // Two classes are named Trail: the user-facing effect in display/, and the
 // ECS component it is built on. The curated global API that Runtime installed
 // exposed the display effect as `Trail`, and that is what a game reaches for

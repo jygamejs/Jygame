@@ -7,7 +7,9 @@ import { Animation } from "../ecs/components/Animation.js";
 import { Visible } from "../ecs/components/Visible.js";
 import { RenderBounds } from "../ecs/components/RenderBounds.js";
 import { AnimationClipRegistry } from "../ecs/animation/AnimationClipRegistry.js";
+import { AnimationCallbacks } from "../ecs/animation/AnimationCallbacks.js";
 import { AnimationClip } from "../ecs/animation/AnimationClip.js";
+import { AnimationPlayback, AnimationPlaybackState, LoopOverride, PlaybackMode, startPlayback } from "../ecs/animation/AnimationPlayback.js";
 import { AssetRegistry } from "../ecs/render/AssetRegistry.js";
 import { SpatialHash } from "../collision/SpatialHash.js";
 import { Layer } from "../view/Layer.js";
@@ -624,7 +626,7 @@ export class Sprite {
   }
 
   _showInitialFrame() {
-    if (this._animCurrent) return;
+    if (this._getPlaybackState().current) return;
     if (!this._animMap || this._animMap.size === 0) return;
     const first = this._animMap.values().next().value;
     if (!first || !first.frames || first.frames.length === 0) return;
@@ -639,6 +641,30 @@ export class Sprite {
     const r = w.get(this.#entity, Renderable);
     r.image = frame;
     this._resolveFromClip(null, first);
+  }
+
+  // The authoritative playback intent for this sprite. Lives in the world's
+  // AnimationPlayback resource when available (so the AnimationSystem shares
+  // it); falls back to a sprite-local object for resource-less worlds.
+  _getPlaybackState() {
+    const w = this.#world;
+    if (w && w.hasResource(AnimationPlayback)) {
+      return w.getResource(AnimationPlayback).get(this.#entity);
+    }
+    if (!this._animPlayback) this._animPlayback = new AnimationPlaybackState();
+    return this._animPlayback;
+  }
+
+  _startPlayback(name, mode, opts = {}) {
+    const w = this.#world;
+    const state = this._getPlaybackState();
+    const registry = w.hasResource(AnimationClipRegistry) ? w.getResource(AnimationClipRegistry) : null;
+    const ok = startPlayback(w, this.#entity, registry, state, name, mode, opts);
+    if (ok) {
+      const map = this._animMap;
+      if (map && map.has(name)) this._resolveFromClip(name, map.get(name));
+    }
+    return ok;
   }
 
   get image() { this._assertAlive(); return this.#world.get(this.#entity, Renderable).image; }
@@ -763,8 +789,8 @@ export class Sprite {
       get animations() { return self._animMap; },
       set animations(v) { self._animMap = v; },
 
-      get current() { return self._animCurrent; },
-      set current(v) { self._animCurrent = v; },
+      get current() { return self._getPlaybackState().current; },
+      set current(v) { self._getPlaybackState().current = v; },
 
       get playing() {
         const comp = self.#world.get(self.#entity, Animation);
@@ -827,45 +853,79 @@ export class Sprite {
         return this;
       },
 
-      play(name) {
-        if (self._animCurrent === name) return this;
-        self._animCurrent = name;
-        const comp = self.#world.get(self.#entity, Animation);
-        const map = self._animMap;
-        if (map && map.has(name)) {
-          const w = self.#world;
-          if (w && w.hasResource(AnimationClipRegistry)) {
-            const reg = w.getResource(AnimationClipRegistry);
-            const key = this._clipKey(name);
-            const id = reg.getId(key) ?? reg.getId(name);
-            if (id !== null) comp.clipId = id;
-          }
-          self._resolveFromClip(name, map.get(name));
+      play(name, options = {}) {
+        const anim = self.#world.get(self.#entity, Animation);
+        const state = self._getPlaybackState();
+
+        if (options && options.force) {
+          // Forced playback owns the sprite until it completes. It clears any
+          // pending temporary sequence and is immune to ordinary play() calls.
+          state.queue.length = 0;
+          self._startPlayback(name, PlaybackMode.FORCED, {
+            loop: options.loop === false
+              ? LoopOverride.NON_LOOP
+              : options.loop === true
+                ? LoopOverride.LOOP
+                : LoopOverride.RESPECT_CLIP,
+            hold: options.resume === false,
+          });
+          return this;
         }
-        comp.frameIndex = 0;
-        comp.elapsed = 0;
-        comp.isPlaying = 1;
-        comp.speed = 1;
+
+        // A persistent request: always remember the latest normal intent.
+        state.requested = name;
+
+        // Temporary or forced playback owns the screen — just record the
+        // request and let the controller resume it later.
+        if (anim.mode === PlaybackMode.ONCE ||
+            anim.mode === PlaybackMode.QUEUED ||
+            anim.mode === PlaybackMode.FORCED) {
+          return this;
+        }
+
+        // Already the active persistent animation → do not restart it.
+        if (state.current === name) return this;
+
+        self._startPlayback(name, PlaybackMode.NORMAL, { loop: LoopOverride.RESPECT_CLIP });
+        return this;
+      },
+
+      playOnce(name) {
+        const anim = self.#world.get(self.#entity, Animation);
+        // A forced animation has authority over playback; one-shots cannot
+        // interrupt it (queue explicitly if that is the intent).
+        if (anim.mode === PlaybackMode.FORCED) return this;
+        // A new one-shot replaces the current temporary sequence.
+        self._getPlaybackState().queue.length = 0;
+        self._startPlayback(name, PlaybackMode.ONCE, { loop: LoopOverride.NON_LOOP });
+        return this;
+      },
+
+      queue(name) {
+        const anim = self.#world.get(self.#entity, Animation);
+        const state = self._getPlaybackState();
+        if (anim.mode === PlaybackMode.FORCED) return this;
+        if (anim.mode === PlaybackMode.ONCE ||
+            anim.mode === PlaybackMode.QUEUED ||
+            state.queue.length > 0) {
+          state.queue.push(name);
+          return this;
+        }
+        // No active temporary playback and an empty queue → start immediately.
+        self._startPlayback(name, PlaybackMode.QUEUED, { loop: LoopOverride.NON_LOOP });
+        return this;
+      },
+
+      clearQueue() {
+        self._getPlaybackState().queue.length = 0;
+        return this;
       },
 
       restart(name) {
-        self._animCurrent = name;
-        const comp = self.#world.get(self.#entity, Animation);
-        const map = self._animMap;
-        if (map && map.has(name)) {
-          const w = self.#world;
-          if (w && w.hasResource(AnimationClipRegistry)) {
-            const reg = w.getResource(AnimationClipRegistry);
-            const key = this._clipKey(name);
-            const id = reg.getId(key) ?? reg.getId(name);
-            if (id !== null) comp.clipId = id;
-          }
-          self._resolveFromClip(name, map.get(name));
-        }
-        comp.frameIndex = 0;
-        comp.elapsed = 0;
-        comp.isPlaying = 1;
-        comp.speed = 1;
+        const state = self._getPlaybackState();
+        state.requested = name;
+        self._startPlayback(name, PlaybackMode.NORMAL, { loop: LoopOverride.RESPECT_CLIP });
+        return this;
       },
 
       pause() {
@@ -874,7 +934,7 @@ export class Sprite {
       },
 
       resume() {
-        if (self._animCurrent) {
+        if (self._getPlaybackState().current) {
           const comp = self.#world.get(self.#entity, Animation);
           comp.isPlaying = 1;
         }
@@ -885,10 +945,19 @@ export class Sprite {
         comp.isPlaying = 0;
         comp.frameIndex = 0;
         comp.elapsed = 0;
+        comp.mode = PlaybackMode.NORMAL;
+        comp.loop = LoopOverride.RESPECT_CLIP;
+        const state = self._getPlaybackState();
+        state.queue.length = 0;
+        state.current = null;
       },
 
       onComplete(cb) {
         self._animCallback = cb;
+        const w = self.#world;
+        if (w && w.hasResource(AnimationCallbacks)) {
+          w.getResource(AnimationCallbacks).set(self.#entity, cb);
+        }
         return this;
       },
     };

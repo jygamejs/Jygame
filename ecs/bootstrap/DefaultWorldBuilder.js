@@ -11,7 +11,7 @@ import {
 } from "../systems/index.js";
 
 import { RenderQueue, AssetRegistry } from "../render/index.js";
-import { AnimationClipRegistry } from "../animation/AnimationClipRegistry.js";
+import { AnimationCallbacks, AnimationClipRegistry, AnimationPlayback } from "../animation/index.js";
 import { TrailManager } from "../trails/TrailManager.js";
 import { SpatialHash } from "../../collision/SpatialHash.js";
 import {
@@ -118,6 +118,8 @@ export class DefaultWorldBuilder {
     world.setResource(TrailManager, new TrailManager());
     world.setResource(RenderQueue, new RenderQueue());
     world.setResource(AnimationClipRegistry, new AnimationClipRegistry());
+    world.setResource(AnimationCallbacks, new AnimationCallbacks());
+    world.setResource(AnimationPlayback, new AnimationPlayback());
     world.setResource(AssetRegistry, new AssetRegistry());
 
     for (let i = 0; i < _ECS_SYSTEMS.length; i++) {

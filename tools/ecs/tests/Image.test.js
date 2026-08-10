@@ -126,6 +126,67 @@ describe("Image.animate", () => {
     assert.strictEqual(result.run.frameCount, 4);
   });
 
+  it("sprite sheet from/to offsets into the grid", async () => {
+    const result = await Image.animate({
+      image: "sheet.png",
+      sliceX: 4,
+      sliceY: 1,
+      run: { from: 5, to: 8 },
+    });
+    assert.ok(result.run instanceof AnimationClip);
+    assert.strictEqual(result.run.frameCount, 4);
+    assert.deepStrictEqual(
+      result.run.frames.map((f) => [f.sx, f.sy]),
+      [[16, 16], [32, 16], [48, 16], [0, 32]]
+    );
+  });
+
+  it("sprite sheet explicit row/column entry", async () => {
+    const result = await Image.animate({
+      image: "sheet.png",
+      sliceX: 4,
+      sliceY: 1,
+      walk: { frames: 2, row: 1, column: 2 },
+    });
+    assert.ok(result.walk instanceof AnimationClip);
+    assert.strictEqual(result.walk.frameCount, 2);
+    assert.deepStrictEqual(
+      result.walk.frames.map((f) => [f.sx, f.sy]),
+      [[32, 16], [48, 16]]
+    );
+  });
+
+  it("sprite sheet frameWidth/frameHeight/columns strategy", async () => {
+    const result = await Image.animate({
+      image: "characters.png",
+      frameWidth: 32,
+      frameHeight: 32,
+      columns: 23,
+      walk: { row: 3, from: 0, to: 3 },
+    });
+    assert.ok(result.walk instanceof AnimationClip);
+    assert.strictEqual(result.walk.frameCount, 4);
+    assert.deepStrictEqual(
+      result.walk.frames.map((f) => [f.sx, f.sy]),
+      [[0, 96], [32, 96], [64, 96], [96, 96]]
+    );
+  });
+
+  it("sprite sheet from/to respect an explicit row", async () => {
+    const result = await Image.animate({
+      image: "sheet.png",
+      sliceX: 4,
+      sliceY: 4,
+      walk: { row: 3, from: 0, to: 3 },
+    });
+    assert.ok(result.walk instanceof AnimationClip);
+    assert.strictEqual(result.walk.frameCount, 4);
+    assert.deepStrictEqual(
+      result.walk.frames.map((f) => [f.sx, f.sy]),
+      [[0, 12], [16, 12], [32, 12], [48, 12]]
+    );
+  });
+
   it("atlas strategy with manual regions", async () => {
     const result = await Image.animate({
       image: "atlas.png",

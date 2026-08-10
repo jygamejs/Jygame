@@ -287,6 +287,25 @@ describe("_generateGridRects", () => {
     assert.deepStrictEqual(rects[0], { x: 2,  y: 2, w: 8, h: 8 });
     assert.deepStrictEqual(rects[3], { x: 2, y: 2 + 8 + 1, w: 8, h: 8 });
   });
+
+  it("respects row/column offset with columns", () => {
+    const rects = AnimationPack._generateGridRects(
+      { frames: 2, row: 1, column: 2 }, 16, 16, 0, 0, 4
+    );
+    assert.strictEqual(rects.length, 2);
+    assert.deepStrictEqual(rects[0], { x: 32, y: 16, w: 16, h: 16 });
+    assert.deepStrictEqual(rects[1], { x: 48, y: 16, w: 16, h: 16 });
+  });
+
+  it("wraps to the next row from an offset", () => {
+    const rects = AnimationPack._generateGridRects(
+      { frames: 3, row: 1, column: 3 }, 16, 16, 0, 0, 4
+    );
+    assert.strictEqual(rects.length, 3);
+    assert.deepStrictEqual(rects[0], { x: 48, y: 16, w: 16, h: 16 });
+    assert.deepStrictEqual(rects[1], { x: 0, y: 32, w: 16, h: 16 });
+    assert.deepStrictEqual(rects[2], { x: 16, y: 32, w: 16, h: 16 });
+  });
 });
 
 // ---------------------------------------------------------------------------

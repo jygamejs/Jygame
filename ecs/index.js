@@ -32,7 +32,7 @@ export { MovementSystem, AnimationSystem, CollisionSystem, RenderSystem, TrailSy
 
 export { HierarchyGraph, HierarchySystem } from "./hierarchy/index.js";
 
-export { AnimationClip, AnimationClipRegistry } from "./animation/index.js";
+export { AnimationCallbacks, AnimationClip, AnimationClipRegistry, AnimationPack, AnimationPlayback, AnimationPlaybackState, LoopOverride, PlaybackMode } from "./animation/index.js";
 
 export { CollisionQuery } from "./collision/index.js";
 

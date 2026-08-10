@@ -21,6 +21,9 @@ function _detectStrategy(config) {
   if (config.path) return "individual";
   if (config.json) return "jsonAtlas";
   if (config.sliceX != null || config.sliceY != null) return "spriteSheet";
+  if (config.frameWidth != null || config.frameHeight != null || config.columns != null) {
+    return "spriteSheet";
+  }
   if (config.image) return "atlas";
   return null;
 }
@@ -115,7 +118,8 @@ export const Image = {
       throw new TypeError(
         "Image.animate: unable to detect loading strategy. " +
         "Provide one of: path (individual files), image+json (texture atlas), " +
-        "image+sliceX/sliceY (sprite sheet), or image+frame entries (atlas region)."
+        "image+sliceX/sliceY or image+frameWidth/frameHeight (sprite sheet), " +
+        "or image+frame entries (atlas region)."
       );
     }
 
@@ -164,7 +168,7 @@ export const Image = {
         const frameHeight = config.frameHeight ?? (imgH / sliceY);
         const cols = config.columns ?? sliceX;
 
-        const { image, sliceX: sx, sliceY: sy, defaults, columns, margin, spacing, ...rest } = config;
+        const { image, sliceX: sx, sliceY: sy, defaults, columns, margin, spacing, frameWidth: _fw, frameHeight: _fh, ...rest } = config;
         const packConfig = { image: resolvedImage, frameWidth, frameHeight };
         if (cols !== undefined) packConfig.columns = cols;
         if (margin != null) packConfig.margin = margin;
@@ -174,19 +178,21 @@ export const Image = {
         for (const key of Object.keys(rest)) {
           if (key === "name") continue;
           const entry = _normalizeEntry(rest[key], defaults || {});
-          let frameStart = 0;
           let frameCount;
+          let row;
+          let col;
           if (entry.from != null) {
-            frameStart = entry.from;
             frameCount = entry.to != null ? entry.to - entry.from + 1 : entry.frames;
+            row = entry.row ?? 0;
+            col = entry.from;
           } else {
             frameCount = entry.frames;
+            row = entry.row ?? 0;
+            col = entry.column ?? 0;
           }
           if (!frameCount || frameCount < 1) {
             throw new Error(`Image.animate: animation "${key}" must specify a positive frame count.`);
           }
-          const row = Math.floor(frameStart / cols);
-          const col = frameStart % cols;
           packConfig[key] = {
             frames: frameCount,
             row,
