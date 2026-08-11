@@ -455,3 +455,276 @@ describe("marker stop state", () => {
     assert.strictEqual(c.stopAt, 0);
   });
 });
+
+// ─── playUntil / pauseAt ────────────────────────────────
+describe("animation.playUntil() / pauseAt()", () => {
+  function makeMarkerSprite(world) {
+    Sprite.setDefaultWorld(world);
+    const s = new Sprite();
+    s.animation.addAll({
+      idle: new AnimationClip({ frames: [0, 1], fps: 10, loop: true }),
+      walk: new AnimationClip({ frames: [2, 3], fps: 10, loop: true }),
+      jump: new AnimationClip({
+        frames: [6, 7, 8, 9, 10],
+        fps: 10,
+        loop: true,
+        timing: [0.08, 0.08, 0.5, 0.1, 0.12],
+        markers: { airborne: 2, landing: 4 },
+      }),
+      attack: new AnimationClip({
+        frames: [11, 12, 13],
+        fps: 10,
+        loop: true,
+        markers: { windup: 1, impact: 2 },
+      }),
+      death: new AnimationClip({
+        frames: [30, 31, 32],
+        fps: 10,
+        loop: false,
+        markers: { corpse: 2 },
+      }),
+    });
+    return s;
+  }
+
+  it("playUntil starts the clip and stops exactly at the marker", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    s.animation.playUntil("airborne");
+    assert.strictEqual(s.animation.current, "jump");
+    assert.strictEqual(s.animation.playing, true);
+
+    const seen = [];
+    for (let i = 0; i < 40; i++) {
+      world.update(1 / 60);
+      seen.push(readState(s).frame);
+    }
+    assert.deepStrictEqual([...new Set(seen)], [0, 1, 2]);
+    assert.strictEqual(readState(s).frame, 2);
+    assert.strictEqual(s.animation.playing, false);
+  });
+
+  it("playUntil does not fire onComplete at the marker", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    const completed = [];
+    s.animation.onComplete((name) => completed.push(name));
+    s.animation.playUntil("airborne");
+    for (let i = 0; i < 40; i++) world.update(1 / 60);
+    assert.deepStrictEqual(completed, []);
+  });
+
+  it("playUntil preserves the frame and resume() continues to completion", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    const completed = [];
+    s.animation.onComplete((name) => completed.push(name));
+    s.animation.playUntil("airborne");
+    for (let i = 0; i < 40; i++) world.update(1 / 60);
+    assert.strictEqual(readState(s).frame, 2);
+
+    s.animation.resume();
+    const seen = [];
+    for (let i = 0; i < 120; i++) {
+      world.update(1 / 60);
+      seen.push(readState(s).frame);
+    }
+    assert.ok(seen.includes(3), "advanced past the marker");
+    assert.strictEqual(seen[seen.length - 1], 4, "ran to the final frame");
+    assert.strictEqual(s.animation.playing, false);
+    assert.deepStrictEqual(completed, ["jump"]);
+  });
+
+  it("playUntil does not advance the queue while paused at a marker", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    s.animation.play("idle");
+    s.animation.playUntil("airborne");
+    s.animation.queue("attack");
+    for (let i = 0; i < 40; i++) world.update(1 / 60);
+    assert.strictEqual(readState(s).frame, 2);
+    assert.strictEqual(s.animation.playing, false);
+    assert.strictEqual(s.animation.current, "jump", "queue must not advance");
+
+    s.animation.resume();
+    const seen = [];
+    for (let i = 0; i < 120; i++) {
+      world.update(1 / 60);
+      seen.push(s.animation.current);
+    }
+    assert.ok(seen.includes("attack"), "queued attack plays after completion");
+    assert.strictEqual(seen[seen.length - 1], "idle", "returns to the persistent request");
+  });
+
+  it("resume() after playUntil returns to the persistent request", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    s.animation.play("walk");
+    s.animation.playUntil("airborne");
+    for (let i = 0; i < 40; i++) world.update(1 / 60);
+    assert.strictEqual(readState(s).frame, 2);
+
+    s.animation.resume();
+    const seen = [];
+    for (let i = 0; i < 120; i++) {
+      s.animation.play("walk");
+      world.update(1 / 60);
+      seen.push(s.animation.current);
+    }
+    assert.strictEqual(seen[seen.length - 1], "walk");
+  });
+
+  it("playUntil arms a marker on the already-playing persistent clip", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    s.animation.play("jump"); // looping persistent clip
+    s.animation.playUntil("airborne");
+    for (let i = 0; i < 40; i++) world.update(1 / 60);
+    assert.strictEqual(readState(s).frame, 2);
+    assert.strictEqual(s.animation.playing, false);
+
+    s.animation.resume();
+    const seen = [];
+    for (let i = 0; i < 120; i++) {
+      world.update(1 / 60);
+      seen.push(readState(s).frame);
+    }
+    assert.strictEqual(seen[seen.length - 1], 4, "plays finitely to the end");
+    assert.strictEqual(s.animation.playing, false);
+  });
+
+  it("playUntil with a marker at the final position stops there without completing", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    const completed = [];
+    s.animation.onComplete((name) => completed.push(name));
+    s.animation.playUntil("landing");
+    for (let i = 0; i < 120; i++) world.update(1 / 60);
+    assert.strictEqual(readState(s).frame, 4);
+    assert.strictEqual(s.animation.playing, false);
+    assert.deepStrictEqual(completed, []);
+  });
+
+  it("markers are animation-relative across clips on the same sprite", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    s.animation.playUntil("impact");
+    assert.strictEqual(s.animation.current, "attack");
+    const seen = [];
+    for (let i = 0; i < 40; i++) {
+      world.update(1 / 60);
+      seen.push(readState(s).frame);
+    }
+    assert.strictEqual(readState(s).frame, 2);
+    assert.strictEqual(s.animation.playing, false);
+  });
+
+  it("playUntil rejects an unknown marker with a helpful error", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    assert.throws(() => s.animation.playUntil("nope"), /"nope" was not found/);
+  });
+
+  it("playUntil rejects an ambiguous marker", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    s.animation.add("flip1", new AnimationClip({ frames: [20, 21], fps: 10, loop: true, markers: { same: 0 } }));
+    s.animation.add("flip2", new AnimationClip({ frames: [22, 23], fps: 10, loop: true, markers: { same: 1 } }));
+    assert.throws(() => s.animation.playUntil("same"), /ambiguous/);
+  });
+
+  it("pauseAt arms the current playback without replacing it", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    s.animation.play("jump");
+    s.animation.pauseAt("airborne");
+    assert.strictEqual(s.animation.current, "jump");
+
+    const seen = [];
+    for (let i = 0; i < 40; i++) {
+      world.update(1 / 60);
+      seen.push(readState(s).frame);
+    }
+    assert.deepStrictEqual([...new Set(seen)], [0, 1, 2]);
+    assert.strictEqual(readState(s).frame, 2);
+    assert.strictEqual(s.animation.playing, false);
+
+    s.animation.resume();
+    const c = s.world.get(s.entity, Animation);
+    assert.strictEqual(c.stopAt, 0);
+    for (let i = 0; i < 120; i++) world.update(1 / 60);
+    assert.strictEqual(readState(s).frame, 4);
+    assert.strictEqual(s.animation.playing, false);
+  });
+
+  it("pauseAt requires a current animation", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    assert.throws(() => s.animation.pauseAt("airborne"), /no animation is currently playing/);
+  });
+
+  it("pauseAt rejects a marker the current clip does not define", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    s.animation.play("idle");
+    assert.throws(() => s.animation.pauseAt("airborne"), /"airborne" was not found/);
+  });
+
+  it("pause() clears the armed stop target", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    s.animation.play("jump");
+    s.animation.pauseAt("airborne");
+    const c = s.world.get(s.entity, Animation);
+    assert.strictEqual(c.stopAt, 3);
+    s.animation.pause();
+    assert.strictEqual(c.stopAt, 0);
+    assert.strictEqual(s.animation.playing, false);
+  });
+
+  it("playUntil does not interrupt a forced animation", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    s.animation.play("walk");
+    s.animation.play("death", { force: true });
+    s.animation.playUntil("airborne");
+    assert.strictEqual(s.animation.current, "death");
+  });
+
+  it("a forced clip can arm its own marker", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    s.animation.play("walk");
+    s.animation.play("death", { force: true });
+    s.animation.playUntil("corpse");
+    const seen = [];
+    for (let i = 0; i < 40; i++) {
+      world.update(1 / 60);
+      seen.push(readState(s).frame);
+    }
+    assert.deepStrictEqual([...new Set(seen)], [0, 1, 2]);
+    assert.strictEqual(readState(s).frame, 2);
+    assert.strictEqual(s.animation.playing, false);
+  });
+
+  it("_toAssetClip preserves timing and markers when remapping frames to asset ids", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    const clip = new AnimationClip({
+      frames: [
+        { sourceImage: {}, sx: 0, sy: 0, sw: 8, sh: 8 },
+        { sourceImage: {}, sx: 8, sy: 0, sw: 8, sh: 8 },
+      ],
+      fps: 10,
+      loop: true,
+      timing: [0.1, 0.2],
+      markers: { start: 0, end: 1 },
+    });
+    s.animation.add("fancy", clip);
+    const stored = s.animation.animations.get("fancy");
+    assert.strictEqual(typeof stored.frames[0], "number");
+    assert.deepStrictEqual(stored.timing, [0.1, 0.2]);
+    assert.strictEqual(stored.markers.start, 0);
+    assert.strictEqual(stored.markers.end, 1);
+  });
+});
