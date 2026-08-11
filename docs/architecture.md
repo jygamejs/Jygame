@@ -20,7 +20,7 @@ The scheduler runs all systems each frame via `world.update(dt)`.
 | `Renderable` | `{draw(ctx,w,h), image, style}` | Per-row references |
 | `Visible` | `{visible: uint8}` | SoA column |
 | `RenderBounds` | `{x: float64, y: float64, w: float64, h: float64}` | SoA columns |
-| `Animation` | `{clipId: u16, frameIndex: u32, elapsed: f32, isPlaying: u8, speed: f32, mode: u8, loop: u8}` | SoA columns |
+| `Animation` | `{clipId: u16, frameIndex: u32, elapsed: f32, isPlaying: u8, speed: f32, mode: u8, loop: u8, stopAt: u32}` | SoA columns |
 | `Trail` | `{maxLength: uint32, interval: float64, elapsed: float64, points: ref}` | Mixed |
 | `Parent` | `{entity: uint32}` | SoA column |
 | `Children` | (empty — tag component) | None |
@@ -210,6 +210,91 @@ AnimationSystem (extends System)
 - Playback intent (names, queue) lives in the `AnimationPlayback` resource so
   the Sprite facade and the system share one controller
 - Writes `Renderable.image` directly — RenderSystem is unaware of AnimationSystem
+- Frame decoding goes through `AnimationClip.frameAt(elapsed, wrap)`:
+  uniform clips stay O(1) (`floor(elapsed / frameDuration)` + modulo), while
+  custom-timing clips use a prefix-sum timeline (`_timeAt`) — see the
+  "Animation Timeline" section below
+- Armed marker stops read the `Animation.stopAt` column (`0` = none,
+  `position + 1` = target). A marker pause decodes **without wrapping** so a
+  large `dt` cannot skip the marker, pauses exactly at the target, and caps
+  `elapsed` at the marker boundary so `resume()` continues deterministically
+  (no frame restart, no time consumed past the marker). It is a pause, not
+  completion: the queue, `onComplete`, and the persistent request are untouched
+
+### Animation Timeline: sequence, timing, and markers
+
+An animation is a **timeline**, not just a list of images. Three orthogonal
+dimensions describe it:
+
+| Concept | Answers | Example |
+|---|---|---|
+| `sequence` | *which* frames play, in what order | `sequence: [0, 1, 2, 1, 0]` |
+| `timing` | *how long* each playback position lasts | `timing: [0.08, 0.08, 0.40, 0.08]` |
+| `markers` | *when* meaningful points occur (for gameplay sync) | `markers: { airborne: 2, landing: 4 }` |
+
+`AnimationClip` is the single normalization point. `frames` are the extracted
+source frames; the clip derives the normalized playback list with precedence
+`explicit sequence > pingPong > identity`. It then stores the per-position
+durations (`_durations`), a prefix-sum timeline (`_timeAt`), and the marker map
+(`_markers`). `fps` remains the uniform default when `timing` is absent, so
+simple animations are unchanged.
+
+```js
+const animations = await Image.animate({
+  image: "jump.png",
+  sliceX: 5,
+  sliceY: 1,
+  jump: {
+    sequence: [0, 1, 2, 3, 4],
+    timing: [0.08, 0.08, 0.20, 0.40, 0.08],
+    markers: { airborne: 2, landing: 4 },
+  },
+});
+```
+
+- **Sequence** reuses source frames without duplicating images — e.g.
+  `sequence: [0, 1, 2, 1, 0]` for a deliberate return, or
+  `sequence: [0, 1, 2, 2, 2, 3]` where repeated positions are legitimate
+  (each repeated position is still a distinct timeline point).
+- **Timing** holds a pose without changing the global FPS — e.g.
+  `timing: [0.08, 0.08, 0.40, 0.08]` keeps one frame on screen five times
+  longer. `timing` aligns to the normalized playback positions, not the raw
+  source frames.
+- **Markers** name positions on the normalized playback timeline (not source
+  frame indices). They are animation-relative — `impact` may exist in several
+  clips without colliding.
+
+Gameplay synchronizes with the animation through the Sprite facade:
+
+```js
+if (Input.pressed("jump")) {
+  king.animation.playUntil("airborne"); // 0 → 1 → 2, then PAUSED
+}
+if (player.isFalling) {
+  king.animation.resume(); // 2 → 3 → 4 → complete
+}
+```
+
+or, arming the current playback without restarting it:
+
+```js
+king.animation.play("jump");
+king.animation.pauseAt("airborne");
+```
+
+| Method | Meaning |
+|---|---|
+| `play(name)` | Persistent request (loops per the clip) |
+| `playOnce(name)` | Temporary one-shot to completion |
+| `playUntil(marker)` | Temporary playback that pauses exactly at a marker |
+| `pauseAt(marker)` | Arm the current playback to pause at a marker |
+| `pause()` / `resume()` | Pause / continue exactly where playback stopped |
+| `stop()` | Reset playback state |
+
+A marker stop is **not** completion: `onComplete` does not fire, the queue does
+not advance, and the persistent request is preserved. `resume()` clears the
+armed stop target and continues from the marker; only a genuine end of the
+(clip-forced finite) playback triggers normal completion/queue behavior.
 
 ### RenderSystem
 
