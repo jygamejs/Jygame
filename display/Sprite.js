@@ -9,7 +9,7 @@ import { RenderBounds } from "../ecs/components/RenderBounds.js";
 import { AnimationClipRegistry } from "../ecs/animation/AnimationClipRegistry.js";
 import { AnimationCallbacks } from "../ecs/animation/AnimationCallbacks.js";
 import { AnimationClip } from "../ecs/animation/AnimationClip.js";
-import { AnimationPlayback, AnimationPlaybackState, LoopOverride, PlaybackMode, startPlayback } from "../ecs/animation/AnimationPlayback.js";
+import { AnimationPlayback, AnimationPlaybackState, LoopOverride, PlaybackMode, resolveClipId, startPlayback } from "../ecs/animation/AnimationPlayback.js";
 import { AssetRegistry } from "../ecs/render/AssetRegistry.js";
 import { SpatialHash } from "../collision/SpatialHash.js";
 import { Layer } from "../view/Layer.js";
@@ -667,6 +667,40 @@ export class Sprite {
     return ok;
   }
 
+  // Start `name` with the playback cursor placed at `position` on its
+  // normalized timeline. Used by playAfter()/resumeAt() for cursor-selecting
+  // playback: a deliberate temporary one-shot, not a completion — onComplete
+  // never fires from positioning.
+  _positionPlayback(name, position, opts = {}) {
+    const w = this.#world;
+    const state = this._getPlaybackState();
+    const anim = w.get(this.#entity, Animation);
+    const registry = w.hasResource(AnimationClipRegistry) ? w.getResource(AnimationClipRegistry) : null;
+    const clip = this._animMap && this._animMap.get(name);
+    const clipId = resolveClipId(registry, this.#entity, name);
+    const frameCount = clip ? (clip.frameCount ?? clip.frames.length) : 0;
+
+    state.current = name;
+    state.hold = !!opts.hold;
+
+    anim.frameIndex = position;
+    anim.elapsed = clip
+      ? (typeof clip.timeAt === "function" ? clip.timeAt(position) : position * (1 / (clip.fps ?? 8)))
+      : 0;
+    anim.isPlaying = opts.playing === false ? 0 : 1;
+    anim.speed = 1;
+    anim.mode = opts.mode ?? PlaybackMode.ONCE;
+    anim.loop = opts.loop ?? LoopOverride.NON_LOOP;
+    anim.stopAt = 0;
+    if (clipId !== null && clipId !== undefined) anim.clipId = clipId;
+
+    if (clip && clip.frames.length && w.has(this.#entity, Renderable)) {
+      w.get(this.#entity, Renderable).image = clip.frames[Math.min(position, frameCount - 1)];
+    }
+    if (clip) this._resolveFromClip(name, clip);
+    return anim;
+  }
+
   // Resolve a marker against one named animation. Markers are animation-relative
   // and the public API names both the animation and the marker, so there is no
   // implicit search and no ambiguity. Throws descriptive errors for either.
@@ -990,6 +1024,48 @@ export class Sprite {
         state.queue.length = 0;
         self._startPlayback(name, PlaybackMode.ONCE, { loop: LoopOverride.NON_LOOP });
         anim.stopAt = position + 1;
+        return this;
+      },
+
+      playAfter(name, marker) {
+        const anim = self.#world.get(self.#entity, Animation);
+        const state = self._getPlaybackState();
+        const { clip, position } = self._resolveClipMarker(name, marker);
+
+        // A forced animation owns the sprite; only its own clip may be
+        // repositioned (same ownership rule playOnce() uses).
+        if (anim.mode === PlaybackMode.FORCED && state.current !== name) return this;
+
+        // A fresh temporary playback replaces the current sequence; keeping the
+        // current clip is a reposition, which must not touch the queue.
+        if (state.current !== name) state.queue.length = 0;
+
+        const frameCount = clip.frameCount ?? clip.frames.length;
+        const start = position + 1;
+        if (start >= frameCount) {
+          // The marker is the final playback position → the animation is ended.
+          // Move the cursor past it: do not wrap to frame 0, do not fire
+          // onComplete.
+          self._positionPlayback(name, frameCount - 1, { playing: false });
+          anim.elapsed = clip.duration;
+          return this;
+        }
+        self._positionPlayback(name, start);
+        return this;
+      },
+
+      resumeAt(name, marker) {
+        const anim = self.#world.get(self.#entity, Animation);
+        const state = self._getPlaybackState();
+        const { position } = self._resolveClipMarker(name, marker);
+
+        // A forced animation owns the sprite; only its own clip may be
+        // repositioned (same ownership rule playOnce() uses).
+        if (anim.mode === PlaybackMode.FORCED && state.current !== name) return this;
+
+        if (state.current !== name) state.queue.length = 0;
+        // Cursor-selecting: position at the marker, not past it.
+        self._positionPlayback(name, position);
         return this;
       },
 

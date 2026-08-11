@@ -53,6 +53,35 @@ function makeSprite(world) {
   return s;
 }
 
+function makeMarkerSprite(world) {
+  Sprite.setDefaultWorld(world);
+  const s = new Sprite();
+  s.animation.addAll({
+    idle: new AnimationClip({ frames: [0, 1], fps: 10, loop: true }),
+    walk: new AnimationClip({ frames: [2, 3], fps: 10, loop: true }),
+    jump: new AnimationClip({
+      frames: [6, 7, 8, 9, 10],
+      fps: 10,
+      loop: true,
+      timing: [0.08, 0.08, 0.5, 0.1, 0.12],
+      markers: { airborne: 2, landing: 4 },
+    }),
+    attack: new AnimationClip({
+      frames: [11, 12, 13],
+      fps: 10,
+      loop: true,
+      markers: { windup: 1, impact: 2 },
+    }),
+    death: new AnimationClip({
+      frames: [30, 31, 32],
+      fps: 10,
+      loop: false,
+      markers: { corpse: 2 },
+    }),
+  });
+  return s;
+}
+
 function readState(sprite) {
   const c = sprite.world.get(sprite.entity, Animation);
   return { current: sprite.animation.current, frame: c.frameIndex, playing: sprite.animation.playing, mode: c.mode };
@@ -458,35 +487,6 @@ describe("marker stop state", () => {
 
 // ─── playUntil / pauseAt ────────────────────────────────
 describe("animation.playUntil() / pauseAt()", () => {
-  function makeMarkerSprite(world) {
-    Sprite.setDefaultWorld(world);
-    const s = new Sprite();
-    s.animation.addAll({
-      idle: new AnimationClip({ frames: [0, 1], fps: 10, loop: true }),
-      walk: new AnimationClip({ frames: [2, 3], fps: 10, loop: true }),
-      jump: new AnimationClip({
-        frames: [6, 7, 8, 9, 10],
-        fps: 10,
-        loop: true,
-        timing: [0.08, 0.08, 0.5, 0.1, 0.12],
-        markers: { airborne: 2, landing: 4 },
-      }),
-      attack: new AnimationClip({
-        frames: [11, 12, 13],
-        fps: 10,
-        loop: true,
-        markers: { windup: 1, impact: 2 },
-      }),
-      death: new AnimationClip({
-        frames: [30, 31, 32],
-        fps: 10,
-        loop: false,
-        markers: { corpse: 2 },
-      }),
-    });
-    return s;
-  }
-
   it("playUntil starts the clip and stops exactly at the marker", () => {
     const world = createWorld();
     const s = makeMarkerSprite(world);
@@ -745,5 +745,148 @@ describe("animation.playUntil() / pauseAt()", () => {
     assert.deepStrictEqual(stored.timing, [0.1, 0.2]);
     assert.strictEqual(stored.markers.start, 0);
     assert.strictEqual(stored.markers.end, 1);
+  });
+});
+
+// ─── playAfter / resumeAt ──────────────────────────────
+describe("animation.playAfter() / resumeAt()", () => {
+  it("playAfter starts at the position after the marker", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    s.animation.playAfter("jump", "airborne"); // airborne: 2 → start at 3
+    assert.strictEqual(s.animation.current, "jump");
+    assert.strictEqual(readState(s).frame, 3);
+    assert.strictEqual(s.animation.playing, true);
+    world.update(0.01); // position 3's timing is 0.1s — still there
+    assert.strictEqual(readState(s).frame, 3);
+  });
+
+  it("playAfter works with a repeated sequence position", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    s.animation.add("loopJump", new AnimationClip({
+      frames: [50, 51, 52, 53, 54, 55, 56],
+      sequence: [0, 1, 2, 2, 2, 3, 4],
+      fps: 10,
+      loop: true,
+      markers: { airborne: 2, landing: 6 },
+    }));
+    s.animation.playAfter("loopJump", "airborne"); // start at 3
+    assert.strictEqual(readState(s).frame, 3);
+    // position 3 repeats the marker's source frame but is a distinct position
+    const clip = s.animation.animations.get("loopJump");
+    assert.strictEqual(clip.frames[3], clip.frames[2]);
+  });
+
+  it("playAfter uses the positioned frame's duration", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    s.animation.add("timed", new AnimationClip({
+      frames: [60, 61, 62, 63],
+      fps: 10,
+      loop: true,
+      timing: [0.1, 0.2, 0.3, 0.4],
+      markers: { mid: 1 },
+    }));
+    s.animation.playAfter("timed", "mid"); // start at 2
+    assert.strictEqual(readState(s).frame, 2);
+    const c = s.world.get(s.entity, Animation);
+    assert.ok(Math.abs(c.elapsed - 0.3) < 1e-6, "cursor placed at timeAt(2)");
+    world.update(0.2); // inside position 2's 0.3s
+    assert.strictEqual(readState(s).frame, 2);
+    world.update(0.2); // 0.5 cumulative → position 3
+    assert.strictEqual(readState(s).frame, 3);
+  });
+
+  it("playAfter with a final-frame marker ends without wrapping", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    const completed = [];
+    s.animation.onComplete((name) => completed.push(name));
+    s.animation.playAfter("jump", "landing"); // landing: 4 = last position
+    assert.strictEqual(s.animation.current, "jump");
+    assert.strictEqual(readState(s).frame, 4);
+    assert.strictEqual(s.animation.playing, false);
+    assert.deepStrictEqual(completed, []);
+    world.update(0.5); // stays ended, does not wrap to frame 0
+    assert.strictEqual(readState(s).frame, 4);
+  });
+
+  it("resumeAt positions at the exact marker and resumes", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    s.animation.resumeAt("jump", "airborne");
+    assert.strictEqual(s.animation.current, "jump");
+    assert.strictEqual(readState(s).frame, 2);
+    assert.strictEqual(s.animation.playing, true);
+  });
+
+  it("resumeAt is cursor-selecting: repositions a marker-paused clip", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    s.animation.playUntil("jump", "airborne");
+    for (let i = 0; i < 40; i++) world.update(1 / 60);
+    assert.strictEqual(readState(s).frame, 2);
+    assert.strictEqual(s.animation.playing, false);
+
+    s.animation.resumeAt("jump", "airborne"); // back to the marker
+    assert.strictEqual(readState(s).frame, 2);
+    assert.strictEqual(s.animation.playing, true);
+
+    const seen = [];
+    for (let i = 0; i < 120; i++) {
+      world.update(1 / 60);
+      seen.push(readState(s).frame);
+    }
+    assert.strictEqual(seen[seen.length - 1], 4, "runs to completion");
+    assert.strictEqual(s.animation.playing, false);
+  });
+
+  it("resumeAt works with timing and repeated frames", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    s.animation.add("seq", new AnimationClip({
+      frames: [60, 61, 62, 63, 64],
+      sequence: [0, 1, 2, 2, 3, 4],
+      fps: 10,
+      loop: true,
+      timing: [0.1, 0.1, 0.1, 0.3, 0.1, 0.2],
+      markers: { airborne: 2, landing: 5 },
+    }));
+    s.animation.resumeAt("seq", "airborne"); // position 2
+    assert.strictEqual(readState(s).frame, 2);
+    const c = s.world.get(s.entity, Animation);
+    assert.ok(Math.abs(c.elapsed - 0.2) < 1e-6, "cursor placed at timeAt(2)");
+    world.update(0.15); // still inside position 2's 0.1s? no — 0.2+0.15=0.35 → position 3
+    assert.strictEqual(readState(s).frame, 3);
+  });
+
+  it("playAfter and resumeAt respect forced playback ownership", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    s.animation.play("walk");
+    s.animation.play("death", { force: true });
+    s.animation.playAfter("jump", "airborne");
+    assert.strictEqual(s.animation.current, "death");
+    s.animation.resumeAt("jump", "airborne");
+    assert.strictEqual(s.animation.current, "death");
+  });
+
+  it("playAfter and resumeAt do not fire onComplete merely by positioning", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    const completed = [];
+    s.animation.onComplete((name) => completed.push(name));
+    s.animation.resumeAt("jump", "airborne");
+    world.update(1 / 60);
+    s.animation.playAfter("jump", "landing");
+    assert.deepStrictEqual(completed, []);
+  });
+
+  it("playAfter and resumeAt validate the animation and marker", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    assert.throws(() => s.animation.playAfter("nope", "airborne"), /Unknown animation "nope"/);
+    assert.throws(() => s.animation.resumeAt("jump", "nope"), /Animation "jump" has no marker "nope"/);
   });
 });
