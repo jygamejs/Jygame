@@ -701,6 +701,23 @@ export class Sprite {
     return anim;
   }
 
+  // The clip currently owning playback, or null.
+  _currentClip() {
+    const state = this._getPlaybackState();
+    if (!state.current) return null;
+    const map = this._animMap;
+    return map ? map.get(state.current) ?? null : null;
+  }
+
+  // Effective loop policy for the current playback: loop override wins, else
+  // the clip's own flag. Mirrors the AnimationSystem's resolution.
+  _effectiveLoops(clip) {
+    const comp = this.#world.get(this.#entity, Animation);
+    if (comp.loop === LoopOverride.NON_LOOP) return false;
+    if (comp.loop === LoopOverride.LOOP) return true;
+    return !!(clip && clip.loop);
+  }
+
   // Resolve a marker against one named animation. Markers are animation-relative
   // and the public API names both the animation and the marker, so there is no
   // implicit search and no ambiguity. Throws descriptive errors for either.
@@ -859,6 +876,78 @@ export class Sprite {
       set playing(v) {
         const comp = self.#world.get(self.#entity, Animation);
         comp.isPlaying = v ? 1 : 0;
+      },
+
+      get isPlaying() {
+        const comp = self.#world.get(self.#entity, Animation);
+        return !!comp.isPlaying;
+      },
+
+      // The current playback position in the normalized timeline (the clip's
+      // `frames` are already sequenced, so frameIndex is the timeline cursor).
+      get frame() {
+        const comp = self.#world.get(self.#entity, Animation);
+        return comp.frameIndex;
+      },
+
+      get position() {
+        const comp = self.#world.get(self.#entity, Animation);
+        return comp.frameIndex;
+      },
+
+      // Normalized progress through the current clip (0 → 1), based on elapsed
+      // timeline duration (timing-aware). Looping clips wrap; a completed
+      // non-looping clip reports exactly 1.
+      get progress() {
+        const state = self._getPlaybackState();
+        const comp = self.#world.get(self.#entity, Animation);
+        const clip = self._currentClip();
+        if (!state.current || !clip) return 0;
+        const frameCount = clip.frameCount ?? clip.frames.length;
+        const duration = clip.duration ?? frameCount * (1 / (clip.fps ?? 8));
+        if (!duration || duration <= 0) return 0;
+        const elapsed = comp.elapsed;
+        return self._effectiveLoops(clip)
+          ? (elapsed % duration) / duration
+          : Math.min(1, elapsed / duration);
+      },
+
+      get isPaused() {
+        const comp = self.#world.get(self.#entity, Animation);
+        if (comp.isPlaying) return false;
+        return !!self._getPlaybackState().current && !this.isComplete;
+      },
+
+      // True only for a genuinely completed finite playback. A marker stop
+      // (even at the final position) is a pause, not completion; looping
+      // playback is never complete.
+      get isComplete() {
+        const state = self._getPlaybackState();
+        const comp = self.#world.get(self.#entity, Animation);
+        if (!state.current) return false;
+        const clip = self._currentClip();
+        if (!clip) return false;
+        if (comp.isPlaying) return false;
+        if (comp.stopAt !== 0) return false;
+        if (self._effectiveLoops(clip)) return false;
+        const frameCount = clip.frameCount ?? clip.frames.length;
+        if (comp.frameIndex !== frameCount - 1) return false;
+        const duration = clip.duration ?? frameCount * (1 / (clip.fps ?? 8));
+        return comp.elapsed >= duration;
+      },
+
+      // The marker name at the current playback position, or null.
+      get marker() {
+        const state = self._getPlaybackState();
+        const comp = self.#world.get(self.#entity, Animation);
+        if (!state.current) return null;
+        const clip = self._currentClip();
+        if (!clip || !clip.markers) return null;
+        const position = comp.frameIndex;
+        for (const name of Object.keys(clip.markers)) {
+          if (clip.markers[name] === position) return name;
+        }
+        return null;
       },
 
       _registerFrame(f) {
@@ -1067,6 +1156,26 @@ export class Sprite {
         // Cursor-selecting: position at the marker, not past it.
         self._positionPlayback(name, position);
         return this;
+      },
+
+      isAt(name, marker) {
+        const state = self._getPlaybackState();
+        if (state.current !== name) return false;
+        const clip = self._animMap && self._animMap.get(name);
+        const markers = clip && clip.markers;
+        if (!markers || !Object.prototype.hasOwnProperty.call(markers, marker)) return false;
+        const comp = self.#world.get(self.#entity, Animation);
+        return comp.frameIndex === markers[marker];
+      },
+
+      hasReached(name, marker) {
+        const state = self._getPlaybackState();
+        if (state.current !== name) return false;
+        const clip = self._animMap && self._animMap.get(name);
+        const markers = clip && clip.markers;
+        if (!markers || !Object.prototype.hasOwnProperty.call(markers, marker)) return false;
+        const comp = self.#world.get(self.#entity, Animation);
+        return comp.frameIndex >= markers[marker];
       },
 
       pauseAt(name, marker) {

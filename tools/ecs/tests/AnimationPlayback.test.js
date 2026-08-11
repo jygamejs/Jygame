@@ -890,3 +890,198 @@ describe("animation.playAfter() / resumeAt()", () => {
     assert.throws(() => s.animation.resumeAt("jump", "nope"), /Animation "jump" has no marker "nope"/);
   });
 });
+
+// ─── marker queries ────────────────────────────────────
+describe("animation.isAt() / hasReached()", () => {
+  it("isAt reports the marker only at its exact position", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    s.animation.playUntil("jump", "airborne"); // stops at 2
+    for (let i = 0; i < 40; i++) world.update(1 / 60);
+    assert.strictEqual(readState(s).frame, 2);
+    assert.strictEqual(s.animation.isAt("jump", "airborne"), true);
+
+    s.animation.resume();
+    for (let i = 0; i < 40; i++) {
+      world.update(1 / 60);
+      if (readState(s).frame > 2) break;
+    }
+    assert.ok(readState(s).frame > 2, "advanced past the marker");
+    assert.strictEqual(s.animation.isAt("jump", "airborne"), false);
+  });
+
+  it("isAt is true while paused at the marker", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    s.animation.playUntil("jump", "airborne");
+    for (let i = 0; i < 40; i++) world.update(1 / 60);
+    assert.strictEqual(s.animation.playing, false);
+    assert.strictEqual(s.animation.isAt("jump", "airborne"), true);
+  });
+
+  it("isAt distinguishes repeated source frames by playback position", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    s.animation.add("seq", new AnimationClip({
+      frames: [50, 51, 52, 53, 54],
+      sequence: [0, 1, 2, 2, 2, 3, 4],
+      fps: 10,
+      loop: false,
+      markers: { airborne: 2 },
+    }));
+    s.animation.play("seq"); // plays the 7-position clip once
+    const samples = [];
+    for (let i = 0; i < 80; i++) {
+      world.update(1 / 60);
+      samples.push([readState(s).frame, s.animation.isAt("seq", "airborne")]);
+    }
+    const atFrame2 = samples.filter(([f, at]) => f === 2 && at).length;
+    const atFrame3or4 = samples.filter(([f, at]) => (f === 3 || f === 4) && at).length;
+    assert.ok(atFrame2 > 0, "reported at playback position 2");
+    assert.strictEqual(atFrame3or4, 0, "repeated source frames are not the marker");
+  });
+
+  it("isAt returns false when a different clip is current", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    s.animation.play("walk");
+    assert.strictEqual(s.animation.isAt("jump", "airborne"), false);
+  });
+
+  it("hasReached is false before, true at and after the marker", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    s.animation.add("seq", new AnimationClip({
+      frames: [50, 51, 52, 53, 54],
+      sequence: [0, 1, 2, 2, 2, 3, 4],
+      fps: 10,
+      loop: false,
+      markers: { airborne: 2, landing: 6 },
+    }));
+    s.animation.play("seq");
+    const seen = [];
+    for (let i = 0; i < 80; i++) {
+      world.update(1 / 60);
+      const f = readState(s).frame;
+      seen.push({ f, at: s.animation.isAt("seq", "airborne"), reached: s.animation.hasReached("seq", "airborne") });
+    }
+    const before = seen.filter((r) => r.f < 2);
+    const at = seen.filter((r) => r.f === 2);
+    const after = seen.filter((r) => r.f > 2);
+    assert.ok(before.length > 0 && before.every((r) => !r.reached && !r.at), "before the marker");
+    assert.ok(at.length > 0 && at.every((r) => r.reached && r.at), "at the marker");
+    assert.ok(after.length > 0 && after.every((r) => r.reached && !r.at), "after the marker");
+    // completed clip still reports hasReached
+    assert.strictEqual(s.animation.playing, false);
+    assert.strictEqual(s.animation.hasReached("seq", "airborne"), true);
+  });
+});
+
+// ─── state getters ─────────────────────────────────────
+describe("animation state getters", () => {
+  it("frame and position expose the playback cursor", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    s.animation.play("jump");
+    world.update(0.09); // timing: position 1 spans [0.08, 0.16)
+    assert.strictEqual(s.animation.position, 1);
+    assert.strictEqual(s.animation.frame, s.animation.position);
+    assert.strictEqual(s.animation.current, "jump");
+  });
+
+  it("progress is timeline-based and reports 1 at completion", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    s.animation.add("flat", new AnimationClip({
+      frames: [0, 1, 2, 3],
+      fps: 10,
+      loop: false,
+      timing: [0.1, 0.2, 0.3, 0.4],
+    }));
+    s.animation.play("flat"); // total duration 1.0s
+    assert.strictEqual(s.animation.progress, 0);
+    world.update(0.05);
+    assert.ok(Math.abs(s.animation.progress - 0.05) < 1e-6);
+    world.update(0.05);
+    assert.ok(Math.abs(s.animation.progress - 0.1) < 1e-6);
+    for (let i = 0; i < 100; i++) world.update(0.1);
+    assert.strictEqual(s.animation.isPlaying, false);
+    assert.strictEqual(s.animation.progress, 1);
+  });
+
+  it("progress wraps for looping clips", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    s.animation.play("walk"); // loop: true, duration 0.2s
+    world.update(0.5); // wraps → 0.1s into the cycle → 50%
+    assert.ok(Math.abs(s.animation.progress - 0.5) < 1e-6);
+  });
+
+  it("isPaused / isComplete across marker pause, manual pause, and completion", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+
+    s.animation.playUntil("jump", "airborne");
+    for (let i = 0; i < 40; i++) world.update(1 / 60);
+    assert.strictEqual(s.animation.isPlaying, false);
+    assert.strictEqual(s.animation.isPaused, true);
+    assert.strictEqual(s.animation.isComplete, false);
+
+    s.animation.resume();
+    s.animation.pause();
+    assert.strictEqual(s.animation.isPlaying, false);
+    assert.strictEqual(s.animation.isPaused, true);
+    assert.strictEqual(s.animation.isComplete, false);
+
+    s.animation.resume();
+    for (let i = 0; i < 120; i++) world.update(1 / 60);
+    assert.strictEqual(s.animation.isPlaying, false);
+    assert.strictEqual(s.animation.isPaused, false);
+    assert.strictEqual(s.animation.isComplete, true);
+  });
+
+  it("a paused looping clip is never complete, even at the last position", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    s.animation.play("walk"); // loop: true, 2 frames
+    for (let i = 0; i < 30; i++) world.update(1 / 60); // elapsed 0.5 → frame 1 (last)
+    assert.strictEqual(readState(s).frame, 1);
+    s.animation.pause();
+    assert.strictEqual(s.animation.isComplete, false);
+    assert.strictEqual(s.animation.isPaused, true);
+  });
+
+  it("marker returns the name at the current position, else null", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    s.animation.playUntil("jump", "airborne");
+    for (let i = 0; i < 40; i++) world.update(1 / 60);
+    assert.strictEqual(s.animation.marker, "airborne");
+    s.animation.resume();
+    for (let i = 0; i < 40; i++) {
+      world.update(1 / 60);
+      if (readState(s).frame > 2) break;
+    }
+    assert.strictEqual(s.animation.marker, null);
+  });
+
+  it("state getters reflect queued and forced playback", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    s.animation.play("idle");
+    s.animation.playOnce("attack");
+    s.animation.queue("death");
+    const seen = [];
+    for (let i = 0; i < 60; i++) {
+      world.update(1 / 60);
+      seen.push(s.animation.current);
+    }
+    assert.ok(seen.includes("attack"));
+    assert.ok(seen.includes("death"));
+    assert.strictEqual(seen[seen.length - 1], "idle");
+
+    s.animation.play("walk", { force: true });
+    assert.strictEqual(s.animation.current, "walk");
+    assert.strictEqual(s.animation.isPlaying, true);
+  });
+});
