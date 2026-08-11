@@ -36,6 +36,7 @@ export class AnimationSystem extends System {
       const speedCol = table.getColumn(aid, "speed");
       const modeCol = table.getColumn(aid, "mode");
       const loopCol = table.getColumn(aid, "loop");
+      const stopAtCol = table.getColumn(aid, "stopAt");
       const imageCol = table.getColumn(rid, "image");
       if (!clipIdCol || !frameIndexCol || !elapsedCol || !isPlayingCol || !speedCol || !imageCol) continue;
 
@@ -44,7 +45,7 @@ export class AnimationSystem extends System {
         if (!isPlayingCol[r]) continue;
 
         const clip = registry.getById(clipIdCol[r]);
-        if (!clip) continue;
+        if (!clip || typeof clip.frameAt !== "function") continue;
 
         const frameCount = clip.frameCount;
         if (frameCount === 0) {
@@ -53,8 +54,30 @@ export class AnimationSystem extends System {
         }
 
         elapsedCol[r] += dt * speedCol[r];
+        if (elapsedCol[r] < 0) elapsedCol[r] = 0;
 
-        let frame = Math.floor(elapsedCol[r] / clip.frameDuration);
+        // An armed marker stop (playUntil/pauseAt): decode without wrapping so
+        // a large dt cannot jump past the target. On reaching it, pause at the
+        // marker and cap `elapsed` at the marker boundary so `resume()` never
+        // restarts the marker frame or consumes time beyond it. This is a pause,
+        // not completion — the queue, onComplete, and persistent request stay
+        // untouched.
+        const stopRaw = stopAtCol ? stopAtCol[r] : 0;
+        if (stopRaw > 0) {
+          const stopTarget = stopRaw - 1;
+          const target = clip.frameAt(elapsedCol[r], false);
+          if (target >= stopTarget) {
+            const cap = clip.timeAt(stopTarget + 1);
+            if (elapsedCol[r] > cap) elapsedCol[r] = cap;
+            isPlayingCol[r] = 0;
+            frameIndexCol[r] = stopTarget;
+            imageCol[r] = clip.frames[stopTarget];
+            continue;
+          }
+          frameIndexCol[r] = target;
+          imageCol[r] = clip.frames[target];
+          continue;
+        }
 
         const loopOverride = loopCol ? loopCol[r] : LoopOverride.RESPECT_CLIP;
         let loops;
@@ -62,30 +85,34 @@ export class AnimationSystem extends System {
         else if (loopOverride === LoopOverride.LOOP) loops = true;
         else loops = clip.loop;
 
+        let frame;
         if (loops) {
-          frame %= clip.frameCount;
-        } else if (frame >= clip.frameCount) {
-          frame = clip.frameCount - 1;
-          isPlayingCol[r] = 0;
-          frameIndexCol[r] = frame;
-          imageCol[r] = clip.frames[frame];
+          frame = clip.frameAt(elapsedCol[r], true);
+        } else {
+          frame = clip.frameAt(elapsedCol[r], false);
+          if (frame >= frameCount) {
+            frame = frameCount - 1;
+            isPlayingCol[r] = 0;
+            frameIndexCol[r] = frame;
+            imageCol[r] = clip.frames[frame];
 
-          if (entityIds) {
-            const entity = entityIds[r];
-            const state = playback && playback.has(entity) ? playback.get(entity) : null;
-            const completedName = state ? state.current : null;
-            if (state) {
-              this._advanceAfterCompletion(ctx, entity, state, modeCol ? modeCol[r] : PlaybackMode.NORMAL);
+            if (entityIds) {
+              const entity = entityIds[r];
+              const state = playback && playback.has(entity) ? playback.get(entity) : null;
+              const completedName = state ? state.current : null;
+              if (state) {
+                this._advanceAfterCompletion(ctx, entity, state, modeCol ? modeCol[r] : PlaybackMode.NORMAL);
+              }
+              if (callbacks) {
+                const cb = callbacks.get(entity);
+                if (cb) cb(completedName);
+              }
             }
-            if (callbacks) {
-              const cb = callbacks.get(entity);
-              if (cb) cb(completedName);
-            }
+            // The transition above may have started a fresh clip (queue advance
+            // or resume), which already wrote frameIndex 0 and the first frame.
+            // Do not let the trailing writes clobber that.
+            continue;
           }
-          // The transition above may have started a fresh clip (queue advance
-          // or resume), which already wrote frameIndex 0 and the first frame.
-          // Do not let the trailing writes clobber that.
-          continue;
         }
 
         frameIndexCol[r] = frame;

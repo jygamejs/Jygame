@@ -7,5 +7,6 @@ export class Animation {
     speed: "f32",
     mode: "u8",
     loop: "u8",
+    stopAt: "u32",
   };
 }

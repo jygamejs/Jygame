@@ -1143,3 +1143,159 @@ describe("AnimationSystem — additional", () => {
     assert.deepStrictEqual(afterKeys, beforeKeys);
   });
 });
+
+// ─── AnimationSystem — Custom Timing ───────────────────
+describe("AnimationSystem — custom timing", () => {
+  function setup(timing, loop) {
+    const world = createWorld();
+    const registry = new AnimationClipRegistry();
+    registry.register("clip", new AnimationClip({ frames: [1, 2, 3], fps: 10, loop, timing }));
+    const clipId = registry.getId("clip");
+    world.setResource(AnimationClipRegistry, registry);
+    world.addSystem(new AnimationSystem());
+    const e = createEntity(world, [[Animation, { clipId, isPlaying: 1, speed: 1 }], [Renderable]]);
+    return { world, e };
+  }
+
+  it("advances per the custom per-position durations", () => {
+    const { world, e } = setup([0.125, 0.25, 0.5], false);
+    world.update(0.125);
+    assert.strictEqual(world.getComponent(e, Animation).frameIndex, 1);
+    world.update(0.125); // cumulative 0.25 — still inside position 1
+    assert.strictEqual(world.getComponent(e, Animation).frameIndex, 1);
+    world.update(0.125); // cumulative 0.375 — enters position 2
+    assert.strictEqual(world.getComponent(e, Animation).frameIndex, 2);
+  });
+
+  it("holds a long pose without completing early", () => {
+    const { world, e } = setup([0.08, 0.5, 0.12], false);
+    const a = world.getComponent(e, Animation);
+    world.update(0.25); // inside the 0.5s pose
+    assert.strictEqual(a.frameIndex, 1);
+    assert.strictEqual(a.isPlaying, 1);
+    world.update(0.25); // 0.5 cumulative — the pose continues
+    assert.strictEqual(a.frameIndex, 1);
+    world.update(0.1); // 0.6 cumulative — the pose ends
+    assert.strictEqual(a.frameIndex, 2);
+  });
+
+  it("completes a non-looping custom-timing clip on a large dt", () => {
+    const { world, e } = setup([0.125, 0.25, 0.5], false);
+    world.update(10);
+    const a = world.getComponent(e, Animation);
+    assert.strictEqual(a.frameIndex, 2);
+    assert.strictEqual(a.isPlaying, 0);
+  });
+
+  it("wraps a looping custom-timing clip at its total duration", () => {
+    const { world, e } = setup([0.125, 0.25, 0.5], true);
+    world.update(0.875);
+    assert.strictEqual(world.getComponent(e, Animation).frameIndex, 0);
+  });
+
+  it("wraps a looping custom-timing clip past multiple durations", () => {
+    const { world, e } = setup([0.125, 0.25, 0.5], true);
+    world.update(1.0); // 1.0 % 0.875 = 0.125 → position 1
+    assert.strictEqual(world.getComponent(e, Animation).frameIndex, 1);
+  });
+
+  it("custom-timing large dt does not crash a looping clip", () => {
+    const { world, e } = setup([0.125, 0.25, 0.5], true);
+    world.update(100000);
+    assert.ok(typeof world.getComponent(e, Animation).frameIndex === "number");
+  });
+});
+
+// ─── AnimationSystem — Marker Stop Targets ─────────────
+describe("AnimationSystem — marker stop targets", () => {
+  function setup(frames, loop) {
+    const world = createWorld();
+    const registry = new AnimationClipRegistry();
+    registry.register("clip", new AnimationClip({ frames, fps: 10, loop }));
+    const clipId = registry.getId("clip");
+    world.setResource(AnimationClipRegistry, registry);
+    world.addSystem(new AnimationSystem());
+    const e = createEntity(world, [[Animation, { clipId, isPlaying: 1, speed: 1 }], [Renderable]]);
+    return { world, e };
+  }
+
+  it("schema exposes a stopAt column", () => {
+    assert.strictEqual(Animation.schema.stopAt, "u32");
+  });
+
+  it("stops exactly at the armed playback position", () => {
+    const { world, e } = setup([1, 2, 3, 4, 5], false);
+    const a = world.getComponent(e, Animation);
+    a.stopAt = 3; // position 2 (1-based encoding)
+    world.update(0.25);
+    assert.strictEqual(a.frameIndex, 2);
+    assert.strictEqual(a.isPlaying, 0);
+  });
+
+  it("does not stop early while still before the armed position", () => {
+    const { world, e } = setup([1, 2, 3, 4, 5], false);
+    const a = world.getComponent(e, Animation);
+    a.stopAt = 3; // position 2
+    world.update(0.15);
+    assert.strictEqual(a.isPlaying, 1);
+    assert.strictEqual(a.frameIndex, 1);
+  });
+
+  it("stops at the marker on a large dt instead of jumping past it", () => {
+    const { world, e } = setup([1, 2, 3, 4, 5], false);
+    const a = world.getComponent(e, Animation);
+    a.stopAt = 3; // position 2
+    world.update(0.5); // would reach position 5 without the stop target
+    assert.strictEqual(a.frameIndex, 2);
+    assert.strictEqual(a.isPlaying, 0);
+  });
+
+  it("stops a looping clip at the armed position", () => {
+    const { world, e } = setup([1, 2, 3, 4, 5], true);
+    const a = world.getComponent(e, Animation);
+    a.stopAt = 3; // position 2
+    world.update(0.25);
+    assert.strictEqual(a.frameIndex, 2);
+    assert.strictEqual(a.isPlaying, 0);
+  });
+
+  it("a marker stop is not completion: onComplete does not fire", () => {
+    const { world, e } = setup([1, 2, 3, 4, 5], false);
+    const callbacks = new AnimationCallbacks();
+    world.setResource(AnimationCallbacks, callbacks);
+    const a = world.getComponent(e, Animation);
+    let fired = 0;
+    callbacks.set(e, () => fired++);
+    a.stopAt = 3; // position 2
+    world.update(0.25);
+    assert.strictEqual(fired, 0);
+    // resume → runs to the genuine end → completion fires exactly once
+    a.stopAt = 0;
+    a.isPlaying = 1;
+    world.update(0.4);
+    assert.strictEqual(fired, 1);
+    world.update(0.4);
+    assert.strictEqual(fired, 1);
+  });
+
+  it("resume() continues from the marker instead of restarting", () => {
+    const { world, e } = setup([1, 2, 3, 4, 5], false);
+    const a = world.getComponent(e, Animation);
+    a.stopAt = 3; // position 2
+    world.update(0.25);
+    assert.strictEqual(a.frameIndex, 2);
+    // resume
+    a.stopAt = 0;
+    a.isPlaying = 1;
+    world.update(0.05);
+    assert.strictEqual(a.frameIndex, 3);
+  });
+
+  it("stopAt defaults to 0 and is not read while playing normally", () => {
+    const { world, e } = setup([1, 2, 3], true);
+    const a = world.getComponent(e, Animation);
+    assert.strictEqual(a.stopAt, 0);
+    world.update(0.25);
+    assert.strictEqual(a.isPlaying, 1);
+  });
+});

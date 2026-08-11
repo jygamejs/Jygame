@@ -91,6 +91,7 @@ export function startPlayback(world, entity, registry, state, name, mode, opts =
   anim.speed = 1;
   anim.mode = mode;
   anim.loop = opts.loop === undefined ? LoopOverride.RESPECT_CLIP : opts.loop;
+  anim.stopAt = 0;
 
   const clipId = resolveClipId(registry, entity, name);
   if (clipId === null) return false;

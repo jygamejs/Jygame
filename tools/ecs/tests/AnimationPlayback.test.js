@@ -432,3 +432,26 @@ describe("integration regression", () => {
     assert.strictEqual(seen[seen.length - 1], "run", "resumes the latest persistent request");
   });
 });
+
+// ─── marker stop state ─────────────────────────────────
+describe("marker stop state", () => {
+  it("startPlayback resets the stopAt target", () => {
+    const world = createWorld();
+    const s = makeSprite(world);
+    s.animation.play("walk");
+    const c = s.world.get(s.entity, Animation);
+    c.stopAt = 5;
+    s.animation.playOnce("jump");
+    assert.strictEqual(c.stopAt, 0);
+  });
+
+  it("stop() resets the stopAt target", () => {
+    const world = createWorld();
+    const s = makeSprite(world);
+    s.animation.play("walk");
+    const c = s.world.get(s.entity, Animation);
+    c.stopAt = 5;
+    s.animation.stop();
+    assert.strictEqual(c.stopAt, 0);
+  });
+});

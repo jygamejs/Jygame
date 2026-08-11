@@ -947,6 +947,7 @@ export class Sprite {
         comp.elapsed = 0;
         comp.mode = PlaybackMode.NORMAL;
         comp.loop = LoopOverride.RESPECT_CLIP;
+        comp.stopAt = 0;
         const state = self._getPlaybackState();
         state.queue.length = 0;
         state.current = null;
