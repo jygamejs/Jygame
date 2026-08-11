@@ -264,11 +264,17 @@ const animations = await Image.animate({
   frame indices). They are animation-relative — `impact` may exist in several
   clips without colliding.
 
-Gameplay synchronizes with the animation through the Sprite facade:
+Gameplay synchronizes with the animation through the Sprite facade. Markers are
+addressed explicitly by animation + marker (never a global namespace), so the
+same marker name can exist in several clips:
 
 ```js
 if (Input.pressed("jump")) {
-  king.animation.playUntil("airborne"); // 0 → 1 → 2, then PAUSED
+  if (king.animation.isAt("jump", "airborne")) {
+    king.animation.resume();
+  } else {
+    king.animation.playUntil("jump", "airborne"); // 0 → 1 → 2, then PAUSED
+  }
 }
 if (player.isFalling) {
   king.animation.resume(); // 2 → 3 → 4 → complete
@@ -279,22 +285,41 @@ or, arming the current playback without restarting it:
 
 ```js
 king.animation.play("jump");
-king.animation.pauseAt("airborne");
+king.animation.pauseAt("jump", "airborne");
 ```
 
 | Method | Meaning |
 |---|---|
 | `play(name)` | Persistent request (loops per the clip) |
 | `playOnce(name)` | Temporary one-shot to completion |
-| `playUntil(marker)` | Temporary playback that pauses exactly at a marker |
-| `pauseAt(marker)` | Arm the current playback to pause at a marker |
+| `playUntil(name, marker)` | Temporary playback that pauses exactly at a marker |
+| `playAfter(name, marker)` | Temporary playback starting at the position after a marker |
+| `pauseAt(name, marker)` | Arm the named (current) playback to pause at a marker |
+| `resumeAt(name, marker)` | Position the cursor at a marker and resume from there |
 | `pause()` / `resume()` | Pause / continue exactly where playback stopped |
 | `stop()` | Reset playback state |
+| `isAt(name, marker)` | Is the cursor exactly at the marker? |
+| `hasReached(name, marker)` | Has the cursor reached or passed the marker? |
 
 A marker stop is **not** completion: `onComplete` does not fire, the queue does
 not advance, and the persistent request is preserved. `resume()` clears the
 armed stop target and continues from the marker; only a genuine end of the
 (clip-forced finite) playback triggers normal completion/queue behavior.
+Positioning operations (`playAfter`, `resumeAt`) never fire `onComplete`
+themselves.
+
+Playback state is queryable through the facade (all facade-side reads — the hot
+`AnimationSystem` loop stays numeric):
+
+| Getter | Meaning |
+|---|---|
+| `current` | Name of the clip owning playback |
+| `frame` / `position` | Current playback position on the normalized timeline |
+| `progress` | Normalized progress through the clip (timing-aware; `1` at completion) |
+| `isPlaying` | Playback is advancing |
+| `isPaused` | Intentionally stopped with a resumable cursor |
+| `isComplete` | A finite playback genuinely completed (a marker stop is never complete) |
+| `marker` | Marker name at the current position, or `null` |
 
 ### RenderSystem
 
