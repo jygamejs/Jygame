@@ -1,6 +1,7 @@
 import { ImageLoader } from "./ImageLoader.js";
 import { LoadingTask } from "./LoadingTask.js";
 import { AnimationPack } from "../ecs/animation/AnimationPack.js";
+import { buildAtlas } from "./Atlas.js";
 
 const _namedCache = new Map();
 const _animationSets = new Map();
@@ -201,6 +202,9 @@ export const Image = {
             loop: entry.loop,
             pingPong: entry.pingPong,
             crop: entry.crop,
+            sequence: entry.sequence,
+            timing: entry.timing,
+            markers: entry.markers,
           };
         }
 
@@ -226,6 +230,12 @@ export const Image = {
     }
 
     return result;
+  },
+
+  // ── Image.atlas ──
+
+  async atlas(config) {
+    return buildAtlas(config);
   },
 
   // ── Image retrieval ──

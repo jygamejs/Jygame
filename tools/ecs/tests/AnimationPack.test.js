@@ -731,3 +731,128 @@ describe("fromJSONAtlas (mocked _resolveImage/_loadJSON)", () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// sequence / timing / markers propagation
+// ---------------------------------------------------------------------------
+
+describe("AnimationPack — sequence/timing/markers propagation", () => {
+  const origResolve = AnimationPack._resolveImage;
+  const origLoadJSON = AnimationPack._loadJSON;
+  const origLoadAll = ImageLoader.loadAll;
+
+  before(() => {
+    AnimationPack._resolveImage = async (img) => img;
+    AnimationPack._loadJSON = async () => ({
+      frames: {
+        "slash_1": { frame: { x: 0, y: 0, w: 16, h: 16 } },
+        "slash_2": { frame: { x: 16, y: 0, w: 16, h: 16 } },
+        "slash_3": { frame: { x: 32, y: 0, w: 16, h: 16 } },
+      },
+    });
+    ImageLoader.loadAll = async (map) => {
+      const result = {};
+      for (const key of Object.keys(map)) result[key] = mockCanvas(16, 16);
+      return result;
+    };
+  });
+
+  after(() => {
+    AnimationPack._resolveImage = origResolve;
+    AnimationPack._loadJSON = origLoadJSON;
+    ImageLoader.loadAll = origLoadAll;
+  });
+
+  it("load() forwards sequence, timing, and markers", async () => {
+    const result = await AnimationPack.load({
+      path: "assets/char",
+      slash: {
+        frames: 3,
+        sequence: [1, 0, 1, 2],
+        timing: [0.05, 0.10, 0.05, 0.15],
+        markers: { windup: 1, impact: 3 },
+      },
+    });
+    const clip = result.slash;
+    assert.strictEqual(clip.frameCount, 4);
+    assert.strictEqual(clip.frames[0], clip.frames[2], "repeated source frame");
+    assert.deepStrictEqual(clip.timing, [0.05, 0.10, 0.05, 0.15]);
+    assert.strictEqual(clip.markers.windup, 1);
+    assert.strictEqual(clip.markers.impact, 3);
+  });
+
+  it("fromSpriteSheet forwards sequence, timing, and markers", async () => {
+    const result = await AnimationPack.fromSpriteSheet({
+      image: "sheet.png",
+      frameWidth: 16,
+      frameHeight: 16,
+      slash: {
+        frames: 3,
+        sequence: [1, 0, 1, 2],
+        timing: [0.05, 0.10, 0.05, 0.15],
+        markers: { windup: 1, impact: 3 },
+      },
+    });
+    const clip = result.slash;
+    assert.strictEqual(clip.frameCount, 4);
+    assert.deepStrictEqual(
+      clip.frames.map((f) => [f.sx, f.sy]),
+      [[16, 0], [0, 0], [16, 0], [32, 0]]
+    );
+    assert.deepStrictEqual(clip.timing, [0.05, 0.10, 0.05, 0.15]);
+    assert.strictEqual(clip.markers.windup, 1);
+    assert.strictEqual(clip.markers.impact, 3);
+  });
+
+  it("fromAtlas forwards sequence, timing, and markers", async () => {
+    const result = await AnimationPack.fromAtlas({
+      image: "atlas.png",
+      slash: {
+        x: 0,
+        y: 0,
+        width: 48,
+        height: 16,
+        frames: 3,
+        sequence: [1, 0, 1, 2],
+        timing: [0.05, 0.10, 0.05, 0.15],
+        markers: { windup: 1, impact: 3 },
+      },
+    });
+    const clip = result.slash;
+    assert.strictEqual(clip.frameCount, 4);
+    assert.deepStrictEqual(clip.timing, [0.05, 0.10, 0.05, 0.15]);
+    assert.strictEqual(clip.markers.windup, 1);
+    assert.strictEqual(clip.markers.impact, 3);
+  });
+
+  it("fromJSONAtlas forwards sequence, timing, and markers", async () => {
+    const result = await AnimationPack.fromJSONAtlas({
+      image: "atlas.png",
+      json: "ignored.json",
+      slash: {
+        prefix: "slash",
+        sequence: [1, 0, 1, 2],
+        timing: [0.05, 0.10, 0.05, 0.15],
+        markers: { windup: 1, impact: 3 },
+      },
+    });
+    const clip = result.slash;
+    assert.strictEqual(clip.frameCount, 4);
+    assert.deepStrictEqual(clip.timing, [0.05, 0.10, 0.05, 0.15]);
+    assert.strictEqual(clip.markers.windup, 1);
+    assert.strictEqual(clip.markers.impact, 3);
+  });
+
+  it("explicit sequence takes precedence over pingPong", async () => {
+    const result = await AnimationPack.fromSpriteSheet({
+      image: "sheet.png",
+      frameWidth: 16,
+      frameHeight: 16,
+      anim: { frames: 3, sequence: [1, 0], pingPong: true },
+    });
+    assert.deepStrictEqual(
+      result.anim.frames.map((f) => [f.sx, f.sy]),
+      [[16, 0], [0, 0]]
+    );
+  });
+});

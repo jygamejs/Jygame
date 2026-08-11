@@ -187,6 +187,30 @@ describe("Image.animate", () => {
     );
   });
 
+  it("sprite sheet entry forwards sequence, timing, and markers", async () => {
+    const result = await Image.animate({
+      image: "sheet.png",
+      sliceX: 4,
+      sliceY: 1,
+      slash: {
+        from: 0,
+        to: 3,
+        sequence: [1, 0, 1, 2],
+        timing: [0.05, 0.10, 0.05, 0.15],
+        markers: { windup: 1, impact: 3 },
+      },
+    });
+    const clip = result.slash;
+    assert.strictEqual(clip.frameCount, 4);
+    assert.deepStrictEqual(
+      clip.frames.map((f) => [f.sx, f.sy]),
+      [[16, 0], [0, 0], [16, 0], [32, 0]]
+    );
+    assert.deepStrictEqual(clip.timing, [0.05, 0.10, 0.05, 0.15]);
+    assert.strictEqual(clip.markers.windup, 1);
+    assert.strictEqual(clip.markers.impact, 3);
+  });
+
   it("atlas strategy with manual regions", async () => {
     const result = await Image.animate({
       image: "atlas.png",

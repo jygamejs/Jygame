@@ -274,24 +274,26 @@ export class AnimationPack {
   }
 
   static _buildClip(anim, frames) {
-    let result = frames;
-
-    if (anim.pingPong && result.length > 2) {
-      result = [...result, ...result.slice(1, -1).reverse()];
-    }
-
     return new AnimationClip({
-      frames: result,
+      frames,
       fps: anim.fps,
       loop: anim.loop,
+      sequence: anim.sequence,
+      timing: anim.timing,
+      pingPong: anim.pingPong,
+      markers: anim.markers,
     });
   }
 
-  static _generateGridRects(anim, fw, fh, margin, spacing, columns) {
+  static _generateGridRects(anim, fw, fh, origin, spacing, columns) {
     const rects = [];
     const cols = columns;
     const startRow = anim.row ?? 0;
     const startCol = anim.column ?? 0;
+    const ox = typeof origin === "number" ? origin : (origin?.x ?? 0);
+    const oy = typeof origin === "number" ? origin : (origin?.y ?? 0);
+    const sx = typeof spacing === "number" ? spacing : (spacing?.x ?? 0);
+    const sy = typeof spacing === "number" ? spacing : (spacing?.y ?? 0);
     for (let i = 0; i < anim.frames; i++) {
       let col, row;
       if (cols !== undefined) {
@@ -303,8 +305,8 @@ export class AnimationPack {
         row = startRow;
       }
       rects.push({
-        x: margin + col * (fw + spacing),
-        y: margin + row * (fh + spacing),
+        x: ox + col * (fw + sx),
+        y: oy + row * (fh + sy),
         w: fw,
         h: fh,
       });
@@ -506,6 +508,9 @@ export class AnimationPack {
     const loop = value.loop ?? defaults.loop ?? true;
     const pingPong = value.pingPong ?? false;
     const crop = value.crop ?? defaults.crop ?? null;
+    const sequence = value.sequence;
+    const timing = value.timing;
+    const markers = value.markers;
 
     const matched = [];
     for (const [frameName, rect] of Object.entries(frameMap)) {
@@ -534,6 +539,9 @@ export class AnimationPack {
       loop,
       pingPong,
       crop,
+      sequence,
+      timing,
+      markers,
       _rects: matched.map((m) => ({
         x: m.rect.x,
         y: m.rect.y,
