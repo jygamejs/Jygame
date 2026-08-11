@@ -490,7 +490,7 @@ describe("animation.playUntil() / pauseAt()", () => {
   it("playUntil starts the clip and stops exactly at the marker", () => {
     const world = createWorld();
     const s = makeMarkerSprite(world);
-    s.animation.playUntil("airborne");
+    s.animation.playUntil("jump", "airborne");
     assert.strictEqual(s.animation.current, "jump");
     assert.strictEqual(s.animation.playing, true);
 
@@ -509,7 +509,7 @@ describe("animation.playUntil() / pauseAt()", () => {
     const s = makeMarkerSprite(world);
     const completed = [];
     s.animation.onComplete((name) => completed.push(name));
-    s.animation.playUntil("airborne");
+    s.animation.playUntil("jump", "airborne");
     for (let i = 0; i < 40; i++) world.update(1 / 60);
     assert.deepStrictEqual(completed, []);
   });
@@ -519,7 +519,7 @@ describe("animation.playUntil() / pauseAt()", () => {
     const s = makeMarkerSprite(world);
     const completed = [];
     s.animation.onComplete((name) => completed.push(name));
-    s.animation.playUntil("airborne");
+    s.animation.playUntil("jump", "airborne");
     for (let i = 0; i < 40; i++) world.update(1 / 60);
     assert.strictEqual(readState(s).frame, 2);
 
@@ -539,7 +539,7 @@ describe("animation.playUntil() / pauseAt()", () => {
     const world = createWorld();
     const s = makeMarkerSprite(world);
     s.animation.play("idle");
-    s.animation.playUntil("airborne");
+    s.animation.playUntil("jump", "airborne");
     s.animation.queue("attack");
     for (let i = 0; i < 40; i++) world.update(1 / 60);
     assert.strictEqual(readState(s).frame, 2);
@@ -560,7 +560,7 @@ describe("animation.playUntil() / pauseAt()", () => {
     const world = createWorld();
     const s = makeMarkerSprite(world);
     s.animation.play("walk");
-    s.animation.playUntil("airborne");
+    s.animation.playUntil("jump", "airborne");
     for (let i = 0; i < 40; i++) world.update(1 / 60);
     assert.strictEqual(readState(s).frame, 2);
 
@@ -578,7 +578,7 @@ describe("animation.playUntil() / pauseAt()", () => {
     const world = createWorld();
     const s = makeMarkerSprite(world);
     s.animation.play("jump"); // looping persistent clip
-    s.animation.playUntil("airborne");
+    s.animation.playUntil("jump", "airborne");
     for (let i = 0; i < 40; i++) world.update(1 / 60);
     assert.strictEqual(readState(s).frame, 2);
     assert.strictEqual(s.animation.playing, false);
@@ -598,17 +598,17 @@ describe("animation.playUntil() / pauseAt()", () => {
     const s = makeMarkerSprite(world);
     const completed = [];
     s.animation.onComplete((name) => completed.push(name));
-    s.animation.playUntil("landing");
+    s.animation.playUntil("jump", "landing");
     for (let i = 0; i < 120; i++) world.update(1 / 60);
     assert.strictEqual(readState(s).frame, 4);
     assert.strictEqual(s.animation.playing, false);
     assert.deepStrictEqual(completed, []);
   });
 
-  it("markers are animation-relative across clips on the same sprite", () => {
+  it("explicit addressing selects the animation and its marker", () => {
     const world = createWorld();
     const s = makeMarkerSprite(world);
-    s.animation.playUntil("impact");
+    s.animation.playUntil("attack", "impact");
     assert.strictEqual(s.animation.current, "attack");
     const seen = [];
     for (let i = 0; i < 40; i++) {
@@ -619,25 +619,37 @@ describe("animation.playUntil() / pauseAt()", () => {
     assert.strictEqual(s.animation.playing, false);
   });
 
-  it("playUntil rejects an unknown marker with a helpful error", () => {
+  it("the same marker name in different clips is not ambiguous", () => {
     const world = createWorld();
     const s = makeMarkerSprite(world);
-    assert.throws(() => s.animation.playUntil("nope"), /"nope" was not found/);
+    s.animation.add("hurt", new AnimationClip({ frames: [40, 41], fps: 10, loop: true, markers: { impact: 1 } }));
+    s.animation.playUntil("attack", "impact");
+    assert.strictEqual(s.animation.current, "attack");
+    s.animation.playUntil("hurt", "impact");
+    assert.strictEqual(s.animation.current, "hurt");
+    // hurt's impact is at position 1 (not attack's 2)
+    for (let i = 0; i < 20; i++) world.update(1 / 60);
+    assert.strictEqual(readState(s).frame, 1);
+    assert.strictEqual(s.animation.playing, false);
   });
 
-  it("playUntil rejects an ambiguous marker", () => {
+  it("playUntil rejects an unknown animation", () => {
     const world = createWorld();
     const s = makeMarkerSprite(world);
-    s.animation.add("flip1", new AnimationClip({ frames: [20, 21], fps: 10, loop: true, markers: { same: 0 } }));
-    s.animation.add("flip2", new AnimationClip({ frames: [22, 23], fps: 10, loop: true, markers: { same: 1 } }));
-    assert.throws(() => s.animation.playUntil("same"), /ambiguous/);
+    assert.throws(() => s.animation.playUntil("nope", "airborne"), /Unknown animation "nope"/);
+  });
+
+  it("playUntil rejects a marker the animation does not define", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    assert.throws(() => s.animation.playUntil("jump", "nope"), /Animation "jump" has no marker "nope"/);
   });
 
   it("pauseAt arms the current playback without replacing it", () => {
     const world = createWorld();
     const s = makeMarkerSprite(world);
     s.animation.play("jump");
-    s.animation.pauseAt("airborne");
+    s.animation.pauseAt("jump", "airborne");
     assert.strictEqual(s.animation.current, "jump");
 
     const seen = [];
@@ -657,24 +669,31 @@ describe("animation.playUntil() / pauseAt()", () => {
     assert.strictEqual(s.animation.playing, false);
   });
 
-  it("pauseAt requires a current animation", () => {
+  it("pauseAt requires the named animation to be the current one", () => {
     const world = createWorld();
     const s = makeMarkerSprite(world);
-    assert.throws(() => s.animation.pauseAt("airborne"), /no animation is currently playing/);
+    assert.throws(() => s.animation.pauseAt("jump", "airborne"), /not.*currently playing/);
   });
 
-  it("pauseAt rejects a marker the current clip does not define", () => {
+  it("pauseAt rejects an unknown animation", () => {
     const world = createWorld();
     const s = makeMarkerSprite(world);
     s.animation.play("idle");
-    assert.throws(() => s.animation.pauseAt("airborne"), /"airborne" was not found/);
+    assert.throws(() => s.animation.pauseAt("nope", "airborne"), /Unknown animation "nope"/);
+  });
+
+  it("pauseAt rejects a marker the named animation does not define", () => {
+    const world = createWorld();
+    const s = makeMarkerSprite(world);
+    s.animation.play("idle");
+    assert.throws(() => s.animation.pauseAt("idle", "airborne"), /Animation "idle" has no marker "airborne"/);
   });
 
   it("pause() clears the armed stop target", () => {
     const world = createWorld();
     const s = makeMarkerSprite(world);
     s.animation.play("jump");
-    s.animation.pauseAt("airborne");
+    s.animation.pauseAt("jump", "airborne");
     const c = s.world.get(s.entity, Animation);
     assert.strictEqual(c.stopAt, 3);
     s.animation.pause();
@@ -687,7 +706,7 @@ describe("animation.playUntil() / pauseAt()", () => {
     const s = makeMarkerSprite(world);
     s.animation.play("walk");
     s.animation.play("death", { force: true });
-    s.animation.playUntil("airborne");
+    s.animation.playUntil("jump", "airborne");
     assert.strictEqual(s.animation.current, "death");
   });
 
@@ -696,7 +715,7 @@ describe("animation.playUntil() / pauseAt()", () => {
     const s = makeMarkerSprite(world);
     s.animation.play("walk");
     s.animation.play("death", { force: true });
-    s.animation.playUntil("corpse");
+    s.animation.playUntil("death", "corpse");
     const seen = [];
     for (let i = 0; i < 40; i++) {
       world.update(1 / 60);

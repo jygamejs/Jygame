@@ -667,67 +667,30 @@ export class Sprite {
     return ok;
   }
 
-  // Marker positions are normalized against the clip's playback timeline. This
-  // throws a descriptive error when the current clip does not define `marker`.
-  _markerPosition(clip, name, marker) {
-    const markers = clip && clip.markers;
-    if (markers && Object.prototype.hasOwnProperty.call(markers, marker)) {
-      return markers[marker];
+  // Resolve a marker against one named animation. Markers are animation-relative
+  // and the public API names both the animation and the marker, so there is no
+  // implicit search and no ambiguity. Throws descriptive errors for either.
+  _resolveClipMarker(name, marker) {
+    if (typeof name !== "string" || name.length === 0) {
+      throw new TypeError(
+        `Animation name must be a non-empty string, got ${JSON.stringify(name)}.`
+      );
     }
-    const avail = markers ? Object.keys(markers).join(", ") : "(none)";
-    throw new Error(
-      `Animation marker "${marker}" was not found. ` +
-      (name ? `Animation "${name}" defines markers: ${avail}.` : "No animation is currently playing.")
-    );
-  }
-
-  // Animation-relative marker lookup: current clip, then the persistent
-  // request, then this sprite's own clip map. Never a global namespace.
-  _resolveMarker(marker) {
     if (typeof marker !== "string" || marker.length === 0) {
       throw new TypeError(
         `Animation marker must be a non-empty string, got ${JSON.stringify(marker)}.`
       );
     }
-    const state = this._getPlaybackState();
     const map = this._animMap;
-
-    const find = (clip) => {
-      const markers = clip && clip.markers;
-      if (markers && Object.prototype.hasOwnProperty.call(markers, marker)) return markers[marker];
-      return -1;
-    };
-
-    if (state.current) {
-      const pos = find(map && map.get(state.current));
-      if (pos >= 0) return { name: state.current, position: pos };
+    const clip = map && map.get(name);
+    if (!clip) {
+      throw new Error(`Unknown animation "${name}".`);
     }
-    if (state.requested && state.requested !== state.current) {
-      const pos = find(map && map.get(state.requested));
-      if (pos >= 0) return { name: state.requested, position: pos };
+    const markers = clip.markers;
+    if (!markers || !Object.prototype.hasOwnProperty.call(markers, marker)) {
+      throw new Error(`Animation "${name}" has no marker "${marker}".`);
     }
-    if (map) {
-      let matchName = null;
-      let matchPos = -1;
-      for (const [name, clip] of map) {
-        const pos = find(clip);
-        if (pos >= 0) {
-          if (matchName !== null) {
-            throw new Error(
-              `Animation marker "${marker}" is ambiguous: defined by "${matchName}" and "${name}". ` +
-              "Markers are animation-relative; play the intended animation first or use a unique marker name."
-            );
-          }
-          matchName = name;
-          matchPos = pos;
-        }
-      }
-      if (matchName !== null) return { name: matchName, position: matchPos };
-    }
-    throw new Error(
-      `Animation marker "${marker}" was not found. ` +
-      `Available animations: ${map && map.size ? Array.from(map.keys()).join(", ") : "(none)"}.`
-    );
+    return { clip, position: markers[marker] };
   }
 
   get image() { this._assertAlive(); return this.#world.get(this.#entity, Renderable).image; }
@@ -1000,10 +963,10 @@ export class Sprite {
         return this;
       },
 
-      playUntil(marker) {
+      playUntil(name, marker) {
         const anim = self.#world.get(self.#entity, Animation);
         const state = self._getPlaybackState();
-        const { name, position } = self._resolveMarker(marker);
+        const { position } = self._resolveClipMarker(name, marker);
 
         // A forced animation owns the sprite; only a marker inside that clip
         // may arm it (same ownership rule playOnce() uses).
@@ -1030,17 +993,16 @@ export class Sprite {
         return this;
       },
 
-      pauseAt(marker) {
+      pauseAt(name, marker) {
         const anim = self.#world.get(self.#entity, Animation);
         const state = self._getPlaybackState();
-        const currentName = state.current;
-        if (!currentName) {
+        const { position } = self._resolveClipMarker(name, marker);
+        if (state.current !== name) {
           throw new Error(
-            `Animation.pauseAt("${marker}") failed: no animation is currently playing.`
+            `Animation.pauseAt("${name}", "${marker}") failed: animation "${name}" is not ` +
+            (state.current ? `the currently playing animation ("${state.current}").` : "currently playing.")
           );
         }
-        const clip = self._animMap && self._animMap.get(currentName);
-        const position = self._markerPosition(clip, currentName, marker);
         if (anim.frameIndex >= position) {
           anim.isPlaying = 0;
           return this;
