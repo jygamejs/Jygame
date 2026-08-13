@@ -17,6 +17,7 @@ const VALID_ATTENUATIONS = new Set([ATTENUATION_LINEAR, ATTENUATION_QUADRATIC, A
 export class AudioManager {
   constructor(options = {}) {
     this._backend = options.backend || new HtmlAudioBackend();
+    this._backends = new Map([[this._backend.kind, this._backend]]);
     this._sounds = new Map();
     this._assets = new Map();
     this._definitions = new Map();
@@ -35,7 +36,7 @@ export class AudioManager {
     this._masterProxy = null;
     this._masterEffectChain = new EffectChain();
     this._masterEffectChain.onChange = () => {
-      this._backend._connectMasterEffectChain(this._masterEffectChain);
+      this._connectMasterEffectChainToBackends(this._masterEffectChain);
     };
 
     this._createGroup("master");
@@ -52,6 +53,28 @@ export class AudioManager {
     }
 
     this._backend.unlock();
+  }
+
+  getBackend(kind) {
+    if (!kind) return this._backend;
+    const existing = this._backends.get(kind);
+    if (existing) return existing;
+    const backend = kind === "web" ? new WebAudioBackend() : new HtmlAudioBackend();
+    backend.unlock();
+    this._backends.set(kind, backend);
+    return backend;
+  }
+
+  _connectMasterEffectChainToBackends(chain) {
+    for (const backend of this._backends.values()) {
+      backend._connectMasterEffectChain(chain);
+    }
+  }
+
+  _connectGroupEffectChainToBackends(groupName, chain) {
+    for (const backend of this._backends.values()) {
+      backend._connectGroupEffectChain(groupName, chain);
+    }
   }
 
   _registerUnlockGate() {
@@ -116,11 +139,17 @@ export class AudioManager {
   get masterMuted() { return this._masterMuted; }
   set masterMuted(value) {
     this._masterMuted = !!value;
-    if (this._backend.supportsGroupGain) this._backend.setMasterVolume(this.effectiveMasterVolume);
+    this._applyMasterVolumeToBackends();
     this._notifyAllSoundsVolumeChange();
   }
 
   get supportsGroupGain() { return this._backend.supportsGroupGain; }
+
+  _applyMasterVolumeToBackends() {
+    for (const backend of this._backends.values()) {
+      if (backend.supportsGroupGain) backend.setMasterVolume(this.effectiveMasterVolume);
+    }
+  }
 
   forEachSound(fn) {
     for (const [key, sound] of this._sounds) fn(sound, key);
@@ -157,26 +186,17 @@ export class AudioManager {
   }
 
   _onGroupVolumeChange(groupName) {
-    if (this._backend.supportsGroupGain) {
-      if (groupName) {
-        const group = this._groups.get(groupName);
-        this._backend.setGroupVolume(groupName, group ? (group._muted ? 0 : group._volume) : 1);
+    if (groupName) {
+      const group = this._groups.get(groupName);
+      const volume = group ? (group._muted ? 0 : group._volume) : 1;
+      for (const backend of this._backends.values()) {
+        if (backend.supportsGroupGain) backend.setGroupVolume(groupName, volume);
       }
-      return;
     }
-    for (const sound of this._sounds.values()) {
-      sound._updateAllVolumes();
-    }
-    for (const sound of this._soundsByDefinition.values()) {
-      sound._updateAllVolumes();
-    }
-    for (const music of this._musicCache.values()) {
-      music._updateVolume();
-    }
+    this._notifyAllSoundsVolumeChange();
   }
 
   _notifyAllSoundsVolumeChange() {
-    if (this._backend.supportsGroupGain) return;
     for (const sound of this._sounds.values()) {
       sound._updateAllVolumes();
     }
@@ -367,24 +387,25 @@ export class AudioManager {
     this._definitions.clear();
     this._assets.clear();
     for (const group of this._groups.values()) {
-      this._backend._connectGroupEffectChain(group._name, null);
+      this._connectGroupEffectChainToBackends(group._name, null);
       group._manager = null;
     }
     this._groups.clear();
-    this._backend._connectMasterEffectChain(null);
+    this._connectMasterEffectChainToBackends(null);
     for (const scene of this._scenes.values()) scene._manager = null;
     this._scenes.clear();
     this._listener = null;
-    this._backend.destroy();
+    for (const backend of this._backends.values()) backend.destroy();
+    this._backends.clear();
     this._backend = null;
   }
 
   suspend() {
-    this._backend.suspend();
+    for (const backend of this._backends.values()) backend.suspend();
   }
 
   resume() {
-    this._backend.resume();
+    for (const backend of this._backends.values()) backend.resume();
   }
 
   _initDiag(diag) {
@@ -420,7 +441,9 @@ export class AudioManager {
     const doUpdate = () => {
       for (const sound of this._sounds.values()) updateSpatial(sound);
       for (const sound of this._soundsByDefinition.values()) updateSpatial(sound);
-      this._backend.setListenerPosition(this._listener.x, this._listener.y);
+      for (const backend of this._backends.values()) {
+        backend.setListenerPosition(this._listener.x, this._listener.y);
+      }
       if (dt > 0) {
         for (const music of this._musicCache.values()) {
           music.update(dt);
@@ -476,13 +499,13 @@ export class AudioManager {
 
   mute() {
     this._masterMuted = true;
-    if (this._backend.supportsGroupGain) this._backend.setMasterVolume(0);
+    this._applyMasterVolumeToBackends();
     this._notifyAllSoundsVolumeChange();
   }
 
   unmute() {
     this._masterMuted = false;
-    if (this._backend.supportsGroupGain) this._backend.setMasterVolume(this.effectiveMasterVolume);
+    this._applyMasterVolumeToBackends();
     this._notifyAllSoundsVolumeChange();
   }
 
@@ -491,7 +514,7 @@ export class AudioManager {
   get masterVolume() { return this._masterVolume; }
   set masterVolume(value) {
     this._masterVolume = Math.max(0, Math.min(1, value));
-    if (this._backend.supportsGroupGain) this._backend.setMasterVolume(this.effectiveMasterVolume);
+    this._applyMasterVolumeToBackends();
     this._notifyAllSoundsVolumeChange();
   }
 

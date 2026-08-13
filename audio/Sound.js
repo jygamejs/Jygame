@@ -20,6 +20,7 @@ export class Sound {
     }, { maxSize: options.maxPoolSize ?? 64 });
     this._activeInstances = [];
     this._volume = 1;
+    this._loop = false;
     this._groupName = "master";
     this._destroyed = false;
     this._maxInstances = options.maxInstances ?? 32;
@@ -27,6 +28,8 @@ export class Sound {
     this._attenuation = null;
     this._persistent = false;
     this._effectChain = new EffectChain();
+    this._onPlay = null;
+    this._onInstanceFinished = null;
   }
 
   get persistent() { return this._persistent; }
@@ -39,6 +42,19 @@ export class Sound {
     if (this._destroyed) return;
     this._volume = Math.max(0, Math.min(1, value));
     this._updateAllVolumes();
+  }
+
+  get loop() { return this._destroyed ? false : this._loop; }
+  set loop(value) {
+    if (this._destroyed) return;
+    this._loop = !!value;
+  }
+
+  get duration() {
+    const asset = this._asset;
+    if (!asset) return 0;
+    const d = asset.duration;
+    return typeof d === "number" && isFinite(d) ? d : 0;
   }
 
   get group() { return this._groupName; }
@@ -86,7 +102,10 @@ export class Sound {
     if (options.spatial !== undefined) instance._spatial = options.spatial;
     if (options.x !== undefined || options.y !== undefined) instance._spatial = true;
 
+    instance.loop = options.loop !== undefined ? !!options.loop : this._loop;
+
     instance.restart();
+    if (this._onPlay) this._onPlay();
     return instance;
   }
 

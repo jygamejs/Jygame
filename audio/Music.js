@@ -2,7 +2,7 @@ export class Music {
   constructor(asset, manager, options = {}) {
     this._asset = asset;
     this._manager = manager;
-    this._backend = manager._backend;
+    this._backend = options.backend || manager._backend;
     this._playback = null;
     this._volume = 1;
     this._fadeVolume = 1;

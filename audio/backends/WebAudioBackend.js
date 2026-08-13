@@ -231,6 +231,8 @@ export class WebAudioBackend extends AudioBackend {
 
   get supportsGroupGain() { return true; }
 
+  get kind() { return "web"; }
+
   _getContext() {
     this._ensureContext();
     return this._context;

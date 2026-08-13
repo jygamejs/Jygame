@@ -9,7 +9,7 @@ export class AudioGroup {
     this._effectChain = new EffectChain();
     this._effectChain.onChange = () => {
       if (this._manager) {
-        this._manager._backend._connectGroupEffectChain(this._name, this._effectChain);
+        this._manager._connectGroupEffectChainToBackends(this._name, this._effectChain);
       }
     };
   }

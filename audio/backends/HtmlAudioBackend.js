@@ -57,6 +57,8 @@ class HtmlPlayback {
 }
 
 export class HtmlAudioBackend extends AudioBackend {
+  get kind() { return "html"; }
+
   createPlayback(asset, effectChain) {
     if (effectChain && effectChain.length > 0) {
       console.warn("HtmlAudioBackend does not support effects");

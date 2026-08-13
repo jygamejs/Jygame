@@ -487,3 +487,408 @@ describe("Audio backend auto-selection", () => {
     AudioLoader.load = origLoad;
   });
 });
+
+describe("Audio sound handle (Audio.load returns Sound)", () => {
+  const origLoad = AudioLoader.load;
+  const origGet = AudioLoader.get;
+  const origHas = AudioLoader.has;
+  const origUnload = AudioLoader.unload;
+  const origClear = AudioLoader.clear;
+  const fakeCache = new Map();
+
+  function unlock() {
+    global.document.dispatchEvent({ type: "pointerdown" });
+  }
+
+  before(() => {
+    AudioLoader.load = async (path) => {
+      const a = mockAudio();
+      fakeCache.set(path, a);
+      return a;
+    };
+    AudioLoader.get = (key) => fakeCache.get(key) || null;
+    AudioLoader.has = (key) => fakeCache.has(key);
+    AudioLoader.unload = (key) => fakeCache.delete(key);
+    AudioLoader.clear = () => fakeCache.clear();
+  });
+
+  after(() => {
+    AudioLoader.load = origLoad;
+    AudioLoader.get = origGet;
+    AudioLoader.has = origHas;
+    AudioLoader.unload = origUnload;
+    AudioLoader.clear = origClear;
+    Audio.clear();
+  });
+
+  it("unnamed load returns a usable sound handle", async () => {
+    Audio.clear();
+    const shot = await Audio.load("/sounds/shot.wav");
+    assert.ok(shot);
+    assert.strictEqual(typeof shot.play, "function");
+    assert.strictEqual(typeof shot.volume, "number");
+  });
+
+  it("named load registers the sound handle", async () => {
+    Audio.clear();
+    const shot = await Audio.load("shot", "/sounds/shot.wav");
+    assert.ok(shot);
+    assert.strictEqual(Audio.get("shot"), shot);
+    assert.strictEqual(Audio.has("shot"), true);
+  });
+
+  it("sound configuration persists on the handle", async () => {
+    Audio.clear();
+    const shot = await Audio.load("shot", "/sounds/shot.wav");
+    shot.volume = 0.7;
+    shot.loop = true;
+    assert.strictEqual(shot.volume, 0.7);
+    assert.strictEqual(shot.loop, true);
+    unlock();
+    const inst = shot.play();
+    assert.ok(inst);
+    assert.strictEqual(inst.loop, true);
+    inst.stop();
+  });
+
+  it("repeated play() starts independent occurrences", async () => {
+    Audio.clear();
+    const shot = await Audio.load("shot", "/sounds/shot.wav");
+    unlock();
+    const a = shot.play();
+    const b = shot.play();
+    const c = shot.play();
+    assert.ok(a);
+    assert.ok(b);
+    assert.ok(c);
+    assert.notStrictEqual(a, b);
+    assert.notStrictEqual(shot, a);
+    a.stop();
+    b.stop();
+    c.stop();
+    const again = shot.play();
+    assert.ok(again);
+    again.stop();
+  });
+
+  it("registry playback still works after named load", async () => {
+    Audio.clear();
+    await Audio.load("shot", "/sounds/shot.wav");
+    unlock();
+    const instance = Audio.play("shot");
+    assert.ok(instance);
+    instance.stop();
+  });
+
+  it("load(name) resolves to the same handle as load(name, path)", async () => {
+    Audio.clear();
+    const shot = await Audio.load("shot", "/sounds/shot.wav");
+    const again = await Audio.load("shot");
+    assert.strictEqual(again, shot);
+  });
+
+  it("load(path) after named load reuses the same handle", async () => {
+    Audio.clear();
+    const shot = await Audio.load("shot", "/sounds/shot.wav");
+    const byPath = await Audio.load("/sounds/shot.wav");
+    assert.strictEqual(byPath, shot);
+  });
+
+  it("batch load resolves to sound handles", async () => {
+    Audio.clear();
+    const task = Audio.load({ a: "/sounds/a.wav", b: "/sounds/b.wav" });
+    const result = await task;
+    assert.strictEqual(typeof result.a.play, "function");
+    assert.strictEqual(typeof result.b.play, "function");
+    assert.strictEqual(Audio.get("a"), result.a);
+    assert.strictEqual(Audio.get("b"), result.b);
+  });
+
+  it("defers play() while gated, plays after the unlock gesture", async () => {
+    Audio.clear();
+    const shot = await Audio.load("shot", "/sounds/shot.wav");
+    assert.strictEqual(shot.play(), null);
+    unlock();
+    const inst = shot.play();
+    assert.ok(inst);
+    inst.stop();
+  });
+});
+
+describe("Audio per-sound backend selection", () => {
+  const origLoad = AudioLoader.load;
+  const origLoadBuffer = AudioLoader.loadBuffer;
+  const origGet = AudioLoader.get;
+  const origHas = AudioLoader.has;
+  const origUnload = AudioLoader.unload;
+  const origClear = AudioLoader.clear;
+  const origWindow = global.window;
+  const fakeCache = new Map();
+
+  function mockAudioContext() {
+    const gain = () => ({
+      gain: { value: 1 },
+      connect: () => {},
+      disconnect: () => {},
+    });
+    return {
+      destination: {},
+      state: "running",
+      currentTime: 0,
+      listener: {
+        positionX: { value: 0 },
+        positionY: { value: 0 },
+        positionZ: { value: 0 },
+      },
+      createGain: gain,
+      createBufferSource: () => ({
+        buffer: null,
+        loop: false,
+        connect: () => {},
+        disconnect: () => {},
+        start: () => {},
+        stop: () => {},
+        onended: null,
+      }),
+      createPanner: () => ({
+        connect: () => {},
+        disconnect: () => {},
+        distanceModel: "",
+        refDistance: 0,
+        maxDistance: 0,
+        rolloffFactor: 0,
+        positionX: { value: 0 },
+        positionY: { value: 0 },
+        positionZ: { value: 0 },
+      }),
+      suspend: async () => {},
+      resume: async () => {},
+      close: async () => {},
+    };
+  }
+
+  function setWindow() {
+    global.window = {
+      AudioContext: mockAudioContext,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    };
+  }
+
+  function unlock() {
+    global.document.dispatchEvent({ type: "pointerdown" });
+  }
+
+  before(() => {
+    Audio.clear();
+    setWindow();
+    AudioLoader.load = async (path) => {
+      const a = mockAudio();
+      fakeCache.set(path, a);
+      return a;
+    };
+    AudioLoader.loadBuffer = async (path) => ({ path, duration: 1 });
+    AudioLoader.get = (key) => fakeCache.get(key) || null;
+    AudioLoader.has = (key) => fakeCache.has(key);
+    AudioLoader.unload = (key) => fakeCache.delete(key);
+    AudioLoader.clear = () => fakeCache.clear();
+  });
+
+  after(() => {
+    Audio.clear();
+    AudioLoader.load = origLoad;
+    AudioLoader.loadBuffer = origLoadBuffer;
+    AudioLoader.get = origGet;
+    AudioLoader.has = origHas;
+    AudioLoader.unload = origUnload;
+    AudioLoader.clear = origClear;
+    if (origWindow === undefined) {
+      delete global.window;
+    } else {
+      global.window = origWindow;
+    }
+  });
+
+  it("default load uses automatic backend selection (web here)", async () => {
+    Audio.clear();
+    const s = await Audio.load("/sounds/auto.wav");
+    assert.ok(s);
+    assert.strictEqual(s._backend.kind, "web");
+  });
+
+  it("default load falls back to html when AudioContext is missing", async () => {
+    Audio.clear();
+    global.window = {};
+    const s = await Audio.load("/sounds/fallback.wav");
+    assert.strictEqual(s._backend.kind, "html");
+    setWindow();
+  });
+
+  it("explicit web backend", async () => {
+    Audio.clear();
+    const s = await Audio.load("/sounds/web.wav", { backend: "web" });
+    assert.strictEqual(s._backend.kind, "web");
+  });
+
+  it("explicit html backend", async () => {
+    Audio.clear();
+    const s = await Audio.load("/sounds/html.wav", { backend: "html" });
+    assert.strictEqual(s._backend.kind, "html");
+    assert.strictEqual(typeof s.play, "function");
+  });
+
+  it("mixed backends can both play independently", async () => {
+    Audio.clear();
+    const a = await Audio.load("/sounds/a.wav", { backend: "web" });
+    const b = await Audio.load("/sounds/b.mp3", { backend: "html" });
+    assert.strictEqual(a._backend.kind, "web");
+    assert.strictEqual(b._backend.kind, "html");
+    unlock();
+    const ia = a.play();
+    const ib = b.play();
+    assert.ok(ia);
+    assert.ok(ib);
+    ia.stop();
+    ib.stop();
+  });
+
+  it("backend persists across plays", async () => {
+    Audio.clear();
+    const s = await Audio.load("/sounds/p.wav", { backend: "web" });
+    unlock();
+    s.play();
+    s.play();
+    assert.strictEqual(s._backend.kind, "web");
+  });
+
+  it("named load with backend works through Audio.play", async () => {
+    Audio.clear();
+    await Audio.load("shot", "/sounds/shot.wav", { backend: "web" });
+    assert.strictEqual(Audio.get("shot")._backend.kind, "web");
+    unlock();
+    const inst = Audio.play("shot");
+    assert.ok(inst);
+    inst.stop();
+    assert.strictEqual(Audio.get("shot")._backend.kind, "web");
+  });
+
+  it("music preserves the asset's backend", async () => {
+    Audio.clear();
+    await Audio.load("theme", "/sounds/theme.mp3", { backend: "html" });
+    const m = Audio.music("theme");
+    assert.strictEqual(m._backend.kind, "html");
+  });
+
+  it("batch string form uses automatic selection", async () => {
+    Audio.clear();
+    const r = await Audio.load({ a: "/sounds/a.wav", b: "/sounds/b.wav" });
+    assert.ok(r.a);
+    assert.ok(r.b);
+    assert.strictEqual(r.a._backend.kind, "web");
+  });
+
+  it("batch object form supports per-asset backend", async () => {
+    Audio.clear();
+    const r = await Audio.load({
+      coin: { path: "/sounds/coin.wav", backend: "web" },
+      theme: { path: "/sounds/theme.mp3", backend: "html" },
+    });
+    assert.strictEqual(r.coin._backend.kind, "web");
+    assert.strictEqual(r.theme._backend.kind, "html");
+  });
+
+  it("invalid backend produces a descriptive error", async () => {
+    Audio.clear();
+    await assert.rejects(
+      Audio.load("/sounds/bad.wav", { backend: "something" }),
+      /unknown backend "something"/
+    );
+  });
+
+  it("cache conflict throws and does not mutate the backend", async () => {
+    Audio.clear();
+    await Audio.load("shot", "/sounds/shot.wav", { backend: "web" });
+    await assert.rejects(
+      Audio.load("shot", "/sounds/shot.wav", { backend: "html" }),
+      /already loaded with the "web" backend/
+    );
+    assert.strictEqual(Audio.get("shot")._backend.kind, "web");
+  });
+});
+
+describe("Audio.backend & Audio.effects", () => {
+  const origLoad = AudioLoader.load;
+  const origGet = AudioLoader.get;
+  const origHas = AudioLoader.has;
+  const origUnload = AudioLoader.unload;
+  const origClear = AudioLoader.clear;
+  const origWindow = global.window;
+  const fakeCache = new Map();
+
+  before(() => {
+    Audio.clear();
+    Audio.backend = null;
+    global.window = {
+      AudioContext: function AudioContext() {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    };
+    AudioLoader.load = async (path) => {
+      const a = mockAudio();
+      fakeCache.set(path, a);
+      return a;
+    };
+    AudioLoader.get = (key) => fakeCache.get(key) || null;
+    AudioLoader.has = (key) => fakeCache.has(key);
+    AudioLoader.unload = (key) => fakeCache.delete(key);
+    AudioLoader.clear = () => fakeCache.clear();
+  });
+
+  after(() => {
+    Audio.backend = null;
+    Audio.clear();
+    AudioLoader.load = origLoad;
+    AudioLoader.get = origGet;
+    AudioLoader.has = origHas;
+    AudioLoader.unload = origUnload;
+    AudioLoader.clear = origClear;
+    if (origWindow === undefined) {
+      delete global.window;
+    } else {
+      global.window = origWindow;
+    }
+  });
+
+  it("backend defaults to web when AudioContext exists", () => {
+    assert.strictEqual(Audio.backend, "web");
+  });
+
+  it("backend forces auto-selection for the whole manager", async () => {
+    Audio.clear();
+    Audio.backend = "html";
+    const s = await Audio.load("/sounds/forced.wav");
+    assert.strictEqual(s._backend.kind, "html");
+    Audio.backend = null;
+  });
+
+  it("backend resets to automatic with null or auto", () => {
+    Audio.backend = "html";
+    Audio.backend = "auto";
+    assert.strictEqual(Audio.backend, "web");
+    Audio.backend = "html";
+    Audio.backend = null;
+    assert.strictEqual(Audio.backend, "web");
+  });
+
+  it("backend rejects invalid values", () => {
+    assert.throws(() => { Audio.backend = "nope"; }, /unknown backend "nope"/);
+  });
+
+  it("exposes the master effect chain", () => {
+    const chain = Audio.effects;
+    assert.ok(chain);
+    assert.strictEqual(typeof chain.add, "function");
+    assert.strictEqual(typeof chain.remove, "function");
+    assert.strictEqual(typeof chain.clear, "function");
+  });
+});
