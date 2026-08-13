@@ -1,3 +1,5 @@
+import { EffectChain } from "./effects/EffectChain.js";
+
 export class Music {
   constructor(asset, manager, options = {}) {
     this._asset = asset;
@@ -13,7 +15,7 @@ export class Music {
     this._fadeFrom = 1;
     this._fadeTo = 1;
     this._destroyed = false;
-    this._effectChain = options.effectChain || null;
+    this._effectChain = options.effectChain || new EffectChain();
   }
 
   get effects() { return this._effectChain; }

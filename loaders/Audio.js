@@ -17,6 +17,7 @@ let _lastTime = 0;
 
 const VALID_BACKENDS = new Set(["web", "html"]);
 let _forcedBackend = null;
+let _autoplayMode = "gated";
 
 function _detectBackendKind() {
   if (typeof window !== "undefined" && (window.AudioContext || window.webkitAudioContext)) {
@@ -78,7 +79,7 @@ function _stopLoop() {
 
 function _getManager() {
   if (!_manager) {
-    _manager = new AudioManager({ backend: _createBackend() });
+    _manager = new AudioManager({ backend: _createBackend(), autoplay: _autoplayMode });
     for (const [key, asset] of _assets) _manager.registerAsset(key, asset);
   }
   return _manager;
@@ -324,6 +325,43 @@ export const Audio = {
 
   get effects() {
     return _getManager().master.effects;
+  },
+
+  get attenuation() {
+    return _getManager().attenuation;
+  },
+  set attenuation(value) {
+    _getManager().attenuation = value;
+  },
+
+  get inverseRolloff() {
+    return _getManager().inverseRolloff;
+  },
+  set inverseRolloff(value) {
+    _getManager().inverseRolloff = value;
+  },
+
+  get autoplay() {
+    return _autoplayMode;
+  },
+  set autoplay(value) {
+    if (value !== "gated" && value !== "none") {
+      throw new Error(
+        `Audio: unknown autoplay mode "${value}". Expected "gated" or "none".`
+      );
+    }
+    _autoplayMode = value;
+    if (_manager) {
+      _manager._autoplay = value;
+      if (value === "gated") {
+        if (!_manager._playLock) {
+          _manager._playLock = true;
+          _manager._registerUnlockGate();
+        }
+      } else if (_manager._playLock) {
+        _manager.flush();
+      }
+    }
   },
 
   // ── Volume / mute ──

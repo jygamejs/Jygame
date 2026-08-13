@@ -892,3 +892,174 @@ describe("Audio.backend & Audio.effects", () => {
     assert.strictEqual(typeof chain.clear, "function");
   });
 });
+
+describe("Audio.music effects, attenuation, autoplay", () => {
+  const origLoad = AudioLoader.load;
+  const origGet = AudioLoader.get;
+  const origHas = AudioLoader.has;
+  const origUnload = AudioLoader.unload;
+  const origClear = AudioLoader.clear;
+  const origWindow = global.window;
+  const fakeCache = new Map();
+
+  function mockAudioContext() {
+    const gain = () => ({
+      gain: { value: 1 },
+      connect: () => {},
+      disconnect: () => {},
+    });
+    return {
+      destination: {},
+      state: "running",
+      currentTime: 0,
+      sampleRate: 44100,
+      listener: {
+        positionX: { value: 0 },
+        positionY: { value: 0 },
+        positionZ: { value: 0 },
+      },
+      createGain: gain,
+      createBuffer: () => ({ getChannelData: () => new Float32Array(10) }),
+      createBufferSource: () => ({
+        buffer: null,
+        loop: false,
+        connect: () => {},
+        disconnect: () => {},
+        start: () => {},
+        stop: () => {},
+        onended: null,
+      }),
+      createBiquadFilter: () => ({
+        type: "",
+        frequency: { value: 0 },
+        Q: { value: 0 },
+        connect: () => {},
+        disconnect: () => {},
+      }),
+      createDelay: () => ({
+        delayTime: { value: 0 },
+        connect: () => {},
+        disconnect: () => {},
+      }),
+      createWaveShaper: () => ({
+        curve: null,
+        connect: () => {},
+        disconnect: () => {},
+      }),
+      createDynamicsCompressor: () => ({
+        threshold: { value: 0 },
+        ratio: { value: 0 },
+        attack: { value: 0 },
+        release: { value: 0 },
+        knee: { value: 0 },
+        connect: () => {},
+        disconnect: () => {},
+      }),
+      createConvolver: () => ({
+        buffer: null,
+        connect: () => {},
+        disconnect: () => {},
+      }),
+      createPanner: () => ({
+        connect: () => {},
+        disconnect: () => {},
+        distanceModel: "",
+        refDistance: 0,
+        maxDistance: 0,
+        rolloffFactor: 0,
+        positionX: { value: 0 },
+        positionY: { value: 0 },
+        positionZ: { value: 0 },
+      }),
+      suspend: async () => {},
+      resume: async () => {},
+      close: async () => {},
+    };
+  }
+
+  function setWindow() {
+    global.window = {
+      AudioContext: mockAudioContext,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    };
+  }
+
+  function resetFacadeState() {
+    Audio.autoplay = "gated";
+    Audio.backend = null;
+    Audio.attenuation = "linear";
+    Audio.inverseRolloff = 4;
+    Audio.clear();
+  }
+
+  before(() => {
+    resetFacadeState();
+    setWindow();
+    AudioLoader.load = async (path) => {
+      const a = mockAudio();
+      fakeCache.set(path, a);
+      return a;
+    };
+    AudioLoader.loadBuffer = async (path) => ({ path, duration: 1, sampleRate: 44100 });
+    AudioLoader.get = (key) => fakeCache.get(key) || null;
+    AudioLoader.has = (key) => fakeCache.has(key);
+    AudioLoader.unload = (key) => fakeCache.delete(key);
+    AudioLoader.clear = () => fakeCache.clear();
+  });
+
+  after(() => {
+    resetFacadeState();
+    AudioLoader.load = origLoad;
+    AudioLoader.get = origGet;
+    AudioLoader.has = origHas;
+    AudioLoader.unload = origUnload;
+    AudioLoader.clear = origClear;
+    if (origWindow === undefined) {
+      delete global.window;
+    } else {
+      global.window = origWindow;
+    }
+  });
+
+  it("music exposes an effect chain", async () => {
+    Audio.clear();
+    await Audio.load("theme", "/sounds/theme.mp3");
+    const m = Audio.music("theme");
+    assert.ok(m.effects);
+    assert.strictEqual(typeof m.effects.add, "function");
+    assert.strictEqual(typeof m.effects.remove, "function");
+    assert.strictEqual(typeof m.effects.clear, "function");
+  });
+
+  it("attenuation get/set and validation", () => {
+    Audio.attenuation = "quadratic";
+    assert.strictEqual(Audio.attenuation, "quadratic");
+    Audio.attenuation = "inverse";
+    assert.strictEqual(Audio.attenuation, "inverse");
+    Audio.attenuation = "linear";
+    assert.strictEqual(Audio.attenuation, "linear");
+    assert.throws(() => { Audio.attenuation = "bogus"; }, /Invalid attenuation/);
+  });
+
+  it("inverseRolloff get/set", () => {
+    Audio.inverseRolloff = 2;
+    assert.strictEqual(Audio.inverseRolloff, 2);
+    Audio.inverseRolloff = 4;
+  });
+
+  it("autoplay defaults to gated and validates values", () => {
+    assert.strictEqual(Audio.autoplay, "gated");
+    assert.throws(() => { Audio.autoplay = "sometimes"; }, /unknown autoplay mode "sometimes"/);
+  });
+
+  it("autoplay 'none' plays immediately without a gesture", async () => {
+    Audio.clear();
+    Audio.autoplay = "none";
+    const s = await Audio.load("/sounds/none.wav");
+    const inst = s.play();
+    assert.ok(inst);
+    inst.stop();
+    Audio.autoplay = "gated";
+  });
+});
