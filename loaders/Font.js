@@ -3,6 +3,14 @@ import { ImageLoader } from "./ImageLoader.js";
 import { LoadingTask } from "./LoadingTask.js";
 
 const _registry = new Map();
+let _nextId = 1;
+const _byId = new Map();
+
+function _register(name, font) {
+  _registry.set(name, font);
+  _byId.set(font.id, font);
+  return font;
+}
 
 function _isObject(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
@@ -54,11 +62,12 @@ function _isPixel(data, i, color) {
   return data[i] === color[0] && data[i + 1] === color[1] && data[i + 2] === color[2];
 }
 
-function _hasContentColumn(data, width, top, bottom, x, color) {
+function _hasContentColumn(data, width, top, bottom, x, color, bg) {
   for (let y = top; y <= bottom; y++) {
     const i = (y * width + x) * 4;
     if (data[i + 3] === 0) continue;
     if (_isPixel(data, i, color)) continue;
+    if (bg && _isPixel(data, i, bg)) continue;
     return true;
   }
   return false;
@@ -77,6 +86,7 @@ export class NativeFont {
   constructor(name) {
     this.name = name;
     this.kind = "native";
+    this.id = _nextId++;
   }
 
   get family() {
@@ -95,6 +105,12 @@ export class BitmapFont {
     this._tintCache = new Map();
     this._lineHeight = 0;
     this._sliced = false;
+    this._background = config.background != null ? _parseColor(config.background) : null;
+    this._caseInsensitive = config.caseInsensitive ?? false;
+    this._colors = config.colors != null
+      ? (Array.isArray(config.colors) ? config.colors : [config.colors]).map(_parseColor)
+      : null;
+    this.id = _nextId++;
   }
 
   _slice() {
@@ -130,6 +146,7 @@ export class BitmapFont {
       const col = i % gridX;
       const row = Math.floor(i / gridX);
       const g = _sliceRegion(this._image, col * cellW, row * cellH, cellW, cellH);
+      this._clearBackgroundPixels(g);
       this._glyphs.set(characters[i], g);
       this._advances.set(characters[i], cellW + spacing);
     }
@@ -156,6 +173,7 @@ export class BitmapFont {
         const i = (y * width + x) * 4;
         if (data[i + 3] === 0) continue;
         if (_isPixel(data, i, color)) continue;
+        if (this._background && _isPixel(data, i, this._background)) continue;
         hasContent = true;
         break;
       }
@@ -194,8 +212,8 @@ export class BitmapFont {
       .map((box) => {
         let left = box.x;
         let right = box.x + box.w - 1;
-        while (left < right && !_hasContentColumn(data, width, top, bottom, left, color)) left++;
-        while (right >= left && !_hasContentColumn(data, width, top, bottom, right, color)) right--;
+        while (left < right && !_hasContentColumn(data, width, top, bottom, left, color, this._background)) left++;
+        while (right >= left && !_hasContentColumn(data, width, top, bottom, right, color, this._background)) right--;
         if (left > right) return null;
         return { x: left, w: right - left + 1 };
       })
@@ -212,13 +230,48 @@ export class BitmapFont {
     for (let i = 0; i < characters.length; i++) {
       const box = trimmed[i];
       const g = _sliceRegion(canvas, box.x, top, box.w, bottom - top + 1);
+      this._clearBackgroundPixels(g);
       this._glyphs.set(characters[i], g);
       this._advances.set(characters[i], box.w + spacing);
     }
   }
 
+  _clearBackgroundPixels(canvas) {
+    if (!this._background) return;
+    const ctx = canvas.getContext("2d");
+    const img = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const d = img.data;
+    const bg = this._background;
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] >= 128 && d[i] === bg[0] && d[i + 1] === bg[1] && d[i + 2] === bg[2]) {
+        d[i + 3] = 0;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+
+  _glyph(ch) {
+    let g = this._glyphs.get(ch);
+    if (g) return g;
+    if (this._caseInsensitive) {
+      const up = ch.toUpperCase();
+      if (up !== ch) g = this._glyphs.get(up);
+      if (!g) {
+        const lo = ch.toLowerCase();
+        if (lo !== ch) g = this._glyphs.get(lo);
+      }
+    }
+    return g || null;
+  }
+
   _advance(ch) {
     if (this._advances.has(ch)) return this._advances.get(ch);
+    if (this._caseInsensitive) {
+      const up = ch.toUpperCase();
+      if (up !== ch && this._advances.has(up)) return this._advances.get(up);
+      const lo = ch.toLowerCase();
+      if (lo !== ch && this._advances.has(lo)) return this._advances.get(lo);
+    }
     if (ch === " ") {
       if (this._config.spaceWidth != null) return this._config.spaceWidth;
       let max = 0;
@@ -232,18 +285,48 @@ export class BitmapFont {
     const key = ch + "\u0000" + color;
     let tinted = this._tintCache.get(key);
     if (tinted) return tinted;
-    const src = this._glyphs.get(ch);
+    const src = this._glyph(ch);
     if (!src) return null;
     const c = document.createElement("canvas");
     c.width = src.width;
     c.height = src.height;
     const ctx = c.getContext("2d");
     ctx.drawImage(src, 0, 0);
-    ctx.globalCompositeOperation = "source-in";
-    ctx.fillStyle = color;
-    ctx.fillRect(0, 0, c.width, c.height);
+    if (this._colors) {
+      const img = ctx.getImageData(0, 0, c.width, c.height);
+      const d = img.data;
+      const [tr, tg, tb] = _parseColor(color);
+      for (let i = 0; i < d.length; i += 4) {
+        if (d[i + 3] === 0) continue;
+        for (const [sr, sg, sb] of this._colors) {
+          if (d[i] === sr && d[i + 1] === sg && d[i + 2] === sb) {
+            d[i] = tr;
+            d[i + 1] = tg;
+            d[i + 2] = tb;
+            break;
+          }
+        }
+      }
+      ctx.putImageData(img, 0, 0);
+    } else {
+      ctx.globalCompositeOperation = "source-in";
+      ctx.fillStyle = color;
+      ctx.fillRect(0, 0, c.width, c.height);
+    }
     this._tintCache.set(key, c);
     return c;
+  }
+
+  glyph(ch) {
+    return this._glyph(ch);
+  }
+
+  advance(ch) {
+    return this._advance(ch);
+  }
+
+  get lineHeight() {
+    return this._lineHeight;
   }
 
   measure(text, options = {}) {
@@ -266,7 +349,7 @@ export class BitmapFont {
 
     let cx = startX;
     for (const ch of str) {
-      const glyph = this._glyphs.get(ch);
+      const glyph = this._glyph(ch);
       const adv = this._advance(ch) * scale;
       if (glyph) {
         const source = color ? this._getTinted(ch, color) : glyph;
@@ -345,8 +428,7 @@ export const Font = {
     if (_registry.has(name)) return _registry.get(name);
     await FontLoader.load(name, path);
     const font = new NativeFont(name);
-    _registry.set(name, font);
-    return font;
+    return _register(name, font);
   },
 
   _loadNativeBatch(map) {
@@ -363,7 +445,7 @@ export const Font = {
       }
       FontLoader.load(name, path).then(() => {
         const font = new NativeFont(name);
-        _registry.set(name, font);
+        _register(name, font);
         results[name] = font;
         task.done();
       }).catch((err) => task.fail(err));
@@ -377,8 +459,7 @@ export const Font = {
     const image = await ImageLoader.load(config.image);
     const font = new BitmapFont(name, config, image);
     font._slice();
-    _registry.set(name, font);
-    return font;
+    return _register(name, font);
   },
 
   _loadBitmapBatch(arr) {
@@ -417,10 +498,15 @@ export const Font = {
     return _registry.has(name);
   },
 
+  byId(id) {
+    return _byId.get(id) || null;
+  },
+
   remove(name) {
     const font = _registry.get(name);
     if (!font) return false;
     _registry.delete(name);
+    _byId.delete(font.id);
     if (font.kind === "native") {
       FontLoader.unload(name);
     }
@@ -429,6 +515,7 @@ export const Font = {
 
   clear() {
     _registry.clear();
+    _byId.clear();
     FontLoader.clear();
   },
 };

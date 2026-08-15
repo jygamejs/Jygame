@@ -43,6 +43,23 @@ function gridImage() {
   return makeImage(4, 2, () => [255, 255, 255]);
 }
 
+function imageDataFrom(img) {
+  const seen = new Set();
+  while (img) {
+    if (typeof img.getImageData === "function") return img.getImageData();
+    if (img.getContext) {
+      const c = img.getContext("2d");
+      if (!c || seen.has(c)) return null;
+      seen.add(c);
+      if (c._put) return { data: new Uint8ClampedArray(c._put.data), width: c._put.width, height: c._put.height };
+      img = c._img;
+      continue;
+    }
+    return null;
+  }
+  return null;
+}
+
 if (typeof global.document === "undefined") {
   global.document = {
     createElement: () => {
@@ -56,8 +73,13 @@ if (typeof global.document === "undefined") {
               _img: null,
               drawImage(...args) { this._img = args[0]; },
               getImageData() {
-                const img = this._img;
-                if (img && typeof img.getImageData === "function") return img.getImageData();
+                if (this._put) {
+                  return { data: new Uint8ClampedArray(this._put.data), width: this._put.width, height: this._put.height };
+                }
+                const found = imageDataFrom(this._img);
+                if (found) {
+                  return { data: new Uint8ClampedArray(found.data), width: found.width, height: found.height };
+                }
                 return {
                   data: new Uint8ClampedArray(canvas.width * canvas.height * 4),
                   width: canvas.width,
@@ -67,6 +89,7 @@ if (typeof global.document === "undefined") {
               fillRect() {},
               fillStyle: null,
               globalCompositeOperation: null,
+              putImageData(img) { this._put = img; },
             };
           }
           return canvas._ctx;
@@ -444,12 +467,234 @@ describe("Font.get/has/remove/clear", () => {
   });
 });
 
+describe("BitmapFont background & caseInsensitive", () => {
+  const origLoad = ImageLoader.load;
+  const origFLoad = FontLoader.load;
+
+  before(() => {
+    ImageLoader.load = async (path) => {
+      if (path === "sep.png") {
+        return makeImage(5, 2, (x, y) => {
+          if (x === 0 || x === 4) return [127, 127, 127];
+          if (x === 1 && y === 1) return [255, 0, 0];
+          return [0, 0, 0];
+        });
+      }
+      return gridImage();
+    };
+    FontLoader.load = async () => {};
+  });
+
+  after(() => {
+    ImageLoader.load = origLoad;
+    FontLoader.load = origFLoad;
+    Font.clear();
+  });
+
+  function makeCtx() {
+    const calls = [];
+    return {
+      calls,
+      drawImage: (img, x, y, w, h) => { calls.push({ img, x, y, w, h }); },
+    };
+  }
+
+  it("background color is ignored during separator slicing", async () => {
+    const font = await Font.load("Bg", {
+      image: "sep.png",
+      characters: "A",
+      separator: "#7F7F7F",
+      background: "#000000",
+    });
+    assert.deepStrictEqual(font.measure("A"), { width: 1, height: 1 });
+  });
+
+  it("without background, opaque pixels count as glyph content", async () => {
+    const font = await Font.load("NoBg", {
+      image: "sep.png",
+      characters: "A",
+      separator: "#7F7F7F",
+    });
+    assert.deepStrictEqual(font.measure("A"), { width: 3, height: 2 });
+  });
+
+  it("caseInsensitive renders lowercase using uppercase glyphs", async () => {
+    const font = await Font.load("CI", {
+      image: "grid.png",
+      characters: "AB",
+      gridX: 2,
+      gridY: 1,
+      caseInsensitive: true,
+    });
+    assert.deepStrictEqual(font.measure("ab"), font.measure("AB"));
+    const ctx = makeCtx();
+    font.render(ctx, "ab", 0, 0);
+    assert.strictEqual(ctx.calls.length, 2);
+  });
+
+  it("caseInsensitive works when rendering with a color tint", async () => {
+    const font = await Font.load("CITint", {
+      image: "grid.png",
+      characters: "AB",
+      gridX: 2,
+      gridY: 1,
+      caseInsensitive: true,
+    });
+    const ctx = makeCtx();
+    font.render(ctx, "ab", 0, 0, { color: "#ff0000" });
+    assert.strictEqual(ctx.calls.length, 2);
+  });
+
+  it("colors restricts tinting to the glyph's character colors", async () => {
+    const prev = ImageLoader.load;
+    ImageLoader.load = async () =>
+      makeImage(2, 2, (x, y) => {
+        if (x === 0 && y === 0) return [180, 180, 180];
+        if (x === 1 && y === 1) return [255, 0, 0];
+        return null;
+      });
+    try {
+      const font = await Font.load("Colors", {
+        image: "colors.png",
+        characters: "A",
+        gridX: 1,
+        gridY: 1,
+        colors: ["#FF0000"],
+      });
+      const tinted = font._getTinted("A", "#00ff00");
+      const out = tinted.getContext("2d").getImageData(0, 0, 2, 2).data;
+      assert.deepStrictEqual([out[0], out[1], out[2], out[3]], [180, 180, 180, 255]);
+      assert.deepStrictEqual([out[12], out[13], out[14], out[15]], [0, 255, 0, 255]);
+    } finally {
+      ImageLoader.load = prev;
+    }
+  });
+
+  it("colors accepts a single color string", async () => {
+    const prev = ImageLoader.load;
+    ImageLoader.load = async () =>
+      makeImage(2, 2, (x, y) => {
+        if (x === 0 && y === 0) return [180, 180, 180];
+        if (x === 1 && y === 1) return [255, 0, 0];
+        return null;
+      });
+    try {
+      const font = await Font.load("ColorsOne", {
+        image: "colors.png",
+        characters: "A",
+        gridX: 1,
+        gridY: 1,
+        colors: "#FF0000",
+      });
+      const tinted = font._getTinted("A", "#00ff00");
+      const out = tinted.getContext("2d").getImageData(0, 0, 2, 2).data;
+      assert.deepStrictEqual([out[0], out[1], out[2], out[3]], [180, 180, 180, 255]);
+      assert.deepStrictEqual([out[12], out[13], out[14], out[15]], [0, 255, 0, 255]);
+    } finally {
+      ImageLoader.load = prev;
+    }
+  });
+
+  it("without caseInsensitive, missing glyphs are skipped", async () => {
+    const font = await Font.load("CS", {
+      image: "grid.png",
+      characters: "AB",
+      gridX: 2,
+      gridY: 1,
+    });
+    assert.deepStrictEqual(font.measure("ab"), { width: 0, height: 2 });
+    const ctx = makeCtx();
+    font.render(ctx, "ab", 0, 0);
+    assert.strictEqual(ctx.calls.length, 0);
+  });
+});
+
+describe("Font numeric ids and glyph accessors", () => {
+  const origLoad = ImageLoader.load;
+  const origFLoad = FontLoader.load;
+
+  before(() => {
+    ImageLoader.load = async (path) => gridImage();
+    FontLoader.load = async () => {};
+  });
+
+  after(() => {
+    ImageLoader.load = origLoad;
+    FontLoader.load = origFLoad;
+    Font.clear();
+  });
+
+  it("assigns distinct monotonic ids to loaded fonts", async () => {
+    const a = await Font.load("IdA", "/fonts/a.ttf");
+    const b = await Font.load("IdB", "/fonts/b.ttf");
+    assert.ok(typeof a.id === "number" && a.id > 0);
+    assert.ok(typeof b.id === "number" && b.id > a.id);
+  });
+
+  it("cached loads keep the same id", async () => {
+    const a = await Font.load("IdCache", "/fonts/cache.ttf");
+    const b = await Font.load("IdCache", "/fonts/cache.ttf");
+    assert.strictEqual(a, b);
+    assert.strictEqual(a.id, b.id);
+  });
+
+  it("byId returns the registered font and null for unknown ids", async () => {
+    const font = await Font.load("IdLookup", "/fonts/lookup.ttf");
+    assert.strictEqual(Font.byId(font.id), font);
+    assert.strictEqual(Font.byId(-1), null);
+    assert.strictEqual(Font.byId(0xFFFFFF), null);
+  });
+
+  it("remove clears the id mapping without reusing the id", async () => {
+    const a = await Font.load("IdRemove", "/fonts/remove.ttf");
+    const oldId = a.id;
+    assert.strictEqual(Font.remove("IdRemove"), true);
+    assert.strictEqual(Font.byId(oldId), null);
+    const b = await Font.load("IdRemove", "/fonts/remove.ttf");
+    assert.ok(b.id > oldId);
+  });
+
+  it("clear clears the id mapping but keeps the counter monotonic", async () => {
+    const a = await Font.load("IdClearA", "/fonts/ca.ttf");
+    Font.clear();
+    assert.strictEqual(Font.byId(a.id), null);
+    const b = await Font.load("IdClearB", "/fonts/cb.ttf");
+    assert.ok(b.id > a.id);
+  });
+
+  it("bitmap glyph/advance/lineHeight delegate to the private data", async () => {
+    const font = await Font.load("Acc", {
+      image: "grid.png",
+      characters: "AB",
+      gridX: 2,
+      gridY: 1,
+    });
+    assert.strictEqual(font.glyph("A"), font._glyph("A"));
+    assert.strictEqual(font.advance("A"), font._advance("A"));
+    assert.strictEqual(font.lineHeight, font._lineHeight);
+    assert.strictEqual(font.glyph("Z"), null);
+    assert.strictEqual(font.advance("Z"), 0);
+  });
+
+  it("bitmap accessors honor caseInsensitive mode", async () => {
+    const font = await Font.load("AccCI", {
+      image: "grid.png",
+      characters: "AB",
+      gridX: 2,
+      gridY: 1,
+      caseInsensitive: true,
+    });
+    assert.strictEqual(font.glyph("a"), font.glyph("A"));
+    assert.strictEqual(font.advance("a"), font.advance("A"));
+  });
+});
+
 describe("Font surface is clean", () => {
   after(() => { Font.clear(); });
 
   it("exposes only the expected API surface", () => {
     const keys = Object.keys(Font).filter((k) => !k.startsWith("_"));
-    const expected = ["load", "get", "has", "remove", "clear"];
+    const expected = ["load", "get", "has", "byId", "remove", "clear"];
     assert.deepStrictEqual(keys, expected);
   });
 });
