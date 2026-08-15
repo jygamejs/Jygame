@@ -6,6 +6,7 @@ export { Renderable } from "./Renderable.js";
 export { Animation } from "./Animation.js";
 export { Visible } from "./Visible.js";
 export { RenderBounds } from "./RenderBounds.js";
+export { Text } from "./Text.js";
 export { Trail } from "./Trail.js";
 export { Parent } from "./Parent.js";
 export { Children } from "./Children.js";
