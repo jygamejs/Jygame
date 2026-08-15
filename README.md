@@ -95,6 +95,7 @@ Full API reference, guides, and examples: [jygame-documentation.vercel.app](http
 | `RenderBounds` | Cached render bounds for culling (`x`, `y`, `w`, `h`). |
 | `Animation` | Animation state: `{ current: string, frame: uint32, elapsed: float64, playing: boolean }`. |
 | `Trail` | Trail effect state: `{ maxLength, interval, elapsed, points }`. |
+| `Text` | Text state: `{ fontHandle: u16, contentHandle: u32, align: u8, letterSpacing: f32, version: u32 }`. Content strings and cached layouts live in `TextResourcePool`, referenced by `contentHandle`. |
 | `Parent` | Single-component parent reference: `{ entity: uint32 }`. |
 | `Children` | Empty-schema tag component. Entities with children have this component. |
 
@@ -112,10 +113,11 @@ Full API reference, guides, and examples: [jygame-documentation.vercel.app](http
 | Import | Description |
 |---|---|
 | `MovementSystem` | Reads `Velocity` + `Transform`, writes `Transform.x/y`. Priority: 0. |
-| `AnimationSystem` | Reads `Animation` + `Renderable`, advances frames. Priority: 0. |
-| `CollisionSystem` | Manages broad-phase strategies and collision queries. Priority: 10. |
-| `RenderSystem` | Reads `Transform` + `Renderable` + `Visible`, draws to canvas with camera culling. Priority: 100. |
-| `TrailSystem` | Updates trail point history for entities with `Trail` component. Priority: 0. |
+| `AnimationSystem` | Reads `Animation` + `Renderable`, advances frames. Priority: 1. |
+| `CollisionSystem` | Manages broad-phase strategies and collision queries. Priority: 2. |
+| `RenderSystem` | Reads `Transform` + `Renderable` + `Visible`, draws to canvas with camera culling. Priority: 3. |
+| `TrailSystem` | Updates trail point history for entities with `Trail` component. Priority: 4. |
+| `TextSystem` | Lays out `Transform` + `Renderable` + `Text` + `Visible` entities into `RenderQueue` glyph commands. Priority: 4 (after `RenderSystem`'s queue-clear). |
 | `HierarchySystem` | Propagates parent transforms to children (BFS from dirty roots). Priority: -10 (before all others). |
 
 ### ECS Resources
@@ -128,6 +130,7 @@ Full API reference, guides, and examples: [jygame-documentation.vercel.app](http
 | `CanvasContext` | Holds the 2D rendering context for the scene. |
 | `TrailManager` | Manages trail effect state across entities. |
 | `TrailBuffer` | Point history buffer for a single trail. |
+| `TextResourcePool` | Dense generation-handled resource pool owning text content strings and cached glyph layouts. Content resources are referenced from the `Text` component via packed `(slot << 16 | generation)` handles. |
 | `AnimationClip` | Frame sequence descriptor with per-clip FPS. |
 | `AnimationClipRegistry` | Global registry of named animation clips. |
 | `AnimationCallbacks` | Per-entity completion observers for the animation system. |
@@ -149,6 +152,9 @@ Full API reference, guides, and examples: [jygame-documentation.vercel.app](http
 | `Scene` | Engine Scene (extends ECS Scene). Lifecycle hooks (`onEnter`, `onExit`, `onCreate`, `pause`, `resume`, `update`, `interpolate`, `render`, `renderUI`, `renderDOM`), blocking properties, stack delegators, auto-cleaned event helpers (`on`, `onSwipe`, `onTap`, `cleanup`), and built-in `_actionMap`/`_inputContext` for input. |
 | `DefaultWorldBuilder` | Creates a pre-configured `World` with all engine components, systems, and resources registered. |
 | `Sprite` | Convenience entity wrapper with `Transform`, `Collider`, `Velocity`, `Renderable`, `Visible`. Exposes `x`, `y`, `width`, `height`, `angle`, `scale`, `velocity`, `image`, `style` shorthands. |
+| `Text` | World-space text entity for bitmap fonts. Composes `Transform` + `Renderable` + `Visible` + `Text`. Exposes `x`, `y`, `angle`, `scale`, `visible`, `value`/`text`/`string`, `font`, `color`, `align`, `letterSpacing`, `layer`, `depth`, `width`, `height`. Also exported as `TextComponent`. |
+| `TextSystem` | ECS system that lays out `Text` entities into `RenderQueue` glyph commands. Priority 4 (after `RenderSystem`'s queue-clear). |
+| `TextResourcePool` | World resource holding text content strings, cached glyph layouts, and measured bounds. |
 | `Group` | Entity container. Iterable (`for...of`). Collision queries delegate to `CollisionSystem`. Optional `SpatialHash` acceleration. `dispose()` for cleanup. |
 | `Camera` | View abstraction — world position, zoom, rotation, coordinate conversion. `Camera.main` auto-set on first construction. `Camera.setMain()` for explicit assignment. |
 | `Vec2` | 2D vector with add, sub, scale, dot, normalize, rotate, lerp. |
@@ -528,11 +534,13 @@ dependencies via the base class. The scheduler runs them in priority order:
 | Priority | System | Description |
 |---|---|---|
 | -10 | `HierarchySystem` | Propagate parent transforms to children (BFS from dirty roots) |
+| -10 | `SavePrevPositionSystem` | Cache the previous frame's Transform for interpolation |
 | 0 | `MovementSystem` | Apply `Velocity` → `Transform` |
-| 0 | `AnimationSystem` | Advance animation frames |
-| 0 | `TrailSystem` | Update trail point history |
-| 10 | `CollisionSystem` | Run broad-phase collision queries |
-| 100 | `RenderSystem` | Cull and render visible entities |
+| 1 | `AnimationSystem` | Advance animation frames |
+| 2 | `CollisionSystem` | Run broad-phase collision queries |
+| 3 | `RenderSystem` | Cull and render visible entities |
+| 4 | `TrailSystem` | Update trail point history |
+| 4 | `TextSystem` | Lay out text entities into `RenderQueue` glyph commands (after `RenderSystem`'s queue-clear) |
 
 Systems access entities through `QueryView` iterables:
 
@@ -592,6 +600,34 @@ not need to track jump/attack state.
 
 `Group` is a pure entity container (iterable). Collision queries delegate
 to `CollisionSystem`. Optional `SpatialHash` acceleration.
+
+### Text
+
+World-space text goes through the ECS (`TextSystem` → `RenderQueue`), so it
+follows the camera, respects `layer`/`depth` ordering, and renders identically
+on Canvas, WebGL, and WebGPU. Bitmap fonts only — native fonts use
+`Font.render(ctx, ...)` (see below).
+
+```js
+const ink = await Font.load("Ink", { image: "ink.png", gridX: 16, gridY: 16 });
+
+const score = new Text(100, 50, "Ink", "Score: 0", { layer: Layer.ENTITIES, depth: 5 });
+score.color = "#ffcc00";
+score.align = "center";
+score.letterSpacing = 1;
+score.value = "Score: 12";
+score.x += 10;
+score.destroy(); // releases the content resource and the entity
+```
+
+`new Text(x, y, font, content)` accepts a registered font name or a `BitmapFont`
+instance. The facade is a thin wrapper over `Transform` + `Renderable` +
+`Visible` + `Text`; `width`/`height` are measured from the cached layout.
+
+`Font.render(ctx, ...)` remains the immediate path for screen-space text —
+correct for UI/debug overlays in `renderUI()`/`render()`. `Text` is the
+world-space, camera-following consumer; native fonts (`Font.load("Native",
+{ family: ... })`) are immediate-only in v1.
 
 ### Input Actions
 

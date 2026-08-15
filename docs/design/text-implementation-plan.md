@@ -11,6 +11,12 @@ commit; final verification runs `node --test tools/ecs/tests/`.
 Commit message style follows `git log` conventions (`feat:`, `feat(<area>):`,
 `docs:`).
 
+> **Status: complete.** All eight commits landed:
+> `e72cda1` (C1), `c64d21a` (C2), `0c40f04` (C3), `adc9a33` (C4), `3c9292e`
+> (C5), `3debddc` (C6), `10d770d` (C7), and this commit (C8, docs). The full
+> suite is green; the priority-4 regression (C5) and the renderer integration
+> tests (C7) are in place.
+
 ---
 
 ## Dependency map

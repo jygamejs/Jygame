@@ -22,6 +22,7 @@ The scheduler runs all systems each frame via `world.update(dt)`.
 | `RenderBounds` | `{x: float64, y: float64, w: float64, h: float64}` | SoA columns |
 | `Animation` | `{clipId: u16, frameIndex: u32, elapsed: f32, isPlaying: u8, speed: f32, mode: u8, loop: u8, stopAt: u32}` | SoA columns |
 | `Trail` | `{maxLength: uint32, interval: float64, elapsed: float64, points: ref}` | Mixed |
+| `Text` | `{fontHandle: u16, contentHandle: u32, align: u8, letterSpacing: f32, version: u32}` | SoA columns |
 | `Parent` | `{entity: uint32}` | SoA column |
 | `Children` | (empty — tag component) | None |
 
@@ -35,11 +36,13 @@ World. The scheduler runs them in priority order:
 | System | Priority | Reads | Writes |
 |---|---|---|---|
 | `HierarchySystem` | -10 | `Parent`, `Transform`, `HierarchyGraph` | `WorldTransform` |
+| `SavePrevPositionSystem` | -10 | `Transform` | `Transform._prevX/_prevY` |
 | `MovementSystem` | 0 | `Velocity`, `Transform` | `Transform.x/y` |
-| `AnimationSystem` | 0 | `Animation`, `Renderable` | `Renderable.image`, `Animation.frame/elapsed` |
-| `TrailSystem` | 0 | `Trail`, `Transform` | `Trail.points` |
-| `CollisionSystem` | 10 | `Transform`, `Collider`, `Visible` | (broad-phase structures) |
-| `RenderSystem` | 100 | `Transform`, `Renderable`, `Visible`, `Camera` | canvas (side effect) |
+| `AnimationSystem` | 1 | `Animation`, `Renderable` | `Renderable.image`, `Animation.frame/elapsed` |
+| `CollisionSystem` | 2 | `Transform`, `Collider`, `Visible` | (broad-phase structures) |
+| `RenderSystem` | 3 | `Transform`, `Renderable`, `Visible`, `Camera` | canvas (side effect) |
+| `TrailSystem` | 4 | `Trail`, `Transform` | `Trail.points` |
+| `TextSystem` | 4 | `Transform`, `Renderable`, `Text`, `Visible` | `RenderQueue` (glyph commands) |
 
 ### Who Owns What
 
@@ -62,6 +65,8 @@ World. The scheduler runs them in priority order:
 | SpatialHash lifecycle | `CollisionSystem` | `beginFrame()` → all rebuilds |
 | Broad-phase strategy | `CollisionSystem` + strategy instance | Pluggable via `useSpatialHash()` |
 | Entity membership | `Group` (iterable container) | Private array |
+| Text glyph state | `Text` — authoritative | `fontHandle`, `contentHandle`, `align`, `letterSpacing`, `version` |
+| Text content, layout, measured bounds | `TextResourcePool` — authoritative | Content strings, cached glyph layout, bounds live outside the ECS |
 
 ### What Is Derived
 
@@ -73,6 +78,7 @@ World. The scheduler runs them in priority order:
 | Entity center | `Transform.x`, `Transform.y` | Collision checks, rendering |
 | World-space AABB | `WorldTransform + Collider + scale` | Camera culling |
 | Visible world bounds | `Camera (x, y, width, height, zoom)` | Culling, worldToScreen, screenToWorld |
+| `Text.width` / `Text.height` | `TextResourcePool` measured bounds (cached layout) | Public convenience getters |
 
 ## Ownership Boundaries
 
@@ -130,6 +136,28 @@ Sprite (convenience entity wrapper)
 - Internally creates an ECS entity via `World._nextEntityId` and adds components
 - `kill()` removes from all groups
 - Public getters (`x`, `y`, `width`, `height`, `image`, `style`, `angle`, `scale`, `velocity`) are convenience shorthands over components
+
+### Text
+
+```
+Text (convenience entity wrapper)
+├── Transform
+├── Renderable
+├── Visible
+└── Text (fontHandle, contentHandle, align, letterSpacing, version)
+```
+
+- Mirrors the Sprite pattern: a concrete wrapper composing existing components,
+  with Text-specific numeric state in the `Text` component
+- Non-numeric state (content string, cached glyph layout, measured bounds) lives
+  in the `TextResourcePool` world resource, referenced through `contentHandle`
+- Rendering metadata (color/layer/depth/smoothing) comes from `Renderable`,
+  position/rotation/scale from `Transform`, visibility from `Visible` — no
+  parallel fields
+- `destroy()` releases the content resource and destroys the entity
+- Text entities carry no `RenderBounds`: `RenderSystem` (which queries it) never
+  sees them, so text is not double-drawn
+- See the Text section below for handles, pool conventions, and system ordering
 
 ### Camera
 
@@ -341,6 +369,81 @@ RenderSystem (extends System)
 - `IDENTITY` sentinel (width=0, plain object) disables both transform
   and culling — no camera setup required for simple games
 - Uses `QueryView` to iterate entities with `Transform + Renderable + Visible`
+
+## Text
+
+Text is the Font consumer in the ECS world (Sprite is the Image consumer). It
+follows the engine's numeric-only ECS invariant, keeps `Font.render(ctx, ...)`
+intact, and pushes glyph quads through the shared `RenderQueue` so Canvas/WebGL/
+WebGPU behave identically. See
+[`docs/design/text-architecture.md`](design/text-architecture.md) for the full
+design; this section records the invariants and conventions.
+
+### The numeric-handle invariant
+
+> The ECS owns numeric state. Resource pools own non-numeric state. Handles
+> connect the two.
+
+Non-numeric data (content strings, cached glyph layouts, measured bounds) never
+enters a component column. `Text` references it through compact numeric handles.
+
+### The `Text` component
+
+```js
+static schema = {
+  fontHandle:    "u16",   // canonical Font registry id; 0 = none
+  contentHandle: "u32",   // packed pool handle (slot << 16 | generation); 0 = no content
+  align:         "u8",    // 0 = left, 1 = center, 2 = right
+  letterSpacing: "f32",
+  version:       "u32",   // bumped on content/font/align/letterSpacing/color change
+};
+```
+
+All rendering metadata (color, layer, depth, imageSmoothing) stays in
+`Renderable`; position/rotation/scale in `Transform`; visibility in `Visible`.
+Text adds no parallel rendering fields and no `RenderBounds`.
+
+### `TextResourcePool`
+
+A world resource holding the cold state behind every `contentHandle`:
+
+- **Dense storage** — typed-array metadata (generation, in-use, layoutVersion,
+  measured width/height) plus a free list; cold JS arrays for content strings
+  and cached glyph layouts.
+- **Generation handles** — `handle = (slot << 16) | generation`. `get(handle)`
+  is one array read + one generation compare; a stale handle returns `null`.
+- **Slot 0 is never allocated**, so `contentHandle === 0` means "no content"
+  (typed-array zero-init makes it free).
+- **Retire-on-wrap** — a release that would overflow a slot's 16-bit generation
+  retires the slot instead of wrapping, so a stale handle can never alias a
+  different live resource.
+- **Idempotent release** — the generation guard makes double-release a no-op,
+  so the facade `destroy()` and the system's destruction hook may both fire.
+- **Ownership** — content is entity-owned: `TextSystem.onAdded` registers
+  `world.onEntityDestroyed` (callbacks run before row removal) and releases the
+  destroyed entity's handle. Fonts are shared and owned by the canonical
+  registry.
+
+### `TextSystem`
+
+`static priority = 4` — after `RenderSystem` (priority 3), which clears the
+`RenderQueue` at the start of its `update()`. This ordering is a hard
+requirement: glyph commands are appended to the same queue after the clear, so
+text and sprites interleave by `layer → depth → insertion` regardless of
+registration order.
+
+Query: `{ all: [Transform, Renderable, Text, Visible] }`. On relayout (only when
+`version !== layoutVersion`) it resolves the font via `Font.byId(fontHandle)`
+and pushes one `RenderQueue` command per glyph. Steady state is allocation-free:
+it reads the cached layout and pushes pooled commands.
+
+### Font registry numeric ids
+
+`Font.load()` assigns each font a monotonic, never-reused numeric `id`
+(`font.id`); `Font.byId(id)` looks it up. `Font.remove()`/`Font.clear()` free
+the registry entry but never reuse ids, so a removed font's handle resolves to
+`null` and can never alias a different font. Unlike `AssetRegistry.clear()`,
+`Font.clear()` does **not** reset the id counter.
 
 ### CollisionSystem
 
