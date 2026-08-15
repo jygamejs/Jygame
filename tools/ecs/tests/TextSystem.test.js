@@ -189,6 +189,31 @@ describe("TextSystem", () => {
     assert.strictEqual(cmds[0].depth, 5);
   });
 
+  it("uses raw glyphs at the default white color", () => {
+    const world = makeWorld();
+    const pool = world.getResource(TextResourcePool);
+    const queue = world.getResource(RenderQueue);
+    const handle = pool.allocate("A");
+    addTextEntity(world, { x: 0, y: 0, fontId: font.id, handle });
+    world.update(16);
+    const cmds = collectCommands(queue);
+    assert.strictEqual(cmds.length, 1);
+    assert.strictEqual(cmds[0].sourceImage, font.glyph("A"));
+  });
+
+  it("tints glyphs when a color is set", () => {
+    const world = makeWorld();
+    const pool = world.getResource(TextResourcePool);
+    const queue = world.getResource(RenderQueue);
+    const handle = pool.allocate("A");
+    addTextEntity(world, { x: 0, y: 0, fontId: font.id, handle, fillColor: 0xffcc00 });
+    world.update(16);
+    const cmds = collectCommands(queue);
+    assert.strictEqual(cmds.length, 1);
+    assert.notStrictEqual(cmds[0].sourceImage, font.glyph("A"));
+    assert.strictEqual(cmds[0].sourceImage, font._getTinted("A", "#ffcc00"));
+  });
+
   it("aligns left/center/right relative to the transform anchor", () => {
     const cases = [
       [0, [100, 102]],

@@ -19,7 +19,7 @@ function newHost(opts) { return new HeadlessHost({ width: 100, height: 100, ...o
 // `import * as jy from "jygame"` work off this same surface.
 const PUBLIC_NAMES = [
   "Game", "Scene",
-  "Sprite", "Group", "Trail", "Camera", "View", "Viewport",
+  "Sprite", "Group", "Trail", "Camera", "View", "Viewport", "Text",
   "Image", "Audio", "Font",
   "Input",
   "Particle", "ParticleSystem", "ParticleEmitter", "ParticleEffect",

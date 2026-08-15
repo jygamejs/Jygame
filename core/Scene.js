@@ -8,6 +8,7 @@ import { Viewport } from "../view/Viewport.js";
 import { RenderConfig } from "../view/RenderConfig.js";
 import { Renderer } from "../renderer/index.js";
 import { Sprite } from "../display/Sprite.js";
+import { Text } from "../display/Text.js";
 import { InputContext } from "../input/actions/InputContext.js";
 import { ActionMap } from "../input/actions/ActionMap.js";
 import { BindingCompiler } from "../input/facade/BindingCompiler.js";
@@ -34,6 +35,7 @@ export class Scene extends EcsScene {
     this.blocksRenderBelow = false;
     this._prevDefaultWorld = null;
     this._prevDefaultParticleWorld = null;
+    this._prevDefaultTextWorld = null;
     this._inputContext = null;
     this._actionMap = null;
     this._inputPriority = 0;
@@ -199,6 +201,8 @@ export class Scene extends EcsScene {
     Sprite._defaultWorld = this._world;
     this._prevDefaultParticleWorld = ParticleEffect._defaultWorld;
     ParticleEffect._defaultWorld = this._world;
+    this._prevDefaultTextWorld = Text._defaultWorld;
+    Text._defaultWorld = this._world;
 
     const result = this.onEnter();
     if (result && typeof result.then === "function") {
@@ -320,6 +324,10 @@ export class Scene extends EcsScene {
 
     if (ParticleEffect._defaultWorld === this._world) {
       ParticleEffect._defaultWorld = this._prevDefaultParticleWorld;
+    }
+
+    if (Text._defaultWorld === this._world) {
+      Text._defaultWorld = this._prevDefaultTextWorld;
     }
 
     if (this._world) {

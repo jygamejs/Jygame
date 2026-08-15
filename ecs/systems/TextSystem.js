@@ -93,10 +93,10 @@ export class TextSystem extends System {
         let layout = pool.layout(handle);
         if (layout === null || version[r] !== pool.layoutVersion(handle)) {
           const font = fontHandle[r] ? Font.byId(fontHandle[r]) : null;
-          if (!font) continue;
+          if (!font || typeof font.glyph !== "function") continue;
           const content = pool.get(handle);
           if (typeof content !== "string") continue;
-          const placements = this._layout(font, content, align[r], letterSpacing[r]);
+          const placements = this._layout(font, content, align[r], letterSpacing[r], fillCol[r]);
           pool.setLayout(handle, placements);
           pool.setLayoutVersion(handle, version[r]);
           layout = pool.layout(handle);
@@ -130,19 +130,23 @@ export class TextSystem extends System {
     }
   }
 
-  _layout(font, content, align, letterSpacing) {
+  _layout(font, content, align, letterSpacing, color) {
     const placements = [];
     let total = 0;
     for (const ch of content) total += font.advance(ch) + letterSpacing;
     let startX = 0;
     if (align === 1) startX = -total / 2;
     else if (align === 2) startX = -total;
+    const tint = color === 0xffffff ? null : "#" + color.toString(16).padStart(6, "0");
     let cx = startX;
     for (const ch of content) {
       const glyph = font.glyph(ch);
       const adv = font.advance(ch) + letterSpacing;
       if (glyph) {
-        placements.push({ canvas: glyph, x: cx, y: 0, w: glyph.width, h: glyph.height });
+        const source = tint ? font._getTinted(ch, tint) : glyph;
+        if (source) {
+          placements.push({ canvas: source, x: cx, y: 0, w: source.width, h: source.height });
+        }
       }
       cx += adv;
     }
