@@ -500,3 +500,52 @@ describe("WebGLRenderer particles", () => {
   });
 });
 
+
+describe("WebGLRenderer text glyphs", () => {
+  it("batches text glyph commands into one instanced draw", () => {
+    const { gl, calls } = makeMockGL();
+    const renderer = new WebGLRenderer({ context: gl, width: 800, height: 600 });
+    const { world, queue } = makeWorld();
+    const canvas = { width: 4, height: 4 };
+    queue.push(canvas, 0, 0, 4, 4, 10, 20, 0, 1, 1, 4, 4, 0xffffff, 0, 1, true, 0);
+    queue.push(canvas, 0, 0, 4, 4, 30, 20, 0, 1, 1, 4, 4, 0xffffff, 0, 1, true, 0);
+    renderer.render(world);
+
+    const draws = calls.drawArraysInstanced;
+    assert.strictEqual(draws.length, 1);
+    assert.strictEqual(draws[0].instanceCount, 2);
+    renderer.destroy();
+  });
+
+  it("uploads a shared glyph canvas once through the texture cache", () => {
+    const { gl, calls } = makeMockGL();
+    const renderer = new WebGLRenderer({ context: gl, width: 800, height: 600 });
+    const { world, queue } = makeWorld();
+    const canvas = { width: 4, height: 4 };
+    queue.push(canvas, 0, 0, 4, 4, 10, 20, 0, 1, 1, 4, 4, 0xffffff, 0, 1, true, 0);
+    queue.push(canvas, 0, 0, 4, 4, 30, 20, 0, 1, 1, 4, 4, 0xffffff, 0, 1, true, 0);
+    renderer.render(world);
+
+    const uploads = calls.texImage2D.filter((c) => c.source === canvas);
+    assert.strictEqual(uploads.length, 1, "shared glyph canvas must upload once");
+    renderer.destroy();
+  });
+
+  it("applies the camera to text glyph commands", () => {
+    const { gl, calls } = makeMockGL();
+    const renderer = new WebGLRenderer({ context: gl, width: 800, height: 600 });
+    const { world, queue } = makeWorld({
+      camera: new Camera(0, 0, 1),
+      viewport: new Viewport(0, 0, 800, 600),
+    });
+    const canvas = { width: 4, height: 4 };
+    queue.push(canvas, 0, 0, 4, 4, 100, 50, 0, 1, 1, 4, 4, 0xffffff, 0, 1, true, 0);
+    renderer.render(world);
+
+    const cam = calls.uniformMatrix4fv.find((c) => c.loc && c.loc.name === "uMatrix");
+    assert.ok(cam, "camera view-projection must be uploaded for a text frame");
+    assert.strictEqual(renderer._batch.data[0], 100);
+    assert.strictEqual(renderer._batch.data[1], 50);
+    renderer.destroy();
+  });
+});

@@ -1,4 +1,4 @@
-import { describe, it, mock } from "node:test";
+import { describe, it, mock, before, after } from "node:test";
 import * as assert from "node:assert";
 import { Renderer } from "../../../renderer/Renderer.js";
 import { CanvasRenderer } from "../../../renderer/CanvasRenderer.js";
@@ -15,6 +15,12 @@ import { TrailSystem } from "../../../ecs/systems/TrailSystem.js";
 import { CanvasContext } from "../../../ecs/render/CanvasContext.js";
 import { Camera } from "../../../view/Camera.js";
 import { Viewport } from "../../../view/Viewport.js";
+import { Text as TextComponent } from "../../../ecs/components/Text.js";
+import { TextResourcePool } from "../../../ecs/render/TextResourcePool.js";
+import { TextSystem } from "../../../ecs/systems/TextSystem.js";
+import { Font } from "../../../loaders/Font.js";
+import { FontLoader } from "../../../loaders/FontLoader.js";
+import { ImageLoader } from "../../../loaders/ImageLoader.js";
 
 function mockCtx() {
   const ctx = {
@@ -238,5 +244,169 @@ describe("World renderable surface", () => {
   it("collectTrailRenderables returns [] without a TrailManager", () => {
     const world = new World();
     assert.deepStrictEqual(world.collectTrailRenderables(), []);
+  });
+});
+
+function makeImageData(w, h, colorAt) {
+  const data = new Uint8ClampedArray(w * h * 4);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const c = colorAt(x, y);
+      if (!c) continue;
+      const i = (y * w + x) * 4;
+      data[i] = c[0];
+      data[i + 1] = c[1];
+      data[i + 2] = c[2];
+      data[i + 3] = 255;
+    }
+  }
+  return data;
+}
+
+function makeImage(w, h, colorAt) {
+  return {
+    width: w,
+    height: h,
+    data: makeImageData(w, h, colorAt),
+    getImageData() {
+      return { data: this.data, width: w, height: h };
+    },
+  };
+}
+
+function gridImage() {
+  return makeImage(4, 2, () => [255, 255, 255]);
+}
+
+function imageDataFrom(img) {
+  const seen = new Set();
+  while (img) {
+    if (typeof img.getImageData === "function") return img.getImageData();
+    if (img.getContext) {
+      const c = img.getContext("2d");
+      if (!c || seen.has(c)) return null;
+      seen.add(c);
+      if (c._put) return { data: new Uint8ClampedArray(c._put.data), width: c._put.width, height: c._put.height };
+      img = c._img;
+      continue;
+    }
+    return null;
+  }
+  return null;
+}
+
+if (typeof global.document === "undefined") {
+  global.document = {
+    createElement: () => {
+      const canvas = {
+        width: 0,
+        height: 0,
+        _ctx: null,
+        getContext: () => {
+          if (!canvas._ctx) {
+            canvas._ctx = {
+              _img: null,
+              drawImage(...args) { this._img = args[0]; },
+              getImageData() {
+                if (this._put) {
+                  return { data: new Uint8ClampedArray(this._put.data), width: this._put.width, height: this._put.height };
+                }
+                const found = imageDataFrom(this._img);
+                if (found) {
+                  return { data: new Uint8ClampedArray(found.data), width: found.width, height: found.height };
+                }
+                return {
+                  data: new Uint8ClampedArray(canvas.width * canvas.height * 4),
+                  width: canvas.width,
+                  height: canvas.height,
+                };
+              },
+              fillRect() {},
+              fillStyle: null,
+              globalCompositeOperation: null,
+              putImageData(img) { this._put = img; },
+            };
+          }
+          return canvas._ctx;
+        },
+      };
+      return canvas;
+    },
+  };
+}
+
+describe("CanvasRenderer text integration", () => {
+  const origImgLoad = ImageLoader.load;
+  const origFLoad = FontLoader.load;
+  let font;
+
+  before(async () => {
+    ImageLoader.load = async () => gridImage();
+    FontLoader.load = async () => {};
+    font = await Font.load("Grid", { image: "grid.png", characters: "AB", gridX: 2, gridY: 1 });
+  });
+
+  after(() => {
+    ImageLoader.load = origImgLoad;
+    FontLoader.load = origFLoad;
+    Font.clear();
+  });
+
+  function makeTextWorld() {
+    const world = new World();
+    world.register(Transform);
+    world.register(Renderable);
+    world.register(TextComponent);
+    world.register(Visible);
+    world.setResource(RenderQueue, new RenderQueue());
+    world.setResource(TextResourcePool, new TextResourcePool());
+    world.addSystem(new TextSystem());
+    return world;
+  }
+
+  function addTextEntity(world, x, y, handle) {
+    const e = world.createEntity();
+    world.addMany(e, Transform, Renderable, TextComponent, Visible);
+    world.set(e, Transform, { x, y, rotation: 0, scaleX: 1, scaleY: 1, _prevX: x, _prevY: y, _interpValid: 1 });
+    world.set(e, Renderable, { fillColor: 0xffffff, layer: 1, depth: 0, imageSmoothing: 1 });
+    world.set(e, TextComponent, { fontHandle: font.id, contentHandle: handle, align: 0, letterSpacing: 0, version: 1 });
+    world.set(e, Visible, { value: 1 });
+    return e;
+  }
+
+  it("renders TextSystem glyphs through drawImage", () => {
+    const world = makeTextWorld();
+    const pool = world.getResource(TextResourcePool);
+    const handle = pool.allocate("AB");
+    addTextEntity(world, 100, 50, handle);
+    world.update(16);
+
+    const ctx = mockCtx();
+    new CanvasRenderer({ context: ctx, width: 800, height: 600 }).render(world);
+
+    assert.strictEqual(ctx.drawImage.mock.calls.length, 2);
+    assert.strictEqual(ctx.drawImage.mock.calls[0].arguments[0], font.glyph("A"));
+    assert.strictEqual(ctx.drawImage.mock.calls[1].arguments[0], font.glyph("B"));
+  });
+
+  it("applies the camera transform to text glyphs", () => {
+    const world = makeTextWorld();
+    const pool = world.getResource(TextResourcePool);
+    const handle = pool.allocate("AB");
+    addTextEntity(world, 100, 50, handle);
+    world.setResource(Camera, new Camera(0, 0, 1));
+    world.setResource(Viewport, new Viewport(0, 0, 800, 600));
+    world.update(16);
+
+    const transforms = [];
+    const ctx = mockCtx();
+    ctx.setTransform = (...args) => { transforms.push(args); };
+    new CanvasRenderer({ context: ctx, width: 800, height: 600 }).render(world);
+
+    // viewport center (400, 300) + glyph world position
+    assert.strictEqual(transforms[0][4], 500);
+    assert.strictEqual(transforms[0][5], 350);
+    assert.strictEqual(transforms[1][4], 502);
+    assert.strictEqual(transforms[1][5], 350);
   });
 });

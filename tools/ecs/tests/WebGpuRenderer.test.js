@@ -524,3 +524,57 @@ describe("WebGpuRenderer particles", () => {
     });
   });
 });
+
+describe("WebGpuRenderer text glyphs", () => {
+  it("batches text glyph commands into one instanced draw", async () => {
+    const mock = makeMockGPU();
+    const renderer = await makeRenderer(mock);
+    const { world, queue } = makeWorld();
+    const canvas = { width: 4, height: 4 };
+    queue.push(canvas, 0, 0, 4, 4, 10, 20, 0, 1, 1, 4, 4, 0xffffff, 0, 1, true, 0);
+    queue.push(canvas, 0, 0, 4, 4, 30, 20, 0, 1, 1, 4, 4, 0xffffff, 0, 1, true, 0);
+    renderer.render(world);
+
+    const draws = mock.log.draw;
+    assert.strictEqual(draws.length, 1);
+    assert.strictEqual(draws[0].vertexCount, 4);
+    assert.strictEqual(draws[0].instanceCount, 2);
+    renderer.destroy();
+  });
+
+  it("uploads a shared glyph canvas as a single texture", async () => {
+    const mock = makeMockGPU();
+    const renderer = await makeRenderer(mock);
+    const { world, queue } = makeWorld();
+    const canvas = { width: 4, height: 4 };
+    queue.push(canvas, 0, 0, 4, 4, 10, 20, 0, 1, 1, 4, 4, 0xffffff, 0, 1, true, 0);
+    queue.push(canvas, 0, 0, 4, 4, 30, 20, 0, 1, 1, 4, 4, 0xffffff, 0, 1, true, 0);
+    renderer.render(world);
+
+    const textures = mock.log.createTexture.filter(
+      (t) => t.width === 4 && t.height === 4,
+    );
+    assert.strictEqual(textures.length, 1, "shared glyph canvas must create one texture");
+    renderer.destroy();
+  });
+
+  it("writes the camera view-projection and glyph position for a text frame", async () => {
+    const mock = makeMockGPU();
+    const renderer = await makeRenderer(mock);
+    const { world, queue } = makeWorld({
+      camera: new Camera(0, 0, 1),
+      viewport: new Viewport(0, 0, 800, 600),
+    });
+    const canvas = { width: 4, height: 4 };
+    queue.push(canvas, 0, 0, 4, 4, 100, 50, 0, 1, 1, 4, 4, 0xffffff, 0, 1, true, 0);
+    renderer.render(world);
+
+    const uniform = mock.log.writeBuffer.find((w) => (w.buffer.usage & GPUBufferUsage.UNIFORM) !== 0 && w.byteLength === 64);
+    assert.ok(uniform, "camera matrix must be written for a text frame");
+    const storage = mock.log.writeBuffer.find((w) => (w.buffer.usage & GPUBufferUsage.STORAGE) !== 0);
+    const d = new Float32Array(storage.data.buffer, storage.data.byteOffset, storage.data.byteLength / 4);
+    assert.strictEqual(d[0], 100);
+    assert.strictEqual(d[1], 50);
+    renderer.destroy();
+  });
+});
