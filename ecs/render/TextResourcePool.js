@@ -23,6 +23,9 @@ export class TextResourcePool {
     this._freeList = new Uint32Array(initialCapacity);
     this._content = new Array(initialCapacity).fill(null);
     this._layout = new Array(initialCapacity).fill(null);
+    this._layoutVersion = new Uint32Array(initialCapacity);
+    this._width = new Float32Array(initialCapacity);
+    this._height = new Float32Array(initialCapacity);
   }
 
   get capacity() {
@@ -36,6 +39,14 @@ export class TextResourcePool {
       if (inUse[i] === LIVE) n++;
     }
     return n;
+  }
+
+  _slotOf(handle) {
+    const slot = handle & TextResourcePool.SLOT_MASK;
+    if (slot === 0) return -1;
+    if (this._generation[slot] !== (handle >>> TextResourcePool.SLOT_BITS)) return -1;
+    if (this._inUse[slot] !== LIVE) return -1;
+    return slot;
   }
 
   allocate(content) {
@@ -58,14 +69,15 @@ export class TextResourcePool {
     this._inUse[slot] = LIVE;
     this._content[slot] = content;
     this._layout[slot] = null;
+    this._layoutVersion[slot] = 0;
+    this._width[slot] = 0;
+    this._height[slot] = 0;
     return (this._generation[slot] << TextResourcePool.SLOT_BITS) | slot;
   }
 
   release(handle) {
-    const slot = handle & TextResourcePool.SLOT_MASK;
-    if (slot === 0) return false;
-    if (this._generation[slot] !== (handle >>> TextResourcePool.SLOT_BITS)) return false;
-    if (this._inUse[slot] !== LIVE) return false;
+    const slot = this._slotOf(handle);
+    if (slot < 0) return false;
 
     this._content[slot] = null;
     this._layout[slot] = null;
@@ -82,20 +94,106 @@ export class TextResourcePool {
   }
 
   get(handle) {
-    const slot = handle & TextResourcePool.SLOT_MASK;
-    if (slot === 0) return null;
-    if (this._generation[slot] !== (handle >>> TextResourcePool.SLOT_BITS)) return null;
-    if (this._inUse[slot] !== LIVE) return null;
+    const slot = this._slotOf(handle);
+    if (slot < 0) return null;
     return this._content[slot];
   }
 
   setContent(handle, content) {
-    const slot = handle & TextResourcePool.SLOT_MASK;
-    if (slot === 0) return false;
-    if (this._generation[slot] !== (handle >>> TextResourcePool.SLOT_BITS)) return false;
-    if (this._inUse[slot] !== LIVE) return false;
+    const slot = this._slotOf(handle);
+    if (slot < 0) return false;
     this._content[slot] = content;
     return true;
+  }
+
+  layout(handle) {
+    const slot = this._slotOf(handle);
+    if (slot < 0) return null;
+    return this._layout[slot];
+  }
+
+  setLayout(handle, placements) {
+    const slot = this._slotOf(handle);
+    if (slot < 0) return false;
+    if (placements == null || typeof placements.length !== "number") {
+      throw new TypeError(
+        "TextResourcePool.setLayout failed: placements must be an array of glyph placements."
+      );
+    }
+
+    const glyphCount = placements.length;
+    let layout = this._layout[slot];
+    if (!layout) {
+      layout = this._layout[slot] = { canvases: [], positions: new Float32Array(0), count: 0 };
+    }
+
+    const curGlyphs = layout.positions.length / 4;
+    if (curGlyphs < glyphCount) {
+      let newGlyphs = curGlyphs === 0 ? 1 : curGlyphs;
+      while (newGlyphs < glyphCount) newGlyphs *= 2;
+      const newPositions = new Float32Array(newGlyphs * 4);
+      newPositions.set(layout.positions);
+      layout.positions = newPositions;
+    }
+
+    layout.count = glyphCount;
+    layout.canvases.length = glyphCount;
+    const canvases = layout.canvases;
+    const pos = layout.positions;
+
+    let minX = Infinity;
+    let maxRight = -Infinity;
+    let maxH = 0;
+    for (let i = 0; i < glyphCount; i++) {
+      const g = placements[i];
+      const x = g.x;
+      const y = g.y;
+      const w = g.w;
+      const h = g.h;
+      canvases[i] = g.canvas;
+      pos[i * 4] = x;
+      pos[i * 4 + 1] = y;
+      pos[i * 4 + 2] = w;
+      pos[i * 4 + 3] = h;
+      if (x < minX) minX = x;
+      const right = x + w;
+      if (right > maxRight) maxRight = right;
+      if (h > maxH) maxH = h;
+    }
+
+    if (glyphCount === 0) {
+      this._width[slot] = 0;
+      this._height[slot] = 0;
+    } else {
+      this._width[slot] = maxRight - minX;
+      this._height[slot] = maxH;
+    }
+    return true;
+  }
+
+  layoutVersion(handle) {
+    const slot = this._slotOf(handle);
+    if (slot < 0) return null;
+    return this._layoutVersion[slot];
+  }
+
+  setLayoutVersion(handle, version) {
+    const slot = this._slotOf(handle);
+    if (slot < 0) return false;
+    this._layoutVersion[slot] = version;
+    return true;
+  }
+
+  width(handle) {
+    const slot = this._slotOf(handle);
+    if (slot < 0) return null;
+    return this._width[slot];
+  }
+
+  height(handle) {
+    const slot = this._slotOf(handle);
+    if (slot < 0) return null;
+    return this._height[slot];
   }
 
   _grow() {
@@ -118,11 +216,23 @@ export class TextResourcePool {
     for (let i = 0; i < this._count; i++) newLayout[i] = this._layout[i];
     newLayout.fill(null, this._count);
 
+    const newLayoutVersion = new Uint32Array(newCap);
+    newLayoutVersion.set(this._layoutVersion);
+
+    const newWidth = new Float32Array(newCap);
+    newWidth.set(this._width);
+
+    const newHeight = new Float32Array(newCap);
+    newHeight.set(this._height);
+
     this._generation = newGen;
     this._inUse = newInUse;
     this._freeList = newFree;
     this._content = newContent;
     this._layout = newLayout;
+    this._layoutVersion = newLayoutVersion;
+    this._width = newWidth;
+    this._height = newHeight;
     this._capacity = newCap;
   }
 }

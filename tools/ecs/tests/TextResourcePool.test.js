@@ -131,3 +131,129 @@ describe("TextResourcePool retire-on-wrap", () => {
     assert.strictEqual(pool.get(next), "b");
   });
 });
+
+describe("TextResourcePool layout cache", () => {
+  function makeCanvas(w, h) {
+    return { width: w, height: h };
+  }
+
+  it("setLayout stores glyphs and layout() exposes them", () => {
+    const pool = new TextResourcePool();
+    const h = pool.allocate("AB");
+    assert.strictEqual(pool.layout(h), null);
+
+    assert.strictEqual(pool.setLayout(h, [
+      { canvas: makeCanvas(4, 2), x: 0, y: 0, w: 4, h: 2 },
+      { canvas: makeCanvas(4, 2), x: 6, y: 0, w: 4, h: 2 },
+    ]), true);
+
+    const layout = pool.layout(h);
+    assert.ok(layout);
+    assert.strictEqual(layout.count, 2);
+    assert.strictEqual(layout.canvases.length, 2);
+    assert.strictEqual(layout.positions.length, 8);
+    assert.deepStrictEqual(Array.from(layout.positions), [0, 0, 4, 2, 6, 0, 4, 2]);
+  });
+
+  it("refills the same buffers in place across relayouts of the same capacity", () => {
+    const pool = new TextResourcePool();
+    const h = pool.allocate("AB");
+    pool.setLayout(h, [
+      { canvas: makeCanvas(4, 2), x: 0, y: 0, w: 4, h: 2 },
+      { canvas: makeCanvas(4, 2), x: 6, y: 0, w: 4, h: 2 },
+    ]);
+    const layout = pool.layout(h);
+    const positionsRef = layout.positions;
+    const canvasesRef = layout.canvases;
+
+    pool.setLayout(h, [
+      { canvas: makeCanvas(8, 4), x: 1, y: 1, w: 8, h: 4 },
+      { canvas: makeCanvas(8, 4), x: 10, y: 1, w: 8, h: 4 },
+    ]);
+    const layout2 = pool.layout(h);
+    assert.strictEqual(layout2, layout);
+    assert.strictEqual(layout2.positions, positionsRef);
+    assert.strictEqual(layout2.canvases, canvasesRef);
+    assert.deepStrictEqual(Array.from(layout2.positions), [1, 1, 8, 4, 10, 1, 8, 4]);
+  });
+
+  it("grows positions geometrically on longer content and preserves capacity on shrink", () => {
+    const pool = new TextResourcePool();
+    const h = pool.allocate("text");
+    pool.setLayout(h, [
+      { canvas: makeCanvas(1, 1), x: 0, y: 0, w: 1, h: 1 },
+      { canvas: makeCanvas(1, 1), x: 1, y: 0, w: 1, h: 1 },
+    ]);
+    assert.strictEqual(pool.layout(h).positions.length, 8);
+
+    const placements = [];
+    for (let i = 0; i < 5; i++) {
+      placements.push({ canvas: makeCanvas(1, 1), x: i, y: 0, w: 1, h: 1 });
+    }
+    pool.setLayout(h, placements);
+    const grown = pool.layout(h);
+    assert.strictEqual(grown.positions.length, 32);
+    assert.strictEqual(grown.count, 5);
+
+    pool.setLayout(h, [{ canvas: makeCanvas(1, 1), x: 0, y: 0, w: 1, h: 1 }]);
+    const shrunk = pool.layout(h);
+    assert.strictEqual(shrunk.positions.length, 32);
+    assert.strictEqual(shrunk.count, 1);
+  });
+
+  it("measures bounds for left/center/right alignment", () => {
+    const pool = new TextResourcePool();
+    const h = pool.allocate("AB");
+    const gw = 4;
+    const gh = 2;
+    const adv = 6;
+    const cases = { left: 0, center: -5, right: -10 };
+    const widths = {};
+    for (const [align, startX] of Object.entries(cases)) {
+      pool.setLayout(h, [
+        { canvas: makeCanvas(gw, gh), x: startX, y: 0, w: gw, h: gh },
+        { canvas: makeCanvas(gw, gh), x: startX + adv, y: 0, w: gw, h: gh },
+      ]);
+      widths[align] = pool.width(h);
+      assert.strictEqual(pool.height(h), gh);
+    }
+    assert.strictEqual(widths.left, widths.center);
+    assert.strictEqual(widths.center, widths.right);
+    assert.strictEqual(widths.left, 10);
+  });
+
+  it("measures an empty layout as zero", () => {
+    const pool = new TextResourcePool();
+    const h = pool.allocate("x");
+    assert.strictEqual(pool.setLayout(h, []), true);
+    assert.strictEqual(pool.width(h), 0);
+    assert.strictEqual(pool.height(h), 0);
+    assert.strictEqual(pool.layout(h).count, 0);
+  });
+
+  it("tracks layout version per slot", () => {
+    const pool = new TextResourcePool();
+    const h = pool.allocate("x");
+    assert.strictEqual(pool.layoutVersion(h), 0);
+    assert.strictEqual(pool.setLayoutVersion(h, 17), true);
+    assert.strictEqual(pool.layoutVersion(h), 17);
+    pool.release(h);
+    assert.strictEqual(pool.layoutVersion(h), null);
+    assert.strictEqual(pool.setLayoutVersion(h, 3), false);
+  });
+
+  it("layout accessors fail for invalid handles", () => {
+    const pool = new TextResourcePool();
+    assert.strictEqual(pool.layout(0), null);
+    assert.strictEqual(pool.setLayout(0, []), false);
+    assert.strictEqual(pool.layoutVersion(0), null);
+    assert.strictEqual(pool.width(0), null);
+    assert.strictEqual(pool.height(0), null);
+  });
+
+  it("setLayout rejects non-array placements", () => {
+    const pool = new TextResourcePool();
+    const h = pool.allocate("x");
+    assert.throws(() => pool.setLayout(h, null), /placements/);
+  });
+});
