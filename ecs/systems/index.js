@@ -4,3 +4,4 @@ export { SavePrevPositionSystem } from "./SavePrevPositionSystem.js";
 export { CollisionSystem } from "./CollisionSystem.js";
 export { RenderSystem } from "./RenderSystem.js";
 export { TrailSystem } from "./TrailSystem.js";
+export { TextSystem } from "./TextSystem.js";

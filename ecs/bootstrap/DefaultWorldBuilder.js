@@ -2,12 +2,12 @@ import { World } from "../core/World.js";
 
 import {
   Transform, Velocity, Collider, Renderable, RenderBounds,
-  Animation, Visible, Trail,
+  Animation, Visible, Trail, Text,
   EnemyTag, PlayerTag, ProjectileTag, StaticTag,
 } from "../components/index.js";
 
 import {
-  MovementSystem, AnimationSystem, SavePrevPositionSystem, CollisionSystem, RenderSystem, TrailSystem,
+  MovementSystem, AnimationSystem, SavePrevPositionSystem, CollisionSystem, RenderSystem, TrailSystem, TextSystem,
 } from "../systems/index.js";
 
 import { RenderQueue, AssetRegistry, TextResourcePool } from "../render/index.js";
@@ -21,12 +21,12 @@ import {
 const _ECS_COMPONENTS = [
   Transform, Velocity, Collider,
   Renderable, RenderBounds,
-  Animation, Visible, Trail,
+  Animation, Visible, Trail, Text,
   EnemyTag, PlayerTag, ProjectileTag, StaticTag,
 ];
 
 const _ECS_SYSTEMS = [
-  SavePrevPositionSystem, MovementSystem, AnimationSystem, CollisionSystem, RenderSystem, TrailSystem,
+  SavePrevPositionSystem, MovementSystem, AnimationSystem, CollisionSystem, RenderSystem, TrailSystem, TextSystem,
 ];
 
 function _registerStandardMetrics(diag) {
