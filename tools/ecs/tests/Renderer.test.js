@@ -56,6 +56,7 @@ describe("Renderer contract", () => {
     assert.throws(() => b.endFrame(), /not implemented/);
     assert.throws(() => b.destroy(), /not implemented/);
     assert.throws(() => b.immediateContext, /not implemented/);
+    assert.throws(() => b.immediateBackgroundContext, /not implemented/);
   });
 
   it("base resize updates shared width/height bookkeeping", () => {
@@ -72,6 +73,7 @@ describe("CanvasRenderer", () => {
     const ctx = mockCtx();
     const r = new CanvasRenderer({ context: ctx, width: 800, height: 600 });
     assert.strictEqual(r.immediateContext, ctx);
+    assert.strictEqual(r.immediateBackgroundContext, ctx);
     assert.strictEqual(r.width, 800);
     assert.strictEqual(r.height, 600);
     assert.strictEqual(r.canvas, null);

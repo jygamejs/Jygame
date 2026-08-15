@@ -340,6 +340,7 @@ describe("SceneStack — queries and iteration", () => {
   it("render() draws each scene and its world", () => {
     const drawn = [];
     const renderer = {
+      immediateBackgroundContext: createHeadlessContext2D(),
       immediateContext: createHeadlessContext2D(),
       render: (world) => drawn.push(world),
     };
@@ -382,10 +383,15 @@ describe("SceneStack — UI", () => {
   it("render() runs render, retained world, renderUI(ctx), then renderDOM", () => {
     const stack = makeStack();
     const calls = [];
+    const bgCtx = createHeadlessContext2D();
     const ctx = createHeadlessContext2D();
-    const renderer = { immediateContext: ctx, render: (world) => calls.push("world") };
+    const renderer = {
+      immediateBackgroundContext: bgCtx,
+      immediateContext: ctx,
+      render: (world) => calls.push("world"),
+    };
     class UIScene extends Scene {
-      render(c) { calls.push("render"); }
+      render(c) { calls.push("render"); assert.strictEqual(c, bgCtx); }
       renderUI(c) { calls.push("renderUI"); assert.strictEqual(c, ctx); }
       renderDOM() { calls.push("renderDOM"); return "<p></p>"; }
     }
@@ -413,7 +419,11 @@ describe("SceneStack — UI", () => {
       configurable: true,
     });
 
-    const renderer = { immediateContext: createHeadlessContext2D(), render() {} };
+    const renderer = {
+      immediateBackgroundContext: createHeadlessContext2D(),
+      immediateContext: createHeadlessContext2D(),
+      render() {},
+    };
     stack.render(renderer, 0);
     assert.strictEqual(writes, 0, "unchanged markup must not touch the DOM");
 

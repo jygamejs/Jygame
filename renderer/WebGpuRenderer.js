@@ -51,7 +51,8 @@ export class WebGpuRenderer extends Renderer {
     this._compositePipeline = null;
     this._compositeBindGroupLayout = null;
 
-    this._immediate = new ImmediateCanvas(width, height);
+    this._immediateBg = new ImmediateCanvas(width, height);
+    this._immediateFg = new ImmediateCanvas(width, height);
     this._clearColor = [0, 0, 0, 0];
     this._tmpParticle = {};
     this._matrix = null;
@@ -111,7 +112,8 @@ export class WebGpuRenderer extends Renderer {
   }
 
   beginFrame() {
-    this._immediate.clear();
+    this._immediateBg.clear();
+    this._immediateFg.clear();
   }
 
   clear() {
@@ -148,7 +150,10 @@ export class WebGpuRenderer extends Renderer {
 
   endFrame() {
     if (!this._initialized) return;
-    this._compositeImmediate();
+    if (this._immediateFg.dirty) {
+      this._compositePass(this._immediateFg);
+      this._immediateFg.dirty = false;
+    }
   }
 
   _renderFrame(world) {
@@ -170,6 +175,11 @@ export class WebGpuRenderer extends Renderer {
         },
       ],
     });
+
+    if (this._immediateBg.dirty) {
+      this._drawCompositeInPass(pass, this._immediateBg);
+      this._immediateBg.dirty = false;
+    }
 
     this._setupSpriteFrame(world);
     this._renderQueue(world, pass);
@@ -424,18 +434,18 @@ export class WebGpuRenderer extends Renderer {
     });
   }
 
-  _compositeImmediate() {
-    const overlay = this._immediate.canvas;
-    if (!overlay || !this._immediate.context) return;
+  _compositeTextureFor(overlay) {
+    const source = overlay.canvas;
+    if (!source || !overlay.context) return null;
     const device = this._device;
-    if (!device || !this._compositePipeline) return;
-    if (typeof device.queue.copyExternalImageToTexture !== "function") return;
+    if (!device || !this._compositePipeline) return null;
+    if (typeof device.queue.copyExternalImageToTexture !== "function") return null;
 
     let tex = this._compositeTexture;
-    if (!tex || tex.width !== overlay.width || tex.height !== overlay.height) {
+    if (!tex || tex.width !== source.width || tex.height !== source.height) {
       if (tex && tex.destroy) tex.destroy();
       tex = device.createTexture({
-        size: { width: overlay.width, height: overlay.height, depthOrArrayLayers: 1 },
+        size: { width: source.width, height: source.height, depthOrArrayLayers: 1 },
         format: "rgba8unorm",
         usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
       });
@@ -443,11 +453,33 @@ export class WebGpuRenderer extends Renderer {
     }
 
     device.queue.copyExternalImageToTexture(
-      { source: overlay },
+      { source },
       { texture: tex },
-      { width: overlay.width, height: overlay.height },
+      { width: source.width, height: source.height },
     );
+    return tex;
+  }
 
+  _drawCompositeInPass(pass, overlay) {
+    const tex = this._compositeTextureFor(overlay);
+    if (!tex) return;
+    const device = this._device;
+    const bindGroup = device.createBindGroup({
+      layout: this._compositeBindGroupLayout,
+      entries: [
+        { binding: 0, resource: this._textures.sampler() },
+        { binding: 1, resource: tex.createView() },
+      ],
+    });
+    pass.setPipeline(this._compositePipeline);
+    pass.setBindGroup(0, bindGroup);
+    pass.draw(4);
+  }
+
+  _compositePass(overlay) {
+    const device = this._device;
+    const tex = this._compositeTextureFor(overlay);
+    if (!tex) return;
     const encoder = device.createCommandEncoder();
     const view = this._context.getCurrentTexture().createView();
     const bindGroup = device.createBindGroup({
@@ -551,7 +583,8 @@ export class WebGpuRenderer extends Renderer {
       if (this.canvas.width !== width) this.canvas.width = width;
       if (this.canvas.height !== height) this.canvas.height = height;
     }
-    this._immediate.resize(width, height);
+    this._immediateBg.resize(width, height);
+    this._immediateFg.resize(width, height);
   }
 
   destroy() {
@@ -568,6 +601,10 @@ export class WebGpuRenderer extends Renderer {
   }
 
   get immediateContext() {
-    return this._immediate.context;
+    return this._immediateFg.drawingContext;
+  }
+
+  get immediateBackgroundContext() {
+    return this._immediateBg.drawingContext;
   }
 }

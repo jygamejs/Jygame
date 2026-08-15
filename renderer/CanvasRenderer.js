@@ -176,4 +176,8 @@ export class CanvasRenderer extends Renderer {
   get immediateContext() {
     return this._ctx;
   }
+
+  get immediateBackgroundContext() {
+    return this._ctx;
+  }
 }

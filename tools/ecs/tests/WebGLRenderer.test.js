@@ -235,20 +235,47 @@ describe("WebGLRenderer", () => {
     assert.strictEqual(renderer.height, 480);
   });
 
-  it("endFrame composites the immediate overlay as a fullscreen quad", () => {
+  it("endFrame composites the foreground overlay as a fullscreen quad", () => {
     const previous = globalThis.document;
     globalThis.document = {
       createElement: () => ({
         width: 0,
         height: 0,
-        getContext: (kind) => (kind === "2d" ? { clearRect() {} } : null),
+        getContext: (kind) => (kind === "2d" ? { clearRect() {}, fillRect() {} } : null),
       }),
     };
     try {
       const { gl, calls } = makeMockGL();
       const renderer = new WebGLRenderer({ context: gl, width: 800, height: 600 });
+      renderer.immediateContext.fillRect(0, 0, 1, 1);
       renderer.endFrame();
       assert.ok(calls.drawArrays.some((c) => c.mode === gl.TRIANGLE_STRIP && c.count === 4));
+    } finally {
+      if (previous === undefined) delete globalThis.document;
+      else globalThis.document = previous;
+    }
+  });
+
+  it("composites the background overlay before the world is drawn", () => {
+    const previous = globalThis.document;
+    globalThis.document = {
+      createElement: () => ({
+        width: 0,
+        height: 0,
+        getContext: (kind) => (kind === "2d" ? { clearRect() {}, fillRect() {} } : null),
+      }),
+    };
+    try {
+      const { gl, calls } = makeMockGL();
+      const renderer = new WebGLRenderer({ context: gl, width: 800, height: 600 });
+      renderer.immediateBackgroundContext.fillRect(0, 0, 1, 1);
+      const { world, queue } = makeWorld({ config: new RenderConfig({ clearColor: "#102030" }) });
+      pushRect(queue);
+      renderer.render(world);
+
+      const strips = calls.drawArrays.filter((c) => c.mode === gl.TRIANGLE_STRIP && c.count === 4);
+      assert.strictEqual(strips.length, 1, "background composite quad only");
+      assert.strictEqual(calls.drawArrays[0], strips[0], "composite quad is drawn before sprites");
     } finally {
       if (previous === undefined) delete globalThis.document;
       else globalThis.document = previous;

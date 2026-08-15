@@ -124,6 +124,32 @@ describe("WebGpuRenderer", () => {
     renderer.destroy();
   });
 
+  it("composites the background overlay under the world when drawn to", async () => {
+    const previous = globalThis.document;
+    globalThis.document = {
+      createElement: () => ({
+        width: 0,
+        height: 0,
+        getContext: (kind) => (kind === "2d" ? { clearRect() {}, fillRect() {} } : null),
+      }),
+    };
+    try {
+      const mock = makeMockGPU();
+      const renderer = await makeRenderer(mock);
+      renderer.immediateBackgroundContext.fillRect(0, 0, 1, 1);
+      const { world, queue } = makeWorld();
+      pushRect(queue, { x: 10, y: 20, width: 40, height: 40, fillColor: 0xff0000 });
+      renderer.render(world);
+
+      const draws = mock.log.draw.filter((d) => d.vertexCount === 4);
+      assert.strictEqual(draws.length, 2, "background composite quad + sprite quad");
+      renderer.destroy();
+    } finally {
+      if (previous === undefined) delete globalThis.document;
+      else globalThis.document = previous;
+    }
+  });
+
   it("uploads per-instance position, size, color, depth and shape", async () => {
     const mock = makeMockGPU();
     const renderer = await makeRenderer(mock);
@@ -231,21 +257,43 @@ describe("WebGpuRenderer", () => {
     renderer.destroy();
   });
 
-  it("endFrame composites the immediate overlay as a fullscreen quad", async () => {
+  it("endFrame composites the foreground overlay as a fullscreen quad", async () => {
     const previous = globalThis.document;
     globalThis.document = {
       createElement: () => ({
         width: 0,
         height: 0,
-        getContext: (kind) => (kind === "2d" ? { clearRect() {} } : null),
+        getContext: (kind) => (kind === "2d" ? { clearRect() {}, fillRect() {} } : null),
+      }),
+    };
+    try {
+      const mock = makeMockGPU();
+      const renderer = await makeRenderer(mock);
+      renderer.immediateContext.fillRect(0, 0, 1, 1);
+      renderer.endFrame();
+      assert.ok(mock.log.copyExternalImageToTexture.length >= 1);
+      assert.ok(mock.log.draw.some((d) => d.vertexCount === 4));
+      renderer.destroy();
+    } finally {
+      if (previous === undefined) delete globalThis.document;
+      else globalThis.document = previous;
+    }
+  });
+
+  it("endFrame skips compositing when the foreground overlay is clean", async () => {
+    const previous = globalThis.document;
+    globalThis.document = {
+      createElement: () => ({
+        width: 0,
+        height: 0,
+        getContext: (kind) => (kind === "2d" ? { clearRect() {}, fillRect() {} } : null),
       }),
     };
     try {
       const mock = makeMockGPU();
       const renderer = await makeRenderer(mock);
       renderer.endFrame();
-      assert.ok(mock.log.copyExternalImageToTexture.length >= 1);
-      assert.ok(mock.log.draw.some((d) => d.vertexCount === 4));
+      assert.strictEqual(mock.log.copyExternalImageToTexture.length, 0);
       renderer.destroy();
     } finally {
       if (previous === undefined) delete globalThis.document;

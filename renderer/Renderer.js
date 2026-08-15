@@ -40,6 +40,10 @@ export class Renderer {
     throw new Error("Renderer.immediateContext is not implemented.");
   }
 
+  get immediateBackgroundContext() {
+    throw new Error("Renderer.immediateBackgroundContext is not implemented.");
+  }
+
   get width() {
     return this._width;
   }

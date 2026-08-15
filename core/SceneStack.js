@@ -251,15 +251,17 @@ export class SceneStack {
   render(renderer, start) {
     for (let i = start; i < this._scenes.length; i++) {
       const scene = this._scenes[i];
-      const ctx = renderer.immediateContext;
-      scene.render(ctx);
+      // Immediate drawing goes on the background layer (behind the world) —
+      // GPU renderers composite it before the world, canvas renderers simply
+      // draw before the world because both hooks share the visible context.
+      scene.render(renderer.immediateBackgroundContext);
       if (scene.world) {
         renderer.render(scene.world);
       }
       // Foreground canvas layer, above the retained objects, below the DOM
-      // overlay. Like render(ctx) it is screen space — the camera does not
+      // overlay. Like renderUI it is screen space — the camera does not
       // transform it.
-      scene.renderUI(ctx);
+      scene.renderUI(renderer.immediateContext);
       const html = scene.renderDOM();
       if (html !== undefined && html !== null && html !== scene._lastUIHTML && scene.root) {
         scene.root.innerHTML = html;

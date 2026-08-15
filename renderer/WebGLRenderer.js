@@ -158,7 +158,8 @@ export class WebGLRenderer extends Renderer {
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
     gl.bindTexture(gl.TEXTURE_2D, null);
 
-    this._immediate = new ImmediateCanvas(width, height);
+    this._immediateBg = new ImmediateCanvas(width, height);
+    this._immediateFg = new ImmediateCanvas(width, height);
     this._clearColor = [0, 0, 0, 0];
     this._trailBatch = null;
     this._tmpParticle = {};
@@ -175,7 +176,8 @@ export class WebGLRenderer extends Renderer {
   }
 
   beginFrame() {
-    this._immediate.clear();
+    this._immediateBg.clear();
+    this._immediateFg.clear();
   }
 
   clear() {
@@ -196,6 +198,10 @@ export class WebGLRenderer extends Renderer {
       const ids = this._diagIds;
 
       const doRender = () => {
+        if (this._immediateBg.dirty) {
+          this._compositeOverlay(this._immediateBg);
+          this._immediateBg.dirty = false;
+        }
         this._setupSpriteFrame(world);
         this._renderQueue(world);
         this._flushBatch();
@@ -217,7 +223,10 @@ export class WebGLRenderer extends Renderer {
 
   endFrame() {
     this._flushBatch();
-    this._compositeImmediate();
+    if (this._immediateFg.dirty) {
+      this._compositeOverlay(this._immediateFg);
+      this._immediateFg.dirty = false;
+    }
   }
 
   _setupSpriteFrame(world) {
@@ -545,14 +554,13 @@ export class WebGLRenderer extends Renderer {
     return [0, 0, 0, 0];
   }
 
-  _compositeImmediate() {
-    const overlay = this._immediate.canvas;
-    if (!overlay || !this._immediate.context) return;
+  _compositeOverlay(overlay) {
     const gl = this._gl;
+    if (!overlay || !overlay.context) return;
 
     gl.bindTexture(gl.TEXTURE_2D, this._compositeTexture);
     gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, overlay);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, overlay.canvas);
 
     gl.useProgram(this._compositeProgram);
     gl.uniform1i(this._compositeTextureLocation, 0);
@@ -589,7 +597,8 @@ export class WebGLRenderer extends Renderer {
     }
     const gl = this._gl;
     gl.viewport(0, 0, this.canvas ? this.canvas.width : width, this.canvas ? this.canvas.height : height);
-    this._immediate.resize(width, height);
+    this._immediateBg.resize(width, height);
+    this._immediateFg.resize(width, height);
   }
 
   destroy() {
@@ -609,7 +618,11 @@ export class WebGLRenderer extends Renderer {
   }
 
   get immediateContext() {
-    return this._immediate.context;
+    return this._immediateFg.drawingContext;
+  }
+
+  get immediateBackgroundContext() {
+    return this._immediateBg.drawingContext;
   }
 
   get gl() {

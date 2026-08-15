@@ -392,12 +392,13 @@ describe("Scene — render pipeline", () => {
     const w = scene.world;
     const calls = [];
     const renderer = {
+      immediateBackgroundContext: mockRenderCtx(),
       immediateContext: mockRenderCtx(),
       render: (world) => { calls.push("world"); },
     };
     scene.render = (ctx) => { calls.push("scene"); };
 
-    scene.render(renderer.immediateContext);
+    scene.render(renderer.immediateBackgroundContext);
     renderer.render(w);
 
     assert.deepStrictEqual(calls, ["scene", "world"]);
