@@ -4,3 +4,4 @@ export { CanvasContext } from "./CanvasContext.js";
 export { AssetRegistry } from "./AssetRegistry.js";
 export { AtlasRegion } from "./AtlasRegion.js";
 export { TrailRenderer } from "./TrailRenderer.js";
+export { TextResourcePool } from "./TextResourcePool.js";

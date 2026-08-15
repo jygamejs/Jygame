@@ -10,7 +10,7 @@ import {
   MovementSystem, AnimationSystem, SavePrevPositionSystem, CollisionSystem, RenderSystem, TrailSystem,
 } from "../systems/index.js";
 
-import { RenderQueue, AssetRegistry } from "../render/index.js";
+import { RenderQueue, AssetRegistry, TextResourcePool } from "../render/index.js";
 import { AnimationCallbacks, AnimationClipRegistry, AnimationPlayback } from "../animation/index.js";
 import { TrailManager } from "../trails/TrailManager.js";
 import { SpatialHash } from "../../collision/SpatialHash.js";
@@ -121,6 +121,7 @@ export class DefaultWorldBuilder {
     world.setResource(AnimationCallbacks, new AnimationCallbacks());
     world.setResource(AnimationPlayback, new AnimationPlayback());
     world.setResource(AssetRegistry, new AssetRegistry());
+    world.setResource(TextResourcePool, new TextResourcePool());
 
     for (let i = 0; i < _ECS_SYSTEMS.length; i++) {
       world.addSystem(new _ECS_SYSTEMS[i]());
