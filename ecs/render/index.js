@@ -7,3 +7,5 @@ export { TrailRenderer } from "./TrailRenderer.js";
 export { TextResourcePool } from "./TextResourcePool.js";
 export { layoutText } from "./TextLayout.js";
 export { rasterizeText } from "./TextRasterizer.js";
+export { GlyphBuffer } from "./GlyphBuffer.js";
+export { fillGlyphBuffer, pushGlyphs, renderGlyphs } from "./GlyphRenderer.js";
