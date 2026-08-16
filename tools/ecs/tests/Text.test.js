@@ -164,28 +164,46 @@ describe("Text facade", () => {
     const w = t.world;
     const e = t.entity;
     assert.strictEqual(w.get(e, TextComponent).version, 1);
+    assert.strictEqual(w.get(e, TextComponent).surfaceVersion, 1);
 
     t.value = "A";
     assert.strictEqual(t.value, "A");
     assert.strictEqual(w.get(e, TextComponent).version, 2);
+    assert.strictEqual(w.get(e, TextComponent).surfaceVersion, 2, "content change rebuilds layout and surface");
 
     t.font = font;
     assert.strictEqual(w.get(e, TextComponent).fontHandle, font.id);
     assert.strictEqual(w.get(e, TextComponent).version, 3);
+    assert.strictEqual(w.get(e, TextComponent).surfaceVersion, 3);
 
     t.color = "#ffcc00";
     assert.strictEqual(w.get(e, Renderable).fillColor, 0xffcc00);
     assert.strictEqual(t.color, "#ffcc00");
-    assert.strictEqual(w.get(e, TextComponent).version, 4);
+    assert.strictEqual(w.get(e, TextComponent).colorEnabled, 1);
+    assert.strictEqual(w.get(e, TextComponent).version, 3, "color does not invalidate layout");
+    assert.strictEqual(w.get(e, TextComponent).surfaceVersion, 4, "color rebuilds only the surface");
+
+    t.color = "#ffffff";
+    assert.strictEqual(w.get(e, Renderable).fillColor, 0xffffff);
+    assert.strictEqual(t.color, "#ffffff");
+    assert.strictEqual(w.get(e, TextComponent).colorEnabled, 1);
+    assert.strictEqual(w.get(e, TextComponent).surfaceVersion, 5);
+
+    t.color = null;
+    assert.strictEqual(t.color, null);
+    assert.strictEqual(w.get(e, TextComponent).colorEnabled, 0);
+    assert.strictEqual(w.get(e, TextComponent).surfaceVersion, 6);
 
     t.align = "center";
     assert.strictEqual(w.get(e, TextComponent).align, 1);
     assert.strictEqual(t.align, "center");
-    assert.strictEqual(w.get(e, TextComponent).version, 5);
+    assert.strictEqual(w.get(e, TextComponent).version, 4);
+    assert.strictEqual(w.get(e, TextComponent).surfaceVersion, 7);
 
     t.letterSpacing = 1.5;
     assert.strictEqual(w.get(e, TextComponent).letterSpacing, 1.5);
-    assert.strictEqual(w.get(e, TextComponent).version, 6);
+    assert.strictEqual(w.get(e, TextComponent).version, 5);
+    assert.strictEqual(w.get(e, TextComponent).surfaceVersion, 8);
 
     t.layer = 2;
     assert.strictEqual(w.get(e, Renderable).layer, 2);

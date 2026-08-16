@@ -99,7 +99,7 @@ export class Text {
     wld.set(eid, Visible, { value: 1 });
 
     const contentHandle = pool.allocate(content);
-    wld.set(eid, TextComponent, { fontHandle: fontObj.id, contentHandle, align: 0, letterSpacing: 0, version: 1 });
+    wld.set(eid, TextComponent, { fontHandle: fontObj.id, contentHandle, align: 0, letterSpacing: 0, version: 1, colorEnabled: 0, surfaceVersion: 1 });
 
     if (options) {
       if (options.color != null) this.color = options.color;
@@ -142,8 +142,17 @@ export class Text {
     return this.#world.getResource(TextResourcePool) || null;
   }
 
-  _bumpVersion() {
-    this._getText().version += 1;
+  // Layout-affecting changes (content, font, alignment, letter spacing) bump
+  // both the layout `version` and the `surfaceVersion` (the bitmap must be
+  // redrawn). Color bumps only `surfaceVersion` — positions don't change.
+  _bumpLayout() {
+    const t = this._getText();
+    t.version += 1;
+    t.surfaceVersion += 1;
+  }
+
+  _bumpSurface() {
+    this._getText().surfaceVersion += 1;
   }
 
   get value() {
@@ -163,7 +172,7 @@ export class Text {
     if (t.contentHandle !== 0 && pool) {
       pool.setContent(t.contentHandle, String(v));
     }
-    this._bumpVersion();
+    this._bumpLayout();
   }
 
   get text() { return this.value; }
@@ -182,25 +191,34 @@ export class Text {
     this._assertAlive();
     const resolved = Text._resolveFont(v);
     this._getText().fontHandle = resolved.id;
-    this._bumpVersion();
+    this._bumpLayout();
   }
 
   get color() {
     this._assertAlive();
+    const enabled = this._getText().colorEnabled;
+    if (!enabled) return null;
     return "#" + this._getR().fillColor.toString(16).padStart(6, "0");
   }
 
   set color(v) {
     this._assertAlive();
+    const t = this._getText();
+    if (v == null) {
+      t.colorEnabled = 0;
+      this._bumpSurface();
+      return;
+    }
     const r = this._getR();
     if (typeof v === "number") {
       r.fillColor = v;
     } else if (typeof v === "string" && v[0] === "#") {
       r.fillColor = parseInt(v.slice(1), 16);
     } else {
-      throw new TypeError("Text.color: expected a hex string or a number.");
+      throw new TypeError("Text.color: expected a hex string, a number, or null.");
     }
-    this._bumpVersion();
+    t.colorEnabled = 1;
+    this._bumpSurface();
   }
 
   get align() {
@@ -220,7 +238,7 @@ export class Text {
     } else {
       t.align = v;
     }
-    this._bumpVersion();
+    this._bumpLayout();
   }
 
   get letterSpacing() {
@@ -231,7 +249,7 @@ export class Text {
   set letterSpacing(v) {
     this._assertAlive();
     this._getText().letterSpacing = v;
-    this._bumpVersion();
+    this._bumpLayout();
   }
 
   get layer() {

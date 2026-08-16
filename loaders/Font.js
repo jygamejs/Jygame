@@ -1,10 +1,44 @@
 import { FontLoader } from "./FontLoader.js";
 import { ImageLoader } from "./ImageLoader.js";
 import { LoadingTask } from "./LoadingTask.js";
+import { AtlasRegion } from "../ecs/render/AtlasRegion.js";
 
 const _registry = new Map();
-let _nextId = 1;
 const _byId = new Map();
+let _nextId = 1;
+
+// The glyph record contract. A glyph is a piece of font data with metrics and
+// a source region — it is NOT inherently a Canvas, texture, or other concrete
+// image. The record is:
+//
+//   { region, advance, offsetX, offsetY }
+//
+//   region  — an `AtlasRegion` ({ sourceImage, sx, sy, sw, sh }) describing
+//             where the glyph's pixels live. `sourceImage` is whatever the
+//             font provider backs it with: today that is an individual canvas
+//             per glyph, but an atlas-backed font can point every glyph's
+//             region at one shared source with different sub-rects. Consumers
+//             must depend only on `region` + metrics, never on Canvas.
+//   advance — how far the next glyph moves (includes the font's `spacing`)
+//   offsetX — layout offset of the glyph box from the advance cursor
+//   offsetY — vertical layout offset of the glyph box
+//
+// Layout and rasterization stay representation-independent because they read
+// only this shape. `_glyphRecord` produces it from an individual glyph canvas.
+function _glyphRecord(canvas, advance) {
+  return {
+    region: new AtlasRegion({
+      sourceImage: canvas,
+      x: 0,
+      y: 0,
+      width: canvas.width,
+      height: canvas.height,
+    }),
+    advance,
+    offsetX: 0,
+    offsetY: 0,
+  };
+}
 
 function _register(name, font) {
   _registry.set(name, font);
@@ -101,7 +135,6 @@ export class BitmapFont {
     this._config = config;
     this._image = image;
     this._glyphs = new Map();
-    this._advances = new Map();
     this._tintCache = new Map();
     this._lineHeight = 0;
     this._sliced = false;
@@ -147,8 +180,7 @@ export class BitmapFont {
       const row = Math.floor(i / gridX);
       const g = _sliceRegion(this._image, col * cellW, row * cellH, cellW, cellH);
       this._clearBackgroundPixels(g);
-      this._glyphs.set(characters[i], g);
-      this._advances.set(characters[i], cellW + spacing);
+      this._glyphs.set(characters[i], _glyphRecord(g, cellW + spacing));
     }
   }
 
@@ -231,8 +263,7 @@ export class BitmapFont {
       const box = trimmed[i];
       const g = _sliceRegion(canvas, box.x, top, box.w, bottom - top + 1);
       this._clearBackgroundPixels(g);
-      this._glyphs.set(characters[i], g);
-      this._advances.set(characters[i], box.w + spacing);
+      this._glyphs.set(characters[i], _glyphRecord(g, box.w + spacing));
     }
   }
 
@@ -250,6 +281,33 @@ export class BitmapFont {
     ctx.putImageData(img, 0, 0);
   }
 
+  _advance(ch) {
+    const rec = this._glyphs.get(ch);
+    if (rec) return rec.advance;
+    if (this._caseInsensitive) {
+      const up = ch.toUpperCase();
+      if (up !== ch) {
+        const r = this._glyphs.get(up);
+        if (r) return r.advance;
+      }
+      const lo = ch.toLowerCase();
+      if (lo !== ch) {
+        const r = this._glyphs.get(lo);
+        if (r) return r.advance;
+      }
+    }
+    if (ch === " ") {
+      if (this._config.spaceWidth != null) return this._config.spaceWidth;
+      let max = 0;
+      for (const r of this._glyphs.values()) {
+        if (r.advance > max) max = r.advance;
+      }
+      return max;
+    }
+    return 0;
+  }
+
+  // Case-insensitive glyph record resolver (internal).
   _glyph(ch) {
     let g = this._glyphs.get(ch);
     if (g) return g;
@@ -264,34 +322,32 @@ export class BitmapFont {
     return g || null;
   }
 
-  _advance(ch) {
-    if (this._advances.has(ch)) return this._advances.get(ch);
-    if (this._caseInsensitive) {
-      const up = ch.toUpperCase();
-      if (up !== ch && this._advances.has(up)) return this._advances.get(up);
-      const lo = ch.toLowerCase();
-      if (lo !== ch && this._advances.has(lo)) return this._advances.get(lo);
-    }
-    if (ch === " ") {
-      if (this._config.spaceWidth != null) return this._config.spaceWidth;
-      let max = 0;
-      for (const a of this._advances.values()) max = Math.max(max, a);
-      return max;
-    }
-    return 0;
+  // Returns the glyph record for `ch` — `{ region, advance, offsetX, offsetY }` —
+  // or null when the font has no glyph for it. The returned record is a stable,
+  // prebuilt object: no allocation per call. `region` is an `AtlasRegion` whose
+  // `sourceImage` is whatever backs the glyph; callers must not assume Canvas.
+  getGlyph(ch) {
+    return this._glyph(ch);
   }
 
-  _getTinted(ch, color) {
+  // The tinted sibling of `getGlyph`. Tinting produces another glyph record,
+  // not a parallel Canvas API: the original record's metrics are preserved and
+  // its `region` is replaced by one pointing at the tinted render of the same
+  // glyph box. Tinted records are cached per (character, color), so repeated
+  // layout of the same styled text never re-bakes the tint. Returns null when
+  // the character has no glyph.
+  getTintedGlyph(ch, color) {
     const key = ch + "\u0000" + color;
-    let tinted = this._tintCache.get(key);
-    if (tinted) return tinted;
-    const src = this._glyph(ch);
-    if (!src) return null;
+    let rec = this._tintCache.get(key);
+    if (rec) return rec;
+    const base = this._glyph(ch);
+    if (!base) return null;
+    const src = base.region.sourceImage;
     const c = document.createElement("canvas");
-    c.width = src.width;
-    c.height = src.height;
+    c.width = base.region.sw;
+    c.height = base.region.sh;
     const ctx = c.getContext("2d");
-    ctx.drawImage(src, 0, 0);
+    ctx.drawImage(src, base.region.sx, base.region.sy, base.region.sw, base.region.sh, 0, 0, c.width, c.height);
     if (this._colors) {
       const img = ctx.getImageData(0, 0, c.width, c.height);
       const d = img.data;
@@ -313,12 +369,24 @@ export class BitmapFont {
       ctx.fillStyle = color;
       ctx.fillRect(0, 0, c.width, c.height);
     }
-    this._tintCache.set(key, c);
-    return c;
+    rec = {
+      region: new AtlasRegion({
+        sourceImage: c,
+        x: 0,
+        y: 0,
+        width: base.region.sw,
+        height: base.region.sh,
+      }),
+      advance: base.advance,
+      offsetX: base.offsetX,
+      offsetY: base.offsetY,
+    };
+    this._tintCache.set(key, rec);
+    return rec;
   }
 
   glyph(ch) {
-    return this._glyph(ch);
+    return this.getGlyph(ch);
   }
 
   advance(ch) {
@@ -347,14 +415,23 @@ export class BitmapFont {
     if (align === "center") startX = x - total / 2;
     else if (align === "right") startX = x - total;
 
+    // Draws through the glyph records: each glyph's region rect is cut from
+    // its sourceImage and placed at the advance cursor plus its metrics. This
+    // stays correct whether `region.sourceImage` is an individual glyph canvas
+    // or a shared atlas — the region (not the resource) defines the glyph.
     let cx = startX;
     for (const ch of str) {
       const glyph = this._glyph(ch);
       const adv = this._advance(ch) * scale;
       if (glyph) {
-        const source = color ? this._getTinted(ch, color) : glyph;
-        if (source) {
-          ctx.drawImage(source, cx, y, source.width * scale, source.height * scale);
+        const rec = color ? this.getTintedGlyph(ch, color) : glyph;
+        if (rec) {
+          const r = rec.region;
+          ctx.drawImage(
+            r.sourceImage, r.sx, r.sy, r.sw, r.sh,
+            cx + rec.offsetX * scale, y + rec.offsetY * scale,
+            r.sw * scale, r.sh * scale
+          );
         }
       }
       cx += adv;

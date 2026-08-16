@@ -1,6 +1,7 @@
 import { describe, it, before, after } from "node:test";
 import * as assert from "node:assert";
 import { Font, NativeFont, BitmapFont } from "../../../loaders/Font.js";
+import { AtlasRegion } from "../../../ecs/render/AtlasRegion.js";
 import { FontLoader } from "../../../loaders/FontLoader.js";
 import { ImageLoader } from "../../../loaders/ImageLoader.js";
 
@@ -366,7 +367,9 @@ describe("BitmapFont.render", () => {
     const calls = [];
     return {
       calls,
-      drawImage: (img, x, y, w, h) => { calls.push({ img, x, y, w, h }); },
+      drawImage: (img, sx, sy, sw, sh, dx, dy, dw, dh) => {
+        calls.push({ img, x: dx, y: dy, w: dw, h: dh, sx, sy, sw, sh });
+      },
     };
   }
 
@@ -377,6 +380,19 @@ describe("BitmapFont.render", () => {
     assert.strictEqual(ctx.calls.length, 2);
     assert.strictEqual(ctx.calls[0].x, 10);
     assert.strictEqual(ctx.calls[1].x, 12);
+  });
+
+  it("draws each glyph through its region rect", async () => {
+    const font = await loadFont();
+    const ctx = makeCtx();
+    font.render(ctx, "AB", 0, 0);
+    assert.strictEqual(ctx.calls.length, 2);
+    assert.strictEqual(ctx.calls[0].sx, 0);
+    assert.strictEqual(ctx.calls[0].sy, 0);
+    assert.strictEqual(ctx.calls[0].sw, 2);
+    assert.strictEqual(ctx.calls[0].sh, 2);
+    assert.strictEqual(ctx.calls[0].img, font.glyph("A").region.sourceImage,
+      "render draws the glyph record's region source");
   });
 
   it("applies scale to positions and sizes", async () => {
@@ -495,7 +511,9 @@ describe("BitmapFont background & caseInsensitive", () => {
     const calls = [];
     return {
       calls,
-      drawImage: (img, x, y, w, h) => { calls.push({ img, x, y, w, h }); },
+      drawImage: (img, sx, sy, sw, sh, dx, dy, dw, dh) => {
+        calls.push({ img, x: dx, y: dy, w: dw, h: dh, sx, sy, sw, sh });
+      },
     };
   }
 
@@ -561,7 +579,7 @@ describe("BitmapFont background & caseInsensitive", () => {
         gridY: 1,
         colors: ["#FF0000"],
       });
-      const tinted = font._getTinted("A", "#00ff00");
+      const tinted = font.getTintedGlyph("A", "#00ff00").region.sourceImage;
       const out = tinted.getContext("2d").getImageData(0, 0, 2, 2).data;
       assert.deepStrictEqual([out[0], out[1], out[2], out[3]], [180, 180, 180, 255]);
       assert.deepStrictEqual([out[12], out[13], out[14], out[15]], [0, 255, 0, 255]);
@@ -586,7 +604,7 @@ describe("BitmapFont background & caseInsensitive", () => {
         gridY: 1,
         colors: "#FF0000",
       });
-      const tinted = font._getTinted("A", "#00ff00");
+      const tinted = font.getTintedGlyph("A", "#00ff00").region.sourceImage;
       const out = tinted.getContext("2d").getImageData(0, 0, 2, 2).data;
       assert.deepStrictEqual([out[0], out[1], out[2], out[3]], [180, 180, 180, 255]);
       assert.deepStrictEqual([out[12], out[13], out[14], out[15]], [0, 255, 0, 255]);
@@ -686,6 +704,106 @@ describe("Font numeric ids and glyph accessors", () => {
     });
     assert.strictEqual(font.glyph("a"), font.glyph("A"));
     assert.strictEqual(font.advance("a"), font.advance("A"));
+  });
+
+  it("glyph() returns a region+metrics record, not a canvas", async () => {
+    const font = await Font.load("GlyphRec", {
+      image: "grid.png",
+      characters: "AB",
+      gridX: 2,
+      gridY: 1,
+    });
+    const g = font.glyph("A");
+    assert.ok(g && typeof g === "object");
+    assert.ok(g.region, "glyph carries a renderable region");
+    assert.ok(g.region instanceof AtlasRegion, "region is the canonical AtlasRegion descriptor");
+    assert.strictEqual(g.region.sx, 0);
+    assert.strictEqual(g.region.sy, 0);
+    assert.strictEqual(g.region.sw, 2);
+    assert.strictEqual(g.region.sh, 2);
+    assert.ok(g.region.sourceImage, "region references a backing resource");
+    assert.strictEqual(typeof g.advance, "number");
+    assert.strictEqual(g.advance, 2);
+    assert.strictEqual(g.offsetX, 0);
+    assert.strictEqual(g.offsetY, 0);
+    assert.strictEqual(font.glyph("A"), g, "glyph records are stable — no per-call allocation");
+    assert.strictEqual(font.getGlyph("A"), g, "getGlyph is the same record API");
+  });
+
+  it("glyph records can share one sourceImage with different regions (atlas-style)", async () => {
+    const font = await Font.load("AtlasRec", {
+      image: "grid.png",
+      characters: "AB",
+      gridX: 2,
+      gridY: 1,
+    });
+    // Rebase every glyph region into one shared source — the same operation an
+    // atlas-backed font performs at load time. Consumers of the records (layout,
+    // rasterization) must not care that the backing is now shared.
+    const shared = document.createElement("canvas");
+    shared.width = 8;
+    shared.height = 2;
+    let offset = 0;
+    font._glyphs.forEach((rec) => {
+      rec.region = new AtlasRegion({
+        sourceImage: shared,
+        x: offset,
+        y: 0,
+        width: rec.region.sw,
+        height: rec.region.sh,
+      });
+      offset += rec.region.sw;
+    });
+
+    const a = font.glyph("A");
+    const b = font.glyph("B");
+    assert.strictEqual(a.region.sourceImage, b.region.sourceImage, "records point at the same source");
+    assert.strictEqual(a.region.sourceImage, shared);
+    assert.deepStrictEqual([a.region.sx, a.region.sw], [0, 2]);
+    assert.deepStrictEqual([b.region.sx, b.region.sw], [2, 2]);
+    assert.strictEqual(font.advance("A"), 2, "metrics unchanged by the shared backing");
+    assert.strictEqual(a.region.sx + a.region.sw, b.region.sx, "regions tile the shared source");
+  });
+
+  it("getTintedGlyph returns a record whose region points at the tinted source", async () => {
+    const font = await Font.load("TintRec2", {
+      image: "grid.png",
+      characters: "AB",
+      gridX: 2,
+      gridY: 1,
+    });
+    const base = font.glyph("A");
+    const tinted = font.getTintedGlyph("A", "#ff0000");
+    assert.ok(tinted);
+    assert.ok(tinted.region instanceof AtlasRegion);
+    assert.strictEqual(tinted.region.sw, base.region.sw);
+    assert.strictEqual(tinted.region.sh, base.region.sh);
+    assert.strictEqual(tinted.region.sx, 0, "tinted region is the whole tinted source box");
+    assert.strictEqual(tinted.region.sy, 0);
+    assert.strictEqual(tinted.advance, base.advance);
+    assert.strictEqual(tinted.offsetX, base.offsetX);
+    assert.strictEqual(tinted.offsetY, base.offsetY);
+    assert.notStrictEqual(tinted.region.sourceImage, base.region.sourceImage);
+    assert.strictEqual(font.getTintedGlyph("A", "#ff0000"), tinted, "tinted records are cached");
+  });
+
+  it("getTintedGlyph returns a record sharing the base metrics", async () => {
+    const font = await Font.load("TintRec", {
+      image: "grid.png",
+      characters: "AB",
+      gridX: 2,
+      gridY: 1,
+    });
+    const base = font.glyph("A");
+    const tinted = font.getTintedGlyph("A", "#ff0000");
+    assert.ok(tinted);
+    assert.strictEqual(tinted.region.sw, base.region.sw);
+    assert.strictEqual(tinted.region.sh, base.region.sh);
+    assert.strictEqual(tinted.advance, base.advance);
+    assert.strictEqual(tinted.offsetX, base.offsetX);
+    assert.strictEqual(tinted.offsetY, base.offsetY);
+    assert.notStrictEqual(tinted.region.sourceImage, base.region.sourceImage);
+    assert.strictEqual(font.getTintedGlyph("A", "#ff0000"), tinted, "tinted records are cached");
   });
 });
 

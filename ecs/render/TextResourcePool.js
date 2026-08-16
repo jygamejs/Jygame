@@ -24,6 +24,8 @@ export class TextResourcePool {
     this._content = new Array(initialCapacity).fill(null);
     this._layout = new Array(initialCapacity).fill(null);
     this._layoutVersion = new Uint32Array(initialCapacity);
+    this._surface = new Array(initialCapacity).fill(null);
+    this._surfaceVersion = new Uint32Array(initialCapacity);
     this._width = new Float32Array(initialCapacity);
     this._height = new Float32Array(initialCapacity);
   }
@@ -44,6 +46,7 @@ export class TextResourcePool {
   _slotOf(handle) {
     const slot = handle & TextResourcePool.SLOT_MASK;
     if (slot === 0) return -1;
+    if (slot >= this._count) return -1;
     if (this._generation[slot] !== (handle >>> TextResourcePool.SLOT_BITS)) return -1;
     if (this._inUse[slot] !== LIVE) return -1;
     return slot;
@@ -70,6 +73,8 @@ export class TextResourcePool {
     this._content[slot] = content;
     this._layout[slot] = null;
     this._layoutVersion[slot] = 0;
+    this._surface[slot] = null;
+    this._surfaceVersion[slot] = 0;
     this._width[slot] = 0;
     this._height[slot] = 0;
     return (this._generation[slot] << TextResourcePool.SLOT_BITS) | slot;
@@ -81,6 +86,7 @@ export class TextResourcePool {
 
     this._content[slot] = null;
     this._layout[slot] = null;
+    this._surface[slot] = null;
 
     if (this._generation[slot] === TextResourcePool.GEN_MAX) {
       this._inUse[slot] = RETIRED;
@@ -112,62 +118,43 @@ export class TextResourcePool {
     return this._layout[slot];
   }
 
-  setLayout(handle, placements) {
+  // Returns the reusable layout structure for this slot, creating it on first
+  // use. `layoutText` (see TextLayout.js) refills it in place from the font's
+  // glyph records on relayout; `setLayout` then stores the result and mirrors
+  // the measured bounds. The pool itself performs no glyph work.
+  layoutTarget(handle) {
     const slot = this._slotOf(handle);
-    if (slot < 0) return false;
-    if (placements == null || typeof placements.length !== "number") {
-      throw new TypeError(
-        "TextResourcePool.setLayout failed: placements must be an array of glyph placements."
-      );
-    }
-
-    const glyphCount = placements.length;
+    if (slot < 0) return null;
     let layout = this._layout[slot];
     if (!layout) {
-      layout = this._layout[slot] = { canvases: [], positions: new Float32Array(0), count: 0 };
+      layout = this._layout[slot] = {
+        glyphs: [],
+        chars: [],
+        positions: new Float32Array(0),
+        count: 0,
+        drawX: 0,
+        width: 0,
+        height: 0,
+      };
     }
+    return layout;
+  }
 
-    const curGlyphs = layout.positions.length / 4;
-    if (curGlyphs < glyphCount) {
-      let newGlyphs = curGlyphs === 0 ? 1 : curGlyphs;
-      while (newGlyphs < glyphCount) newGlyphs *= 2;
-      const newPositions = new Float32Array(newGlyphs * 4);
-      newPositions.set(layout.positions);
-      layout.positions = newPositions;
+  // Stores a filled layout for this slot and mirrors its measured bounds. The
+  // layout is produced by `layoutText` from the font's glyph records; the pool
+  // does not interpret it.
+  setLayout(handle, layout) {
+    const slot = this._slotOf(handle);
+    if (slot < 0) return false;
+    if (layout == null || typeof layout.count !== "number") {
+      throw new TypeError(
+        "TextResourcePool.setLayout failed: layout must be a filled layout structure " +
+        "(produced by TextLayout.layoutText)."
+      );
     }
-
-    layout.count = glyphCount;
-    layout.canvases.length = glyphCount;
-    const canvases = layout.canvases;
-    const pos = layout.positions;
-
-    let minX = Infinity;
-    let maxRight = -Infinity;
-    let maxH = 0;
-    for (let i = 0; i < glyphCount; i++) {
-      const g = placements[i];
-      const x = g.x;
-      const y = g.y;
-      const w = g.w;
-      const h = g.h;
-      canvases[i] = g.canvas;
-      pos[i * 4] = x;
-      pos[i * 4 + 1] = y;
-      pos[i * 4 + 2] = w;
-      pos[i * 4 + 3] = h;
-      if (x < minX) minX = x;
-      const right = x + w;
-      if (right > maxRight) maxRight = right;
-      if (h > maxH) maxH = h;
-    }
-
-    if (glyphCount === 0) {
-      this._width[slot] = 0;
-      this._height[slot] = 0;
-    } else {
-      this._width[slot] = maxRight - minX;
-      this._height[slot] = maxH;
-    }
+    this._layout[slot] = layout;
+    this._width[slot] = layout.width;
+    this._height[slot] = layout.height;
     return true;
   }
 
@@ -181,6 +168,44 @@ export class TextResourcePool {
     const slot = this._slotOf(handle);
     if (slot < 0) return false;
     this._layoutVersion[slot] = version;
+    return true;
+  }
+
+  // Returns a canvas at least `width` × `height` for this slot's rasterized
+  // text, reusing the existing surface whenever it is big enough. Growth (a
+  // longer string) may allocate; shrink never does.
+  ensureSurface(handle, width, height) {
+    const slot = this._slotOf(handle);
+    if (slot < 0) return null;
+    if (typeof document === "undefined" || typeof document.createElement !== "function") return null;
+    const w = Math.max(1, Math.ceil(width));
+    const h = Math.max(1, Math.ceil(height));
+    let surface = this._surface[slot];
+    if (!surface || surface.width < w || surface.height < h) {
+      surface = document.createElement("canvas");
+      surface.width = w;
+      surface.height = h;
+      this._surface[slot] = surface;
+    }
+    return surface;
+  }
+
+  surface(handle) {
+    const slot = this._slotOf(handle);
+    if (slot < 0) return null;
+    return this._surface[slot];
+  }
+
+  surfaceVersion(handle) {
+    const slot = this._slotOf(handle);
+    if (slot < 0) return null;
+    return this._surfaceVersion[slot];
+  }
+
+  setSurfaceVersion(handle, version) {
+    const slot = this._slotOf(handle);
+    if (slot < 0) return false;
+    this._surfaceVersion[slot] = version;
     return true;
   }
 
@@ -219,6 +244,13 @@ export class TextResourcePool {
     const newLayoutVersion = new Uint32Array(newCap);
     newLayoutVersion.set(this._layoutVersion);
 
+    const newSurface = new Array(newCap);
+    for (let i = 0; i < this._count; i++) newSurface[i] = this._surface[i];
+    newSurface.fill(null, this._count);
+
+    const newSurfaceVersion = new Uint32Array(newCap);
+    newSurfaceVersion.set(this._surfaceVersion);
+
     const newWidth = new Float32Array(newCap);
     newWidth.set(this._width);
 
@@ -231,6 +263,8 @@ export class TextResourcePool {
     this._content = newContent;
     this._layout = newLayout;
     this._layoutVersion = newLayoutVersion;
+    this._surface = newSurface;
+    this._surfaceVersion = newSurfaceVersion;
     this._width = newWidth;
     this._height = newHeight;
     this._capacity = newCap;

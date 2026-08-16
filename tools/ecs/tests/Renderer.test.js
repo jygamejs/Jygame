@@ -322,6 +322,7 @@ if (typeof global.document === "undefined") {
                 };
               },
               fillRect() {},
+              clearRect() {},
               fillStyle: null,
               globalCompositeOperation: null,
               putImageData(img) { this._put = img; },
@@ -369,12 +370,12 @@ describe("CanvasRenderer text integration", () => {
     world.addMany(e, Transform, Renderable, TextComponent, Visible);
     world.set(e, Transform, { x, y, rotation: 0, scaleX: 1, scaleY: 1, _prevX: x, _prevY: y, _interpValid: 1 });
     world.set(e, Renderable, { fillColor: 0xffffff, layer: 1, depth: 0, imageSmoothing: 1 });
-    world.set(e, TextComponent, { fontHandle: font.id, contentHandle: handle, align: 0, letterSpacing: 0, version: 1 });
+    world.set(e, TextComponent, { fontHandle: font.id, contentHandle: handle, align: 0, letterSpacing: 0, version: 1, surfaceVersion: 1 });
     world.set(e, Visible, { value: 1 });
     return e;
   }
 
-  it("renders TextSystem glyphs through drawImage", () => {
+  it("renders TextSystem text as a single drawImage of the surface", () => {
     const world = makeTextWorld();
     const pool = world.getResource(TextResourcePool);
     const handle = pool.allocate("AB");
@@ -384,12 +385,11 @@ describe("CanvasRenderer text integration", () => {
     const ctx = mockCtx();
     new CanvasRenderer({ context: ctx, width: 800, height: 600 }).render(world);
 
-    assert.strictEqual(ctx.drawImage.mock.calls.length, 2);
-    assert.strictEqual(ctx.drawImage.mock.calls[0].arguments[0], font.glyph("A"));
-    assert.strictEqual(ctx.drawImage.mock.calls[1].arguments[0], font.glyph("B"));
+    assert.strictEqual(ctx.drawImage.mock.calls.length, 1, "one text surface, one draw");
+    assert.strictEqual(ctx.drawImage.mock.calls[0].arguments[0], pool.surface(handle));
   });
 
-  it("applies the camera transform to text glyphs", () => {
+  it("applies the camera transform to the text surface", () => {
     const world = makeTextWorld();
     const pool = world.getResource(TextResourcePool);
     const handle = pool.allocate("AB");
@@ -403,10 +403,9 @@ describe("CanvasRenderer text integration", () => {
     ctx.setTransform = (...args) => { transforms.push(args); };
     new CanvasRenderer({ context: ctx, width: 800, height: 600 }).render(world);
 
-    // viewport center (400, 300) + glyph world position
+    // viewport center (400, 300) + surface world position
+    assert.strictEqual(transforms.length, 1);
     assert.strictEqual(transforms[0][4], 500);
     assert.strictEqual(transforms[0][5], 350);
-    assert.strictEqual(transforms[1][4], 502);
-    assert.strictEqual(transforms[1][5], 350);
   });
 });

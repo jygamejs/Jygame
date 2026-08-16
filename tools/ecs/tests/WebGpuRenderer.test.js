@@ -13,6 +13,13 @@ import { ParticleEffect } from "../../../particles/ParticleEffect.js";
 import { Particle } from "../../../display/Particle.js";
 import { GpuParticleBackend } from "../../../particles/backends/GpuParticleBackend.js";
 import { makeMockGPU } from "./lib/MockGPU.js";
+import { Text as TextComponent } from "../../../ecs/components/Text.js";
+import { Renderable } from "../../../ecs/components/Renderable.js";
+import { TextResourcePool } from "../../../ecs/render/TextResourcePool.js";
+import { TextSystem } from "../../../ecs/systems/TextSystem.js";
+import { Font } from "../../../loaders/Font.js";
+import { FontLoader } from "../../../loaders/FontLoader.js";
+import { ImageLoader } from "../../../loaders/ImageLoader.js";
 
 function makeCanvas(mock) {
   return {
@@ -576,5 +583,84 @@ describe("WebGpuRenderer text glyphs", () => {
     assert.strictEqual(d[0], 100);
     assert.strictEqual(d[1], 50);
     renderer.destroy();
+  });
+});
+
+describe("WebGpuRenderer — rasterized text", () => {
+  it("renders a text entity as a single instanced quad", async () => {
+    const prevDoc = globalThis.document;
+    const prevImg = ImageLoader.load;
+    const prevF = FontLoader.load;
+    globalThis.document = {
+      createElement: () => {
+        const canvas = {
+          width: 0,
+          height: 0,
+          _ctx: null,
+          getContext: () => {
+            if (!canvas._ctx) {
+              canvas._ctx = {
+                _img: null,
+                drawImage(...a) { this._img = a[0]; },
+                getImageData() {
+                  return { data: new Uint8ClampedArray(canvas.width * canvas.height * 4), width: canvas.width, height: canvas.height };
+                },
+                fillRect() {},
+                clearRect() {},
+                putImageData() {},
+                fillStyle: null,
+                globalCompositeOperation: null,
+              };
+            }
+            return canvas._ctx;
+          },
+        };
+        return canvas;
+      },
+    };
+    try {
+      ImageLoader.load = async () => ({
+        width: 4,
+        height: 2,
+        data: new Uint8ClampedArray(32),
+        getImageData() { return { data: this.data, width: 4, height: 2 }; },
+      });
+      FontLoader.load = async () => {};
+      const font = await Font.load("TFont", { image: "grid.png", characters: "AB", gridX: 2, gridY: 1 });
+
+      const mock = makeMockGPU();
+      const renderer = await makeRenderer(mock);
+      const world = new World();
+      world.register(Transform);
+      world.register(Renderable);
+      world.register(TextComponent);
+      world.register(Visible);
+      world.setResource(RenderQueue, new RenderQueue());
+      const pool = new TextResourcePool();
+      world.setResource(TextResourcePool, pool);
+      world.addSystem(new TextSystem());
+
+      const e = world.createEntity();
+      world.addMany(e, Transform, Renderable, TextComponent, Visible);
+      world.set(e, Transform, { x: 10, y: 20, rotation: 0, scaleX: 1, scaleY: 1, _prevX: 10, _prevY: 20, _interpValid: 1 });
+      world.set(e, Renderable, { fillColor: 0xffffff, layer: 1, depth: 0, imageSmoothing: 1 });
+      const handle = pool.allocate("AB");
+      world.set(e, TextComponent, { fontHandle: font.id, contentHandle: handle, align: 0, letterSpacing: 0, version: 1, surfaceVersion: 1, colorEnabled: 0 });
+      world.set(e, Visible, { value: 1 });
+      world.update(16);
+
+      renderer.render(world);
+      const draws = mock.log.draw;
+      assert.strictEqual(draws.length, 1, "one draw call for the whole text");
+      assert.strictEqual(draws[0].vertexCount, 4);
+      assert.strictEqual(draws[0].instanceCount, 1);
+      renderer.destroy();
+    } finally {
+      ImageLoader.load = prevImg;
+      FontLoader.load = prevF;
+      Font.clear();
+      if (prevDoc === undefined) delete globalThis.document;
+      else globalThis.document = prevDoc;
+    }
   });
 });

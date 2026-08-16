@@ -5,8 +5,28 @@ import { Text } from "../components/Text.js";
 import { Visible } from "../components/Visible.js";
 import { RenderQueue } from "../render/RenderQueue.js";
 import { TextResourcePool } from "../render/TextResourcePool.js";
+import { layoutText } from "../render/TextLayout.js";
+import { rasterizeText } from "../render/TextRasterizer.js";
 import { Font } from "../../loaders/Font.js";
 
+// TextSystem converts each Text entity into its single rasterized
+// representation and emits exactly ONE RenderQueue command for it — the text
+// is one texture, one region, one quad, regardless of how many glyphs it has.
+//
+// Two independent caches live in the TextResourcePool, invalidated separately:
+//
+//   version         (Text.version)          → layout cache (glyph records + positions)
+//   surfaceVersion  (Text.surfaceVersion)   → rasterized bitmap cache
+//
+// Layout-affecting changes (content, font, alignment, letter spacing) bump
+// both; a color change bumps only surfaceVersion (the bitmap must be redrawn
+// with the new tint, but the positions are unchanged). Transform and
+// Renderable changes never bump either — they are applied at draw time.
+//
+// Layout is computed by `layoutText` (TextLayout.js) purely from the font's
+// glyph records — never from a concrete image representation — and the
+// surface is rasterized by `rasterizeText` (TextRasterizer.js) from those
+// records' regions. Both stages are representation-independent.
 export class TextSystem extends System {
   static query = { all: [Transform, Renderable, Text, Visible] };
   static priority = 4;
@@ -80,10 +100,13 @@ export class TextSystem extends System {
       const align = table.getColumn(txid, "align");
       const letterSpacing = table.getColumn(txid, "letterSpacing");
       const version = table.getColumn(txid, "version");
+      const colorEnabled = table.getColumn(txid, "colorEnabled");
+      const surfaceVersion = table.getColumn(txid, "surfaceVersion");
 
       const visible = table.getColumn(vid, "value");
       if (!tx || !ty || !trot || !tsx || !tsy || !fillCol || !layer || !depth || !smoothing
-          || !fontHandle || !contentHandle || !align || !letterSpacing || !version || !visible) continue;
+          || !fontHandle || !contentHandle || !align || !letterSpacing || !version || !colorEnabled
+          || !surfaceVersion || !visible) continue;
 
       for (let r = 0; r < count; r++) {
         if (!visible[r]) continue;
@@ -91,65 +114,50 @@ export class TextSystem extends System {
         if (handle === 0) continue;
 
         let layout = pool.layout(handle);
+        let relayouted = false;
         if (layout === null || version[r] !== pool.layoutVersion(handle)) {
           const font = fontHandle[r] ? Font.byId(fontHandle[r]) : null;
-          if (!font || typeof font.glyph !== "function") continue;
+          if (!font || typeof font.getGlyph !== "function") continue;
           const content = pool.get(handle);
           if (typeof content !== "string") continue;
-          const placements = this._layout(font, content, align[r], letterSpacing[r], fillCol[r]);
-          pool.setLayout(handle, placements);
+          layout = pool.layoutTarget(handle);
+          if (!layout) continue;
+          layoutText(layout, font, content, align[r], letterSpacing[r]);
+          pool.setLayout(handle, layout);
           pool.setLayoutVersion(handle, version[r]);
-          layout = pool.layout(handle);
-          if (layout === null) continue;
+          relayouted = true;
+        }
+        if (layout === null || layout.count === 0) continue;
+
+        if (relayouted || surfaceVersion[r] !== pool.surfaceVersion(handle)) {
+          const font = fontHandle[r] ? Font.byId(fontHandle[r]) : null;
+          if (!font || typeof font.getTintedGlyph !== "function") continue;
+          const tint = colorEnabled[r] ? "#" + fillCol[r].toString(16).padStart(6, "0") : null;
+          const surface = pool.ensureSurface(handle, layout.width, layout.height);
+          if (!surface) continue;
+          const sctx = surface.getContext("2d");
+          sctx.clearRect(0, 0, surface.width, surface.height);
+          rasterizeText(sctx, font, layout, tint);
+          pool.setSurfaceVersion(handle, surfaceVersion[r]);
         }
 
-        const canvases = layout.canvases;
-        const positions = layout.positions;
-        const glyphCount = layout.count;
+        const surface = pool.surface(handle);
+        if (!surface) continue;
+
         const canInterp = tiv !== null && tiv[r] === 1;
         const prevX = canInterp && tpx ? tpx[r] : tx[r];
         const prevY = canInterp && tpy ? tpy[r] : ty[r];
 
-        for (let i = 0; i < glyphCount; i++) {
-          const canvas = canvases[i];
-          const lx = positions[i * 4];
-          const ly = positions[i * 4 + 1];
-          const w = positions[i * 4 + 2];
-          const h = positions[i * 4 + 3];
-          queue.push(
-            canvas, 0, 0, w, h,
-            tx[r] + lx, ty[r] + ly,
-            trot[r], tsx[r], tsy[r],
-            w, h,
-            fillCol[r], 0, layer[r], !!smoothing[r], depth[r],
-            prevX + lx, prevY + ly,
-            canInterp
-          );
-        }
+        queue.push(
+          surface, 0, 0, layout.width, layout.height,
+          tx[r] + layout.drawX, ty[r],
+          trot[r], tsx[r], tsy[r],
+          layout.width, layout.height,
+          fillCol[r], 0, layer[r], !!smoothing[r], depth[r],
+          prevX + layout.drawX, prevY,
+          canInterp
+        );
       }
     }
-  }
-
-  _layout(font, content, align, letterSpacing, color) {
-    const placements = [];
-    let total = 0;
-    for (const ch of content) total += font.advance(ch) + letterSpacing;
-    let startX = 0;
-    if (align === 1) startX = -total / 2;
-    else if (align === 2) startX = -total;
-    const tint = color === 0xffffff ? null : "#" + color.toString(16).padStart(6, "0");
-    let cx = startX;
-    for (const ch of content) {
-      const glyph = font.glyph(ch);
-      const adv = font.advance(ch) + letterSpacing;
-      if (glyph) {
-        const source = tint ? font._getTinted(ch, tint) : glyph;
-        if (source) {
-          placements.push({ canvas: source, x: cx, y: 0, w: source.width, h: source.height });
-        }
-      }
-      cx += adv;
-    }
-    return placements;
   }
 }

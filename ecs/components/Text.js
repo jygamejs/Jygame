@@ -5,5 +5,7 @@ export class Text {
     align: "u8",
     letterSpacing: "f32",
     version: "u32",
+    colorEnabled: "u8",
+    surfaceVersion: "u32",
   };
 }
