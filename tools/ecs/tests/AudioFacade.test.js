@@ -203,23 +203,45 @@ describe("Audio.music", () => {
     Audio.clear();
   });
 
-  it("throws when key is not loaded", () => {
-    assert.throws(() => Audio.music("nope"), /not found/);
+  it("throws when key is not loaded and is not a path", async () => {
+    await assert.rejects(Audio.music("nope"), /not found/);
   });
 
   it("returns a Music instance from loaded asset", async () => {
     await Audio.load("bgm", "/sounds/bg.ogg");
-    const m = Audio.music("bgm");
+    const m = await Audio.music("bgm");
     assert.ok(m);
     assert.strictEqual(typeof m.play, "function");
     assert.strictEqual(typeof m.fadeIn, "function");
     assert.strictEqual(typeof m.fadeOut, "function");
   });
 
+  it("loads a clip by path and returns a Music handle", async () => {
+    const m = await Audio.music("/sounds/bg.ogg");
+    assert.ok(m);
+    assert.strictEqual(typeof m.play, "function");
+    assert.strictEqual(typeof m.fadeIn, "function");
+    assert.strictEqual(typeof m.fadeOut, "function");
+  });
+
+  it("loads a named clip and registers it for Audio.play", async () => {
+    const m = await Audio.music("theme", "/sounds/theme.ogg");
+    assert.ok(m);
+    assert.strictEqual(typeof m.play, "function");
+    // The asset is registered under both the name and the path.
+    const viaName = await Audio.music("theme");
+    assert.strictEqual(viaName, m, "music handle cached per key");
+    const viaPath = await Audio.music("/sounds/theme.ogg");
+    assert.strictEqual(viaPath, m, "path aliases the same music handle");
+    assert.strictEqual(Audio.has("theme"), true, "asset registered under the name");
+    assert.strictEqual(Audio.has("/sounds/theme.ogg"), true, "asset registered under the path");
+    assert.doesNotThrow(() => Audio.play("theme"), "Audio.play reaches the loaded asset");
+  });
+
   it("caches Music instance", async () => {
     await Audio.load("loop", "/sounds/loop.ogg");
-    const a = Audio.music("loop");
-    const b = Audio.music("loop");
+    const a = await Audio.music("loop");
+    const b = await Audio.music("loop");
     assert.strictEqual(a, b);
   });
 });
@@ -775,7 +797,7 @@ describe("Audio per-sound backend selection", () => {
   it("music preserves the asset's backend", async () => {
     Audio.clear();
     await Audio.load("theme", "/sounds/theme.mp3", { backend: "html" });
-    const m = Audio.music("theme");
+    const m = await Audio.music("theme");
     assert.strictEqual(m._backend.kind, "html");
   });
 
@@ -1025,7 +1047,7 @@ describe("Audio.music effects, attenuation, autoplay", () => {
   it("music exposes an effect chain", async () => {
     Audio.clear();
     await Audio.load("theme", "/sounds/theme.mp3");
-    const m = Audio.music("theme");
+    const m = await Audio.music("theme");
     assert.ok(m.effects);
     assert.strictEqual(typeof m.effects.add, "function");
     assert.strictEqual(typeof m.effects.remove, "function");

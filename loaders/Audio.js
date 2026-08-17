@@ -148,6 +148,16 @@ function _isObject(v) {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
+// A single-argument `music(key)` call is ambiguous between a registered name
+// and a path that has not been loaded yet. Paths are the strings that look
+// like files — a `/` separator or a recognizable audio extension. Names that
+// are neither loaded nor path-like get the descriptive "not found" error
+// instead of a failed fetch.
+function _looksLikePath(key) {
+  if (key.includes("/")) return true;
+  return /\.(mp3|ogg|wav|oga|m4a|aac|flac|webm|opus)$/i.test(key);
+}
+
 function _isBatchMap(a) {
   if (!_isObject(a)) return false;
   if (Object.keys(a).length === 0) return false;
@@ -268,27 +278,53 @@ export const Audio = {
 
   // ── Audio.music ──
 
-  music(key) {
-    if (_musicCache.has(key)) return _musicCache.get(key);
+  // Returns a looping `Music` handle for a clip. The same handle is cached per
+  // key and returned on every call. `music()` accepts the same forms as
+  // `load()` and resolves a `Promise<Music>` so the clip can be fetched on
+  // demand — no separate `Audio.load()` required:
+  //
+  //   await Audio.music("assets/theme.ogg")            // load by path
+  //   await Audio.music("bgm", "assets/bg.ogg")        // load named
+  //   await Audio.music("bgm")                         // already-loaded key
+  //
+  // The named form registers the clip under both the name and the path, so
+  // `Audio.play("bgm")` reaches the same loaded asset afterwards. A key that
+  // is not loaded and not a path throws "not found".
+  async music(a, b, options) {
+    const mgr = _getManager();
 
-    let asset = _assets.get(key);
-    if (!asset) {
-      asset = AudioLoader.get(key);
+    // Named load form — music(name, path, options).
+    if (typeof b === "string") {
+      const cached = _musicCache.get(a);
+      if (cached) return cached;
+      const sound = await _loadNamedSound(a, b, options);
+      const music = new Music(sound._asset, mgr, { backend: sound._backend });
+      _musicCache.set(a, music);
+      if (b !== a) _musicCache.set(b, music);
+      _startLoop();
+      return music;
+    }
+
+    // Key form — music(key, options).
+    if (_musicCache.has(a)) return _musicCache.get(a);
+
+    let asset = _assets.get(a);
+    if (!asset) asset = AudioLoader.get(a);
+    if (!asset && _looksLikePath(a)) {
+      const sound = await _loadSingle(a, b);
+      asset = sound._asset;
     }
     if (!asset) {
-      const mgrMusic = _getManager().getMusic(key);
+      const mgrMusic = mgr.getMusic(a);
       if (mgrMusic) return mgrMusic;
-    }
-    if (!asset) {
       throw new Error(
-        `Audio: music "${key}" not found. Load it first with Audio.load().`
+        `Audio: music "${a}" not found. Load it first with Audio.load().`
       );
     }
 
-    const mgr = _getManager();
-    const sound = _sounds.get(key);
+    const sound = _sounds.get(a);
     const music = new Music(asset, mgr, { backend: sound ? sound._backend : mgr._backend });
-    _musicCache.set(key, music);
+    _musicCache.set(a, music);
     _startLoop();
     return music;
   },
