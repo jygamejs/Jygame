@@ -311,7 +311,7 @@ export const Audio = {
     let asset = _assets.get(a);
     if (!asset) asset = AudioLoader.get(a);
     if (!asset && _looksLikePath(a)) {
-      const sound = await _loadSingle(a, b);
+      const sound = await this._loadSingle(a, b);
       asset = sound._asset;
     }
     if (!asset) {

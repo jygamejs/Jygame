@@ -181,11 +181,13 @@ describe("Audio.music", () => {
   const origUnload = AudioLoader.unload;
   const origClear = AudioLoader.clear;
   const fakeCache = new Map();
+  const loadCalls = [];
 
   before(() => {
     AudioLoader.load = async (path) => {
       const a = mockAudio();
       fakeCache.set(path, a);
+      loadCalls.push(path);
       return a;
     };
     AudioLoader.get = (key) => fakeCache.get(key) || null;
@@ -217,11 +219,14 @@ describe("Audio.music", () => {
   });
 
   it("loads a clip by path and returns a Music handle", async () => {
-    const m = await Audio.music("/sounds/bg.ogg");
+    const before = loadCalls.length;
+    const m = await Audio.music("/sounds/fresh.ogg");
     assert.ok(m);
     assert.strictEqual(typeof m.play, "function");
     assert.strictEqual(typeof m.fadeIn, "function");
     assert.strictEqual(typeof m.fadeOut, "function");
+    assert.strictEqual(loadCalls.length, before + 1, "the clip was fetched on demand");
+    assert.ok(loadCalls.includes("/sounds/fresh.ogg"));
   });
 
   it("loads a named clip and registers it for Audio.play", async () => {
