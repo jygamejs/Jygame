@@ -12,6 +12,10 @@ import { WebGLRenderer } from "../../../renderer/WebGLRenderer.js";
 import { GpuParticleBackend } from "../../../particles/backends/GpuParticleBackend.js";
 import { GpuParticleRenderer } from "../../../particles/renderers/GpuParticleRenderer.js";
 import { ConeShape } from "../../../shapes/ConeShape.js";
+import { ScaleModifier } from "../../../modifiers/ScaleModifier.js";
+import { FadeModifier } from "../../../modifiers/FadeModifier.js";
+import { VelocityModifier } from "../../../modifiers/VelocityModifier.js";
+import { ModifierStack } from "../../../modifiers/ModifierStack.js";
 import { makeMockGL } from "./lib/MockGL.js";
 import { makeMockGPU } from "./lib/MockGPU.js";
 
@@ -458,6 +462,57 @@ describe("Particle engine-owned configuration", () => {
       ParticleEffect._defaultWorld = null;
       renderer.destroy();
     }
+  });
+
+  it("runs facade modifiers on the auto-selected GPU backend", () => {
+    const { gl } = makeMockGL();
+    const renderer = new WebGLRenderer({ context: gl, width: 800, height: 600 });
+    const world = new World();
+    world.setResource(Renderer, renderer);
+    ParticleEffect._defaultWorld = world;
+    try {
+      const effect = Particle.create({
+        modifiers: [
+          new ScaleModifier({ from: 10, to: 0 }),
+          new FadeModifier({ mode: "out" }),
+        ],
+        lifetime: [0.5, 1],
+      });
+      const backend = effect.system._backend;
+      assert.ok(backend instanceof GpuParticleBackend);
+      // The facade wraps the modifiers in a ModifierStack; the GPU backend
+      // must compile its child descriptors into program passes.
+      backend._rebuildProgram();
+      assert.ok(backend._program, "GPU program must be compiled from the ModifierStack");
+      assert.ok(backend._program.visualPass.length >= 2, "scale + fade both compile");
+
+      effect.burst(1);
+      backend.update(1 / 60);
+      const p = backend.particles[0];
+      assert.ok(p.size < 10, "ScaleModifier applied on the GPU backend");
+      assert.ok(p.alpha < 1, "FadeModifier applied on the GPU backend");
+      effect.destroy();
+    } finally {
+      ParticleEffect._defaultWorld = null;
+      renderer.destroy();
+    }
+  });
+
+  it("ModifierStack.toDescriptor() returns its flattened child descriptors", () => {
+    const stack = new ModifierStack([
+      new ScaleModifier({ from: 6, to: 0 }),
+      new FadeModifier({ mode: "out" }),
+    ]);
+    const inner = new ModifierStack([new VelocityModifier({ drag: 0.5 })]);
+    stack.add(inner);
+
+    const d = stack.toDescriptor();
+    assert.ok(Array.isArray(d), "stack descriptor is a flat list");
+    assert.deepStrictEqual(
+      d.map((x) => x.type),
+      ["scale", "fade", "velocity"],
+      "nested stacks flatten recursively",
+    );
   });
 
   it("accepts a backend instance", () => {

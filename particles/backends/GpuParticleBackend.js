@@ -139,7 +139,14 @@ export class GpuParticleBackend {
     for (const entry of this._modifiers) {
       const mod = entry.modifier;
       if (typeof mod.toDescriptor === "function") {
-        descriptors.push(mod.toDescriptor());
+        // ModifierStack.toDescriptor() returns a flat list of child
+        // descriptors; keep the list flat for the compiler.
+        const d = mod.toDescriptor();
+        if (Array.isArray(d)) {
+          for (const sub of d) descriptors.push(sub);
+        } else {
+          descriptors.push(d);
+        }
       }
     }
     this._program = descriptors.length > 0

@@ -73,6 +73,26 @@ export class ModifierStack {
     return this._modifiers[Symbol.iterator]();
   }
 
+  // The GPU particle backend compiles modifiers into passes from their
+  // descriptors. A stack has no descriptor of its own — it is the flat list of
+  // its children's descriptors (nested stacks flatten recursively). Without
+  // this, a facade-created effect (whose modifiers are wrapped in a
+  // ModifierStack) would compile to an empty program on GPU backends and none
+  // of the modifiers would run.
+  toDescriptor() {
+    const descriptors = [];
+    for (const mod of this._modifiers) {
+      if (typeof mod.toDescriptor !== "function") continue;
+      const d = mod.toDescriptor();
+      if (Array.isArray(d)) {
+        for (const sub of d) descriptors.push(sub);
+      } else {
+        descriptors.push(d);
+      }
+    }
+    return descriptors;
+  }
+
   beginFrame(dt, ctx) {
     if (!this.enabled) return;
     const mods = this._modifiers;

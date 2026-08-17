@@ -125,7 +125,14 @@ export class ModifierCompiler {
           `ModifierCompiler: modifier ${mod.constructor ? mod.constructor.name : "unknown"} does not implement toDescriptor()`
         );
       }
-      descriptors.push(mod.toDescriptor());
+      // ModifierStack.toDescriptor() returns a flat list of child descriptors;
+      // keep the list flat for the compiler.
+      const d = mod.toDescriptor();
+      if (Array.isArray(d)) {
+        for (const sub of d) descriptors.push(sub);
+      } else {
+        descriptors.push(d);
+      }
     }
     return this.compile(descriptors);
   }
