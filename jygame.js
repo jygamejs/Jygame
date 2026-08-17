@@ -48,6 +48,7 @@ export { RenderSystem } from "./ecs/systems/RenderSystem.js";
 export { TextSystem } from "./ecs/systems/TextSystem.js";
 export { AssetRegistry } from "./ecs/render/AssetRegistry.js";
 export { TextResourcePool } from "./ecs/render/TextResourcePool.js";
+export { TextRenderMode } from "./ecs/render/TextRenderMode.js";
 export { Camera } from "./view/Camera.js";
 export { View } from "./view/View.js";
 export { Viewport } from "./view/Viewport.js";

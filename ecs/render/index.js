@@ -5,6 +5,7 @@ export { AssetRegistry } from "./AssetRegistry.js";
 export { AtlasRegion } from "./AtlasRegion.js";
 export { TrailRenderer } from "./TrailRenderer.js";
 export { TextResourcePool } from "./TextResourcePool.js";
+export { TextRenderMode } from "./TextRenderMode.js";
 export { layoutText } from "./TextLayout.js";
 export { rasterizeText } from "./TextRasterizer.js";
 export { GlyphBuffer } from "./GlyphBuffer.js";

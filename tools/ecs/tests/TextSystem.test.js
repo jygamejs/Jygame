@@ -9,6 +9,7 @@ import { Visible } from "../../../ecs/components/Visible.js";
 import { RenderQueue } from "../../../ecs/render/RenderQueue.js";
 import { AtlasRegion } from "../../../ecs/render/AtlasRegion.js";
 import { TextResourcePool } from "../../../ecs/render/TextResourcePool.js";
+import { TextRenderMode } from "../../../ecs/render/TextRenderMode.js";
 import { RenderSystem } from "../../../ecs/systems/RenderSystem.js";
 import { TextSystem } from "../../../ecs/systems/TextSystem.js";
 import { Font } from "../../../loaders/Font.js";
@@ -119,12 +120,12 @@ function makeWorld() {
   return world;
 }
 
-function addTextEntity(world, { x, y, fontId, handle, align = 0, letterSpacing = 0, version = 1, surfaceVersion = 1, fillColor = 0xffffff, colorEnabled = 0, layer = 1, depth = 0 }) {
+function addTextEntity(world, { x, y, fontId, handle, align = 0, letterSpacing = 0, version = 1, surfaceVersion = 1, fillColor = 0xffffff, colorEnabled = 0, layer = 1, depth = 0, renderMode = 0 }) {
   const e = world.createEntity();
   world.addMany(e, Transform, Renderable, Text, Visible);
   world.set(e, Transform, { x, y, rotation: 0, scaleX: 1, scaleY: 1, _prevX: x, _prevY: y, _interpValid: 1 });
   world.set(e, Renderable, { fillColor, layer, depth, imageSmoothing: 1 });
-  world.set(e, Text, { fontHandle: fontId, contentHandle: handle, align, letterSpacing, version, colorEnabled, surfaceVersion });
+  world.set(e, Text, { fontHandle: fontId, contentHandle: handle, align, letterSpacing, version, colorEnabled, surfaceVersion, renderMode });
   world.set(e, Visible, { value: 1 });
   return e;
 }
@@ -656,5 +657,294 @@ describe("TextSystem", () => {
     world.destroyEntity(e);
     assert.strictEqual(pool.get(handle), null);
     assert.strictEqual(pool.surface(handle), null);
+  });
+});
+
+describe("TextSystem render modes", () => {
+  const origImgLoad = ImageLoader.load;
+  const origFLoad = FontLoader.load;
+  let font;
+
+  before(async () => {
+    ImageLoader.load = async () => gridImage();
+    FontLoader.load = async () => {};
+    font = await Font.load("ModeGrid", { image: "grid.png", characters: "AB", gridX: 2, gridY: 1 });
+  });
+
+  after(() => {
+    ImageLoader.load = origImgLoad;
+    FontLoader.load = origFLoad;
+    Font.clear();
+  });
+
+  it("defaults to RASTERIZED — one command, one surface", () => {
+    const world = makeWorld();
+    const pool = world.getResource(TextResourcePool);
+    const queue = world.getResource(RenderQueue);
+    const handle = pool.allocate("AB");
+    addTextEntity(world, { x: 100, y: 50, fontId: font.id, handle });
+    world.update(16);
+
+    const cmds = collectCommands(queue);
+    assert.strictEqual(cmds.length, 1, "rasterized default emits one command");
+    assert.ok(pool.surface(handle), "rasterized mode builds a surface");
+  });
+
+  it("GLYPH mode emits one command per glyph and no rasterized surface", () => {
+    const world = makeWorld();
+    const pool = world.getResource(TextResourcePool);
+    const queue = world.getResource(RenderQueue);
+    const handle = pool.allocate("AB");
+    addTextEntity(world, { x: 100, y: 50, fontId: font.id, handle, renderMode: TextRenderMode.GLYPH });
+    world.update(16);
+
+    const cmds = collectCommands(queue);
+    assert.strictEqual(cmds.length, 2, "one command per glyph");
+    assert.strictEqual(pool.surface(handle), null, "glyph mode never rasterizes");
+    assert.strictEqual(cmds[0].sourceImage, font.glyph("A").region.sourceImage, "glyph A region source");
+    assert.strictEqual(cmds[0].sx, 0);
+    assert.strictEqual(cmds[1].sourceImage, font.glyph("B").region.sourceImage, "glyph B region source");
+    // Entity-local centers: A = -1, B = +1 (width 4, glyphs 2px) → world 99 / 101
+    assert.ok(Math.abs(cmds[0].x - 99) < 1e-5, `A x = ${cmds[0].x}`);
+    assert.ok(Math.abs(cmds[1].x - 101) < 1e-5, `B x = ${cmds[1].x}`);
+    assert.ok(Math.abs(cmds[0].y - 50) < 1e-5);
+    assert.ok(Math.abs(cmds[1].y - 50) < 1e-5);
+  });
+
+  it("GLYPH mode reuses the shared layout across frames", () => {
+    const world = makeWorld();
+    const pool = world.getResource(TextResourcePool);
+    const queue = world.getResource(RenderQueue);
+    const handle = pool.allocate("AB");
+    addTextEntity(world, { x: 0, y: 0, fontId: font.id, handle, renderMode: TextRenderMode.GLYPH });
+    world.update(16);
+    const layout1 = pool.layout(handle);
+
+    queue.clear();
+    world.update(16);
+    const layout2 = pool.layout(handle);
+    assert.strictEqual(layout2, layout1, "layout object reused — no relayout on unchanged text");
+    assert.strictEqual(layout2.positions, layout1.positions, "positions buffer reused");
+    assert.strictEqual(collectCommands(queue).length, 2);
+  });
+
+  it("GLYPH mode resolves tinted glyph records for colored text", () => {
+    const world = makeWorld();
+    const pool = world.getResource(TextResourcePool);
+    const queue = world.getResource(RenderQueue);
+    const handle = pool.allocate("A");
+    addTextEntity(world, { x: 0, y: 0, fontId: font.id, handle, fillColor: 0xffcc00, colorEnabled: 1, renderMode: TextRenderMode.GLYPH });
+    world.update(16);
+
+    const cmds = collectCommands(queue);
+    assert.strictEqual(cmds.length, 1);
+    assert.strictEqual(cmds[0].sourceImage, font.getTintedGlyph("A", "#ffcc00").region.sourceImage,
+      "glyph path consumes tinted records through the font provider");
+  });
+
+  it("GLYPH mode preserves atlas-shared sourceImage across commands", async () => {
+    const atlasFont = await Font.load("AtlasModeGrid", { image: "grid.png", characters: "AB", gridX: 2, gridY: 1 });
+    const world = makeWorld();
+    const pool = world.getResource(TextResourcePool);
+    const queue = world.getResource(RenderQueue);
+
+    // Build an atlas-backed provider: both glyphs share one sourceImage.
+    const atlas = document.createElement("canvas");
+    atlas.width = 4;
+    atlas.height = 2;
+    const records = {
+      A: { region: new AtlasRegion({ sourceImage: atlas, x: 0, y: 0, width: 2, height: 2 }), advance: 2, offsetX: 0, offsetY: 0 },
+      B: { region: new AtlasRegion({ sourceImage: atlas, x: 2, y: 0, width: 2, height: 2 }), advance: 2, offsetX: 0, offsetY: 0 },
+    };
+    atlasFont.getGlyph = (ch) => records[ch] || null;
+    atlasFont.advance = (ch) => {
+      const r = records[ch];
+      return r ? r.advance : 0;
+    };
+
+    const handle = pool.allocate("AB");
+    addTextEntity(world, { x: 0, y: 0, fontId: atlasFont.id, handle, renderMode: TextRenderMode.GLYPH });
+    world.update(16);
+
+    const cmds = collectCommands(queue);
+    assert.strictEqual(cmds.length, 2);
+    assert.strictEqual(cmds[0].sourceImage, atlas, "glyph A shares the atlas source");
+    assert.strictEqual(cmds[1].sourceImage, atlas, "glyph B shares the atlas source");
+    assert.strictEqual(cmds[0].sx, 0, "glyph A sub-rect");
+    assert.strictEqual(cmds[1].sx, 2, "glyph B sub-rect");
+  });
+
+  it("GLYPH mode applies entity rotation and scale", () => {
+    const world = makeWorld();
+    const pool = world.getResource(TextResourcePool);
+    const queue = world.getResource(RenderQueue);
+    const handle = pool.allocate("A");
+    const e = addTextEntity(world, { x: 100, y: 50, fontId: font.id, handle, renderMode: TextRenderMode.GLYPH });
+    world.set(e, Transform, { x: 100, y: 50, rotation: Math.PI / 2, scaleX: 2, scaleY: 2, _prevX: 100, _prevY: 50, _interpValid: 1 });
+    world.update(16);
+
+    const cmds = collectCommands(queue);
+    assert.strictEqual(cmds.length, 1);
+    // Single glyph centered at local (0,0): world position stays at the anchor.
+    assert.ok(Math.abs(cmds[0].x - 100) < 1e-5);
+    assert.ok(Math.abs(cmds[0].y - 50) < 1e-5);
+    // Transform.rotation is stored f32, so compare against the quantized value.
+    assert.ok(Math.abs(cmds[0].rotation - Math.fround(Math.PI / 2)) < 1e-6);
+    assert.strictEqual(cmds[0].scaleX, 2);
+    assert.strictEqual(cmds[0].scaleY, 2);
+  });
+
+  it("both modes share identical layout geometry", () => {
+    const world = makeWorld();
+    const pool = world.getResource(TextResourcePool);
+    const queue = world.getResource(RenderQueue);
+
+    const hRaster = pool.allocate("AB");
+    const hGlyph = pool.allocate("AB");
+    addTextEntity(world, { x: 0, y: 0, fontId: font.id, handle: hRaster, renderMode: TextRenderMode.RASTERIZED });
+    addTextEntity(world, { x: 0, y: 0, fontId: font.id, handle: hGlyph, renderMode: TextRenderMode.GLYPH });
+    world.update(16);
+
+    const rasterLayout = pool.layout(hRaster);
+    const glyphLayout = pool.layout(hGlyph);
+    assert.strictEqual(rasterLayout.count, glyphLayout.count, "same glyph count");
+    assert.strictEqual(rasterLayout.width, glyphLayout.width, "same width");
+    assert.strictEqual(rasterLayout.height, glyphLayout.height, "same height");
+    assert.strictEqual(rasterLayout.drawX, glyphLayout.drawX, "same alignment offset");
+    assert.deepStrictEqual(
+      Array.from(rasterLayout.positions.slice(0, rasterLayout.count * 2)),
+      Array.from(glyphLayout.positions.slice(0, glyphLayout.count * 2)),
+      "identical glyph positions"
+    );
+    assert.deepStrictEqual(rasterLayout.chars, glyphLayout.chars, "identical chars");
+  });
+
+  it("switching modes does not rebuild the layout", () => {
+    const world = makeWorld();
+    const pool = world.getResource(TextResourcePool);
+    const queue = world.getResource(RenderQueue);
+    const handle = pool.allocate("AB");
+    const e = addTextEntity(world, { x: 0, y: 0, fontId: font.id, handle, renderMode: TextRenderMode.RASTERIZED });
+    world.update(16);
+    const layout1 = pool.layout(handle);
+
+    world.set(e, Text, { renderMode: TextRenderMode.GLYPH });
+    world.update(16);
+    assert.strictEqual(pool.layout(handle), layout1, "glyph switch reuses the layout");
+    assert.strictEqual(collectCommands(queue).length, 2);
+
+    world.set(e, Text, { renderMode: TextRenderMode.RASTERIZED });
+    world.update(16);
+    assert.strictEqual(pool.layout(handle), layout1, "raster switch reuses the layout");
+    assert.strictEqual(collectCommands(queue).length, 1);
+  });
+
+  it("switching back to RASTERIZED reuses the cached surface", () => {
+    const world = makeWorld();
+    const pool = world.getResource(TextResourcePool);
+    const queue = world.getResource(RenderQueue);
+    const handle = pool.allocate("AB");
+    const e = addTextEntity(world, { x: 0, y: 0, fontId: font.id, handle, renderMode: TextRenderMode.RASTERIZED });
+    world.update(16);
+    const s1 = pool.surface(handle);
+    assert.ok(s1);
+
+    world.set(e, Text, { renderMode: TextRenderMode.GLYPH });
+    world.update(16);
+    assert.strictEqual(pool.surface(handle), s1, "surface remains cached while in glyph mode");
+
+    world.set(e, Text, { renderMode: TextRenderMode.RASTERIZED });
+    world.update(16);
+    assert.strictEqual(pool.surface(handle), s1, "surface reused on switch back — no re-rasterization");
+  });
+
+  it("modes switch cleanly across four states without stale output", () => {
+    const world = makeWorld();
+    const pool = world.getResource(TextResourcePool);
+    const queue = world.getResource(RenderQueue);
+    const handle = pool.allocate("AB");
+    const e = addTextEntity(world, { x: 0, y: 0, fontId: font.id, handle, renderMode: TextRenderMode.RASTERIZED });
+
+    world.update(16);
+    assert.strictEqual(collectCommands(queue).length, 1, "R1");
+    const layout1 = pool.layout(handle);
+    const s1 = pool.surface(handle);
+
+    world.set(e, Text, { renderMode: TextRenderMode.GLYPH });
+    queue.clear();
+    world.update(16);
+    assert.strictEqual(collectCommands(queue).length, 2, "G1");
+    assert.strictEqual(pool.layout(handle), layout1);
+
+    world.set(e, Text, { renderMode: TextRenderMode.RASTERIZED });
+    queue.clear();
+    world.update(16);
+    assert.strictEqual(collectCommands(queue).length, 1, "R2");
+    assert.strictEqual(pool.surface(handle), s1, "surface survives the round-trip");
+
+    world.set(e, Text, { renderMode: TextRenderMode.GLYPH });
+    queue.clear();
+    world.update(16);
+    assert.strictEqual(collectCommands(queue).length, 2, "G2");
+    assert.strictEqual(pool.layout(handle), layout1, "layout stable across all switches");
+  });
+
+  it("empty content produces no commands in either mode", () => {
+    const world = makeWorld();
+    const pool = world.getResource(TextResourcePool);
+    const queue = world.getResource(RenderQueue);
+
+    const h1 = pool.allocate("");
+    const h2 = pool.allocate("");
+    addTextEntity(world, { x: 0, y: 0, fontId: font.id, handle: h1, renderMode: TextRenderMode.RASTERIZED });
+    addTextEntity(world, { x: 0, y: 0, fontId: font.id, handle: h2, renderMode: TextRenderMode.GLYPH });
+    world.update(16);
+    assert.strictEqual(collectCommands(queue).length, 0);
+    assert.strictEqual(pool.surface(h1), null);
+    assert.strictEqual(pool.surface(h2), null);
+  });
+
+  it("GLYPH mode respects visibility early-out", () => {
+    const world = makeWorld();
+    const pool = world.getResource(TextResourcePool);
+    const queue = world.getResource(RenderQueue);
+    const handle = pool.allocate("AB");
+    const e = addTextEntity(world, { x: 0, y: 0, fontId: font.id, handle, renderMode: TextRenderMode.GLYPH });
+    world.set(e, Visible, { value: 0 });
+    world.update(16);
+    assert.strictEqual(collectCommands(queue).length, 0, "invisible glyph text emits nothing");
+  });
+
+  it("two entities with different modes interleave by layer/depth", () => {
+    const world = makeWorld();
+    const pool = world.getResource(TextResourcePool);
+    const queue = world.getResource(RenderQueue);
+
+    // Rasterized at depth 5 → one command; glyph at depth 2 → two commands.
+    const hRaster = pool.allocate("AB");
+    const hGlyph = pool.allocate("AB");
+    addTextEntity(world, { x: 0, y: 0, fontId: font.id, handle: hRaster, depth: 5, renderMode: TextRenderMode.RASTERIZED });
+    addTextEntity(world, { x: 0, y: 0, fontId: font.id, handle: hGlyph, depth: 2, renderMode: TextRenderMode.GLYPH });
+    world.update(16);
+
+    const cmds = collectCommands(queue);
+    assert.strictEqual(cmds.length, 3, "1 rasterized + 2 glyph commands");
+    assert.deepStrictEqual(cmds.map((c) => c.depth), [2, 2, 5], "glyph commands sort before the rasterized command");
+  });
+
+  it("GLYPH mode passes color/layer/depth/imageSmoothing through", () => {
+    const world = makeWorld();
+    const pool = world.getResource(TextResourcePool);
+    const queue = world.getResource(RenderQueue);
+    const handle = pool.allocate("A");
+    addTextEntity(world, { x: 0, y: 0, fontId: font.id, handle, fillColor: 0xffcc00, colorEnabled: 0, layer: 3, depth: 9, renderMode: TextRenderMode.GLYPH });
+    world.update(16);
+
+    const cmds = collectCommands(queue);
+    assert.strictEqual(cmds.length, 1);
+    assert.strictEqual(cmds[0].fillColor, 0xffcc00);
+    assert.strictEqual(cmds[0].layer, 3);
+    assert.strictEqual(cmds[0].depth, 9);
+    assert.strictEqual(cmds[0].imageSmoothing, true);
   });
 });

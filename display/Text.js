@@ -4,6 +4,7 @@ import { Renderable } from "../ecs/components/Renderable.js";
 import { Visible } from "../ecs/components/Visible.js";
 import { Text as TextComponent } from "../ecs/components/Text.js";
 import { TextResourcePool } from "../ecs/render/TextResourcePool.js";
+import { TextRenderMode } from "../ecs/render/TextRenderMode.js";
 import { Font } from "../loaders/Font.js";
 import { Layer } from "../view/Layer.js";
 
@@ -54,6 +55,25 @@ export class Text {
     return font;
   }
 
+  static _normalizeRenderMode(v) {
+    if (typeof v === "number") {
+      if (v === TextRenderMode.RASTERIZED || v === TextRenderMode.GLYPH) return v;
+      throw new TypeError(
+        `Text.renderMode: expected TextRenderMode.RASTERIZED, TextRenderMode.GLYPH, ` +
+        `"raster", or "glyph", got ${v}.`
+      );
+    }
+    if (typeof v === "string") {
+      const s = v.toLowerCase();
+      if (s === "raster" || s === "rasterized") return TextRenderMode.RASTERIZED;
+      if (s === "glyph") return TextRenderMode.GLYPH;
+    }
+    throw new TypeError(
+      `Text.renderMode: expected TextRenderMode.RASTERIZED, TextRenderMode.GLYPH, ` +
+      `"raster", or "glyph", got ${String(v)}.`
+    );
+  }
+
   #world;
   #entity;
   #dead = false;
@@ -99,7 +119,7 @@ export class Text {
     wld.set(eid, Visible, { value: 1 });
 
     const contentHandle = pool.allocate(content);
-    wld.set(eid, TextComponent, { fontHandle: fontObj.id, contentHandle, align: 0, letterSpacing: 0, version: 1, colorEnabled: 0, surfaceVersion: 1 });
+    wld.set(eid, TextComponent, { fontHandle: fontObj.id, contentHandle, align: 0, letterSpacing: 0, version: 1, colorEnabled: 0, surfaceVersion: 1, renderMode: TextRenderMode.RASTERIZED });
 
     if (options) {
       if (options.color != null) this.color = options.color;
@@ -109,6 +129,7 @@ export class Text {
       if (options.depth != null) this.depth = options.depth;
       if (options.scale != null) this.scale = options.scale;
       if (options.visible != null) this.visible = options.visible;
+      if (options.renderMode != null) this.renderMode = options.renderMode;
     }
   }
 
@@ -250,6 +271,20 @@ export class Text {
     this._assertAlive();
     this._getText().letterSpacing = v;
     this._bumpLayout();
+  }
+
+  // The rendering representation: `TextRenderMode.RASTERIZED` (default) or
+  // `TextRenderMode.GLYPH`. Changing the mode only selects how the shared
+  // layout is represented — it never rebuilds the layout, the content, or the
+  // rasterized surface.
+  get renderMode() {
+    this._assertAlive();
+    return this._getText().renderMode;
+  }
+
+  set renderMode(v) {
+    this._assertAlive();
+    this._getText().renderMode = Text._normalizeRenderMode(v);
   }
 
   get layer() {

@@ -7,5 +7,6 @@ export class Text {
     version: "u32",
     colorEnabled: "u8",
     surfaceVersion: "u32",
+    renderMode: "u8",
   };
 }

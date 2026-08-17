@@ -6,6 +6,7 @@ import { Renderable } from "../../../ecs/components/Renderable.js";
 import { Visible } from "../../../ecs/components/Visible.js";
 import { Text as TextComponent } from "../../../ecs/components/Text.js";
 import { TextResourcePool } from "../../../ecs/render/TextResourcePool.js";
+import { TextRenderMode } from "../../../ecs/render/TextRenderMode.js";
 import { Scene } from "../../../core/Scene.js";
 import { Text } from "../../../display/Text.js";
 import { Font } from "../../../loaders/Font.js";
@@ -257,5 +258,91 @@ describe("Text facade", () => {
     assert.notStrictEqual(mod.Text, mod.TextComponent);
     assert.strictEqual(typeof mod.TextSystem, "function");
     assert.strictEqual(typeof mod.TextResourcePool, "function");
+  });
+});
+
+describe("Text renderMode", () => {
+  const origImgLoad = ImageLoader.load;
+  const origFLoad = FontLoader.load;
+  let font;
+
+  before(async () => {
+    ImageLoader.load = async () => gridImage();
+    FontLoader.load = async () => {};
+    font = await Font.load("ModeFacade", { image: "grid.png", characters: "AB", gridX: 2, gridY: 1 });
+  });
+
+  after(() => {
+    ImageLoader.load = origImgLoad;
+    FontLoader.load = origFLoad;
+    Font.clear();
+    Text._defaultWorld = null;
+  });
+
+  it("defaults to RASTERIZED", () => {
+    Text._defaultWorld = null;
+    const t = new Text(0, 0, font, "hi");
+    assert.strictEqual(t.renderMode, TextRenderMode.RASTERIZED);
+    assert.strictEqual(t.world.get(t.entity, TextComponent).renderMode, TextRenderMode.RASTERIZED);
+  });
+
+  it("setter/getter round-trips GLYPH and RASTERIZED", () => {
+    Text._defaultWorld = null;
+    const t = new Text(0, 0, font, "hi");
+    t.renderMode = TextRenderMode.GLYPH;
+    assert.strictEqual(t.renderMode, TextRenderMode.GLYPH);
+    assert.strictEqual(t.world.get(t.entity, TextComponent).renderMode, TextRenderMode.GLYPH);
+
+    t.renderMode = TextRenderMode.RASTERIZED;
+    assert.strictEqual(t.renderMode, TextRenderMode.RASTERIZED);
+    assert.strictEqual(t.world.get(t.entity, TextComponent).renderMode, TextRenderMode.RASTERIZED);
+  });
+
+  it("accepts string mode names", () => {
+    Text._defaultWorld = null;
+    const t = new Text(0, 0, font, "hi");
+    t.renderMode = "glyph";
+    assert.strictEqual(t.renderMode, TextRenderMode.GLYPH);
+    t.renderMode = "raster";
+    assert.strictEqual(t.renderMode, TextRenderMode.RASTERIZED);
+    t.renderMode = "rasterized";
+    assert.strictEqual(t.renderMode, TextRenderMode.RASTERIZED);
+  });
+
+  it("rejects invalid mode values", () => {
+    Text._defaultWorld = null;
+    const t = new Text(0, 0, font, "hi");
+    assert.throws(() => { t.renderMode = 2; }, /renderMode/);
+    assert.throws(() => { t.renderMode = "wave"; }, /renderMode/);
+    assert.throws(() => { t.renderMode = null; }, /renderMode/);
+  });
+
+  it("constructor options.renderMode selects the mode", () => {
+    Text._defaultWorld = null;
+    const t = new Text(0, 0, font, "hi", { renderMode: TextRenderMode.GLYPH });
+    assert.strictEqual(t.renderMode, TextRenderMode.GLYPH);
+  });
+
+  it("changing renderMode does not bump version or surfaceVersion", () => {
+    Text._defaultWorld = null;
+    const t = new Text(0, 0, font, "hi");
+    const w = t.world;
+    const e = t.entity;
+    const v = w.get(e, TextComponent).version;
+    const sv = w.get(e, TextComponent).surfaceVersion;
+
+    t.renderMode = TextRenderMode.GLYPH;
+    assert.strictEqual(w.get(e, TextComponent).version, v, "version unchanged");
+    assert.strictEqual(w.get(e, TextComponent).surfaceVersion, sv, "surfaceVersion unchanged");
+
+    t.renderMode = TextRenderMode.RASTERIZED;
+    assert.strictEqual(w.get(e, TextComponent).version, v, "version unchanged after second switch");
+    assert.strictEqual(w.get(e, TextComponent).surfaceVersion, sv, "surfaceVersion unchanged after second switch");
+  });
+
+  it("exports TextRenderMode from jygame", async () => {
+    const mod = await import("../../../jygame.js");
+    assert.strictEqual(mod.TextRenderMode.RASTERIZED, 0);
+    assert.strictEqual(mod.TextRenderMode.GLYPH, 1);
   });
 });
