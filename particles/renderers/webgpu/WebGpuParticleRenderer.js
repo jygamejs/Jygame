@@ -101,8 +101,13 @@ export class WebGpuParticleRenderer {
     this._whiteTexture = null;
     this._whiteTextureView = null;
     this._sampler = null;
+    this._vsModule = null;
+    this._fsModule = null;
+    this._pipelines = null;
     this._config = {
-      format: navigator.gpu.getPreferredCanvasFormat(),
+      format: typeof navigator !== "undefined" && navigator.gpu
+        ? navigator.gpu.getPreferredCanvasFormat()
+        : "bgra8unorm",
       alphaMode: "premultiplied",
     };
     this._initialized = false;
@@ -157,41 +162,9 @@ export class WebGpuParticleRenderer {
     });
 
     // Shader modules
-    const vsModule = device.createShaderModule({ code: VERTEX_SHADER_WGSL });
-    const fsModule = device.createShaderModule({ code: FRAGMENT_SHADER_WGSL });
-
-    // Render pipeline
-    this._pipeline = device.createRenderPipeline({
-      layout: this._pipelineLayout,
-      vertex: {
-        module: vsModule,
-        entryPoint: "vs_main",
-      },
-      fragment: {
-        module: fsModule,
-        entryPoint: "fs_main",
-        targets: [
-          {
-            format: this._config.format,
-            blend: {
-              color: {
-                srcFactor: "src-alpha",
-                dstFactor: "one-minus-src-alpha",
-                operation: "add",
-              },
-              alpha: {
-                srcFactor: "one",
-                dstFactor: "one-minus-src-alpha",
-                operation: "add",
-              },
-            },
-          },
-        ],
-      },
-      primitive: {
-        topology: "triangle-list",
-      },
-    });
+    this._vsModule = device.createShaderModule({ code: VERTEX_SHADER_WGSL });
+    this._fsModule = device.createShaderModule({ code: FRAGMENT_SHADER_WGSL });
+    this._pipelines = new Map();
 
     // Index buffer (static)
     this._indexBuffer = device.createBuffer({
@@ -266,10 +239,59 @@ export class WebGpuParticleRenderer {
     });
   }
 
-  render(particleCount, textureView) {
+  // Creates (and caches) a render pipeline for the given color attachment
+  // format. The pipeline target must match the format of whatever pass draws
+  // the particles — the standalone swapchain path uses the preferred canvas
+  // format, while the WebGpuRenderer frame pass may use a configured format.
+  _ensurePipeline(format) {
+    const key = format || this._config.format;
+    let pipeline = this._pipelines.get(key);
+    if (pipeline) return pipeline;
+
+    pipeline = this._device.createRenderPipeline({
+      layout: this._pipelineLayout,
+      vertex: {
+        module: this._vsModule,
+        entryPoint: "vs_main",
+      },
+      fragment: {
+        module: this._fsModule,
+        entryPoint: "fs_main",
+        targets: [
+          {
+            format: key,
+            blend: {
+              color: {
+                srcFactor: "src-alpha",
+                dstFactor: "one-minus-src-alpha",
+                operation: "add",
+              },
+              alpha: {
+                srcFactor: "one",
+                dstFactor: "one-minus-src-alpha",
+                operation: "add",
+              },
+            },
+          },
+        ],
+      },
+      primitive: {
+        topology: "triangle-list",
+      },
+    });
+    this._pipelines.set(key, pipeline);
+    return pipeline;
+  }
+
+  // Draws `particleCount` particles. When `pass` is provided the particles are
+  // drawn into that existing render pass (the WebGpuRenderer's frame pass), so
+  // they render in pass order instead of via a separate submit that the
+  // frame's loadOp "clear" pass would wipe afterwards. Without a pass the
+  // renderer falls back to its own command buffer into the swapchain.
+  render(particleCount, textureView, pass, targetFormat) {
     if (!this._initialized) return;
-    if (!this._context || !this._canvas) return;
     if (particleCount === 0) return;
+    if (!this._canvas) return;
 
     this._ensureBindGroup0();
 
@@ -290,7 +312,22 @@ export class WebGpuParticleRenderer {
       ],
     });
 
-    // Get current texture from swap chain
+    const pipeline = this._ensurePipeline(targetFormat);
+
+    const draw = (rp) => {
+      rp.setPipeline(pipeline);
+      rp.setBindGroup(0, this._renderBindGroup0);
+      rp.setBindGroup(1, bindGroup1);
+      rp.setIndexBuffer(this._indexBuffer, "uint16");
+      rp.drawIndexed(6, particleCount, 0, 0, 0);
+    };
+
+    if (pass) {
+      draw(pass);
+      return;
+    }
+
+    if (!this._context) return;
     const texture = this._context.getCurrentTexture();
     const view = texture.createView();
 
@@ -304,12 +341,7 @@ export class WebGpuParticleRenderer {
         },
       ],
     });
-
-    renderPass.setPipeline(this._pipeline);
-    renderPass.setBindGroup(0, this._renderBindGroup0);
-    renderPass.setBindGroup(1, bindGroup1);
-    renderPass.setIndexBuffer(this._indexBuffer, "uint16");
-    renderPass.drawIndexed(6, particleCount, 0, 0, 0);
+    draw(renderPass);
     renderPass.end();
 
     device.queue.submit([commandEncoder.finish()]);
@@ -329,6 +361,9 @@ export class WebGpuParticleRenderer {
     this._bindGroupLayout1 = null;
     this._renderBindGroup0 = null;
     this._particleBuffer = null;
+    this._vsModule = null;
+    this._fsModule = null;
+    this._pipelines = null;
     this._context = null;
     this._canvas = null;
   }

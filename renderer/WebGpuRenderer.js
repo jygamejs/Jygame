@@ -349,9 +349,11 @@ export class WebGpuRenderer extends Renderer {
       if (!backend) continue;
 
       if (backend._mode === "compute" && backend._gpuRenderer) {
-        // GPU-native particle path: reuse WebGpuParticleRenderer, which draws
-        // into the shared canvas with its own submit (loadOp "load").
-        backend.render();
+        // GPU-native particle path: draw into this frame's render pass (with
+        // this renderer's attachment format) instead of the particle renderer
+        // submitting its own command buffer — a separate submit would execute
+        // before this pass's loadOp "clear" and get wiped every frame.
+        backend.render(pass, this._format);
         continue;
       }
 

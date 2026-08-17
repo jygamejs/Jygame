@@ -17,6 +17,7 @@ import { Trail, Transform, Visible, TrailManager } from "../../../ecs/index.js";
 import { ParticleEffect } from "../../../particles/ParticleEffect.js";
 import { Particle } from "../../../display/Particle.js";
 import { GpuParticleBackend } from "../../../particles/backends/GpuParticleBackend.js";
+import { WebGpuParticleRenderer } from "../../../particles/renderers/webgpu/WebGpuParticleRenderer.js";
 import { makeMockGPU } from "./lib/MockGPU.js";
 import { Text as TextComponent } from "../../../ecs/components/Text.js";
 import { Renderable } from "../../../ecs/components/Renderable.js";
@@ -616,6 +617,56 @@ describe("WebGpuRenderer particles", () => {
         renderer.destroy();
       }
     });
+  });
+});
+
+describe("WebGpuParticleRenderer frame integration", () => {
+  async function makeParticleRenderer(mock) {
+    const renderer = new WebGpuParticleRenderer({
+      canvas: { width: 800, height: 600, getContext: (kind) => (kind === "webgpu" ? mock.context : null) },
+      device: mock.device,
+    });
+    await renderer.initialize();
+    renderer.setParticleBuffer(
+      mock.device.createBuffer({ size: 1024, usage: GPUBufferUsage.STORAGE }),
+    );
+    return renderer;
+  }
+
+  it("draws compute particles into the caller's render pass without its own submit", async () => {
+    const mock = makeMockGPU();
+    const renderer = await makeParticleRenderer(mock);
+
+    const encoder = mock.device.createCommandEncoder();
+    const pass = encoder.beginRenderPass({
+      colorAttachments: [
+        { view: mock.currentTexture.createView(), loadOp: "clear", storeOp: "store" },
+      ],
+    });
+    renderer.render(2, null, pass, "bgra8unorm");
+    pass.end();
+    mock.device.queue.submit([encoder.finish()]);
+
+    assert.strictEqual(mock.log.drawIndexed.length, 1, "particles drawn once");
+    assert.strictEqual(mock.log.drawIndexed[0].indexCount, 6);
+    assert.strictEqual(mock.log.drawIndexed[0].instanceCount, 2);
+    assert.strictEqual(mock.log.setIndexBuffer.length, 1);
+    assert.strictEqual(mock.log.beginRenderPass.length, 1, "only the caller's pass was created");
+    assert.strictEqual(mock.log.submit.length, 1, "only the caller submitted");
+    renderer.destroy();
+  });
+
+  it("falls back to its own swapchain submit when no render pass is provided", async () => {
+    const mock = makeMockGPU();
+    const renderer = await makeParticleRenderer(mock);
+
+    renderer.render(3, null, null, "bgra8unorm");
+
+    assert.strictEqual(mock.log.drawIndexed.length, 1);
+    assert.strictEqual(mock.log.drawIndexed[0].instanceCount, 3);
+    assert.strictEqual(mock.log.beginRenderPass.length, 1, "own pass created");
+    assert.strictEqual(mock.log.submit.length, 1, "own command buffer submitted");
+    renderer.destroy();
   });
 });
 
