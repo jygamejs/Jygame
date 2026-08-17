@@ -13,10 +13,10 @@ struct Particle {
 };
 
 @group(0) @binding(0) var<storage, read> particles : array<Particle>;
-@group(0) @binding(1) var<uniform> uniforms : RenderUniforms;
+@group(0) @binding(1) var<uniform> camera : CameraUniform;
 
-struct RenderUniforms {
-  resolution: vec2<f32>,
+struct CameraUniform {
+  m : mat4x4<f32>,
 };
 
 struct VertexOutput {
@@ -42,15 +42,15 @@ fn vs_main(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_index) ins
   if (p.alive > 0u) {
     let w = p.size;
     let h = p.size;
+    // Quad is centered on the particle (origin 0.5) like the CPU and operator
+    // GPU renderers, and transformed by the same camera matrix the sprite path
+    // uses so particles live in world space under the camera.
     var local = QUAD_POS[vertexIndex] * vec2(w, h);
-    local -= vec2(w * 0.5, h * 0.5);
     let c = cos(p.rotation);
     let s = sin(p.rotation);
     local = vec2(local.x * c - local.y * s, local.x * s + local.y * c);
     let world = local + vec2(p.x, p.y);
-    var ndc = world / uniforms.resolution * 2.0 - 1.0;
-    ndc.y = -ndc.y;
-    pos = vec4(ndc, p.depth * 0.00001, 1.0);
+    pos = camera.m * vec4(world, clamp(p.depth, -0.99, 0.99), 1.0);
   } else {
     pos = vec4(0.0, 0.0, 0.0, 0.0);
   }
@@ -173,9 +173,10 @@ export class WebGpuParticleRenderer {
     });
     device.queue.writeBuffer(this._indexBuffer, 0, INDEX_DATA.buffer);
 
-    // Render uniform buffer (resolution)
+    // Camera uniform buffer (mat4x4, 64 bytes) — same layout as the sprite
+    // batch so particles transform under the same view-projection.
     this._renderUniformBuffer = device.createBuffer({
-      size: 16, // vec2<f32> (8 bytes) + padding to 16 bytes
+      size: 64,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
 
@@ -288,7 +289,9 @@ export class WebGpuParticleRenderer {
   // they render in pass order instead of via a separate submit that the
   // frame's loadOp "clear" pass would wipe afterwards. Without a pass the
   // renderer falls back to its own command buffer into the swapchain.
-  render(particleCount, textureView, pass, targetFormat) {
+  // `matrix` is the camera view-projection used by the sprite path; when
+  // absent a default screen-space matrix preserves the old NDC mapping.
+  render(particleCount, textureView, pass, targetFormat, matrix) {
     if (!this._initialized) return;
     if (particleCount === 0) return;
     if (!this._canvas) return;
@@ -298,9 +301,13 @@ export class WebGpuParticleRenderer {
     const device = this._device;
     const canvas = this._canvas;
 
-    // Write resolution uniform
-    const resolution = new Float32Array([canvas.width, canvas.height]);
-    device.queue.writeBuffer(this._renderUniformBuffer, 0, resolution.buffer);
+    // Write the camera matrix into the uniform buffer.
+    if (matrix) {
+      device.queue.writeBuffer(this._renderUniformBuffer, 0, matrix);
+    } else {
+      const m = this._screenSpaceMatrix(canvas.width, canvas.height);
+      device.queue.writeBuffer(this._renderUniformBuffer, 0, m);
+    }
 
     // Create bind group 1 (texture)
     const texView = textureView || this._whiteTextureView;
@@ -345,6 +352,21 @@ export class WebGpuParticleRenderer {
     renderPass.end();
 
     device.queue.submit([commandEncoder.finish()]);
+  }
+
+  // Screen-space identity view-projection: maps world coords directly to NDC
+  // with the y-axis flipped (x/width*2-1, 1-y/height*2). Mirrors the matrix
+  // `buildViewProjection` produces for a null camera, so the no-camera
+  // fallback matches the engine's screen-space convention.
+  _screenSpaceMatrix(width, height) {
+    const m = new Float32Array(16);
+    m[0] = width > 0 ? 2 / width : 0;
+    m[5] = height > 0 ? -2 / height : 0;
+    m[10] = 1;
+    m[12] = -1;
+    m[13] = 1;
+    m[15] = 1;
+    return m;
   }
 
   destroy() {

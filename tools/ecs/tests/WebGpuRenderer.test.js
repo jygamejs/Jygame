@@ -637,13 +637,16 @@ describe("WebGpuParticleRenderer frame integration", () => {
     const mock = makeMockGPU();
     const renderer = await makeParticleRenderer(mock);
 
+    const camera = new Float32Array(16);
+    camera[0] = 2 / 800; camera[5] = -2 / 600; camera[10] = 1; camera[12] = -1; camera[13] = 1; camera[15] = 1;
+
     const encoder = mock.device.createCommandEncoder();
     const pass = encoder.beginRenderPass({
       colorAttachments: [
         { view: mock.currentTexture.createView(), loadOp: "clear", storeOp: "store" },
       ],
     });
-    renderer.render(2, null, pass, "bgra8unorm");
+    renderer.render(2, null, pass, "bgra8unorm", camera);
     pass.end();
     mock.device.queue.submit([encoder.finish()]);
 
@@ -653,6 +656,12 @@ describe("WebGpuParticleRenderer frame integration", () => {
     assert.strictEqual(mock.log.setIndexBuffer.length, 1);
     assert.strictEqual(mock.log.beginRenderPass.length, 1, "only the caller's pass was created");
     assert.strictEqual(mock.log.submit.length, 1, "only the caller submitted");
+
+    const uniform = mock.log.writeBuffer.find((w) => (w.buffer.usage & GPUBufferUsage.UNIFORM) !== 0);
+    assert.ok(uniform, "camera uniform written");
+    assert.strictEqual(uniform.byteLength, 64);
+    const uploaded = new Float32Array(uniform.data.buffer, uniform.data.byteOffset, 16);
+    assert.deepStrictEqual(Array.from(uploaded), Array.from(camera), "frame camera matrix uploaded");
     renderer.destroy();
   });
 

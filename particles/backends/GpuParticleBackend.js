@@ -692,7 +692,7 @@ export class GpuParticleBackend {
     return this._storage.activeCount;
   }
 
-  render(ctx, format) {
+  render(ctx, format, matrix) {
     const count = this._activeParticleCount();
     if (count === 0) return;
 
@@ -700,11 +700,12 @@ export class GpuParticleBackend {
       // GPU-native render path: read directly from compute buffer. `ctx` is a
       // render pass when called from the WebGpuRenderer frame (drawn into that
       // pass so the frame's loadOp "clear" cannot wipe the particles);
-      // otherwise the renderer falls back to its own submit.
+      // otherwise the renderer falls back to its own submit. `matrix` is the
+      // frame's camera view-projection so particles live in world space.
       const buffer = this._computeDispatcher.gpuBuffer;
       if (buffer) {
         this._gpuRenderer.setParticleBuffer(buffer);
-        this._gpuRenderer.render(count, null, ctx, format);
+        this._gpuRenderer.render(count, null, ctx, format, matrix);
       }
       return;
     }

@@ -350,10 +350,11 @@ export class WebGpuRenderer extends Renderer {
 
       if (backend._mode === "compute" && backend._gpuRenderer) {
         // GPU-native particle path: draw into this frame's render pass (with
-        // this renderer's attachment format) instead of the particle renderer
-        // submitting its own command buffer — a separate submit would execute
-        // before this pass's loadOp "clear" and get wiped every frame.
-        backend.render(pass, this._format);
+        // this renderer's attachment format and camera matrix) instead of the
+        // particle renderer submitting its own command buffer — a separate
+        // submit would execute before this pass's loadOp "clear" and get wiped
+        // every frame.
+        backend.render(pass, this._format, this._matrix);
         continue;
       }
 
