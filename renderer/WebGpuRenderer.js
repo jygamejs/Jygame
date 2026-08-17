@@ -228,7 +228,7 @@ export class WebGpuRenderer extends Renderer {
       if (entry.view !== this._currentView) {
         this._flushBatch(pass);
         this._currentView = entry.view;
-        this._batch.setTexture(entry.view, this._textures.sampler());
+        this._batch.setTexture(entry.view, this._textures.sampler(cmd.imageSmoothing));
       }
 
       if (this._cull(cmd, camera, vp, cfg)) return;
@@ -397,7 +397,7 @@ export class WebGpuRenderer extends Renderer {
     if (entry.view !== this._currentView) {
       this._flushBatch(pass);
       this._currentView = entry.view;
-      this._batch.setTexture(entry.view, this._textures.sampler());
+      this._batch.setTexture(entry.view, this._textures.sampler(true));
     }
 
     const w = inst.width > 0 ? inst.width : inst.size;

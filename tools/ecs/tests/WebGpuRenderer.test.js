@@ -330,6 +330,38 @@ describe("WebGpuRenderer", () => {
     renderer.destroy();
   });
 
+  it("texture cache provides separate linear and nearest samplers for imageSmoothing", async () => {
+    const mock = makeMockGPU();
+    const renderer = await makeRenderer(mock);
+    const linear = renderer._textures.sampler(true);
+    const nearest = renderer._textures.sampler(false);
+    assert.notStrictEqual(linear, nearest, "linear and nearest are distinct samplers");
+    assert.strictEqual(renderer._textures.sampler(true), linear, "linear sampler cached");
+    assert.strictEqual(renderer._textures.sampler(false), nearest, "nearest sampler cached");
+    const desc = mock.log.createSampler[1].desc;
+    assert.strictEqual(desc.minFilter, "nearest");
+    assert.strictEqual(desc.magFilter, "nearest");
+    renderer.destroy();
+  });
+
+  it("binds the nearest sampler for commands with imageSmoothing disabled", async () => {
+    const mock = makeMockGPU();
+    const renderer = await makeRenderer(mock);
+    const { world, queue } = makeWorld();
+    pushRect(queue, {
+      image: { width: 16, height: 16, data: new Uint8Array(16 * 16 * 4) },
+      imageSmoothing: false,
+    });
+    renderer.render(world);
+    const nearest = renderer._textures.sampler(false);
+    const linear = renderer._textures.sampler(true);
+    assert.notStrictEqual(nearest, linear);
+    const entries = mock.log.createBindGroup.flatMap((g) => g.desc.entries);
+    assert.ok(entries.some((e) => e.binding === 0 && e.resource === nearest), "bound the nearest sampler");
+    assert.ok(!entries.some((e) => e.binding === 0 && e.resource === linear), "did not bind the linear sampler");
+    renderer.destroy();
+  });
+
   it("sprite fragment shader uses select() instead of the invalid WGSL ternary", () => {
     assert.ok(!SPRITE_FRAGMENT_WGSL.includes(" ? "), "no ternary operator in WGSL");
     assert.ok(SPRITE_FRAGMENT_WGSL.includes("select("), "uses select()");

@@ -169,11 +169,22 @@ export class WgpuTrailBatch {
   }
 
   _grow() {
+    const device = this._device;
     this._maxVertices *= 2;
     const data = new Float32Array(this._maxVertices * FLOATS_PER_VERTEX);
     data.set(this._data);
     this._data = data;
-    this._device.queue.writeBuffer(this._vertexBuffer, 0, data);
+    if (this._vertexBuffer) this._vertexBuffer.destroy();
+    this._vertexBuffer = device.createBuffer({
+      size: data.byteLength,
+      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+    });
+    this._cameraBindGroup = device.createBindGroup({
+      layout: this._bindGroupLayout,
+      entries: [
+        { binding: 0, resource: { buffer: this._uniformBuffer } },
+      ],
+    });
   }
 
   destroy() {

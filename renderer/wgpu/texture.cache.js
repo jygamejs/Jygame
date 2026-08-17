@@ -7,17 +7,24 @@ export class WgpuTextureCache {
     this._cache = new Map();
     this._white = null;
     this._sampler = null;
+    this._nearestSampler = null;
   }
 
-  sampler() {
-    if (this._sampler) return this._sampler;
-    this._sampler = this._device.createSampler({
-      minFilter: "linear",
-      magFilter: "linear",
+  // Smoothing mirrors the game's imageSmoothing option the same way the GL
+  // texture cache does: linear filtering when smoothing is on, nearest when
+  // off (crisp pixels for pixel art).
+  sampler(smoothing = true) {
+    const key = smoothing ? "_sampler" : "_nearestSampler";
+    let existing = this[key];
+    if (existing) return existing;
+    const created = this._device.createSampler({
+      minFilter: smoothing ? "linear" : "nearest",
+      magFilter: smoothing ? "linear" : "nearest",
       addressModeU: "clamp-to-edge",
       addressModeV: "clamp-to-edge",
     });
-    return this._sampler;
+    this[key] = created;
+    return created;
   }
 
   get(sourceImage) {

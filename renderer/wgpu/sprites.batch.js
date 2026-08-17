@@ -151,11 +151,23 @@ export class WgpuSpriteBatch {
   }
 
   _grow() {
+    const device = this._device;
     this._maxInstances *= 2;
     const data = new Float32Array(this._maxInstances * FLOATS_PER_INSTANCE);
     data.set(this._data);
     this._data = data;
-    this._device.queue.writeBuffer(this._instanceBuffer, 0, data);
+    if (this._instanceBuffer) this._instanceBuffer.destroy();
+    this._instanceBuffer = device.createBuffer({
+      size: data.byteLength,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+    this._cameraBindGroup = device.createBindGroup({
+      layout: this._bindGroupLayout0,
+      entries: [
+        { binding: 0, resource: { buffer: this._uniformBuffer } },
+        { binding: 1, resource: { buffer: this._instanceBuffer } },
+      ],
+    });
   }
 
   destroy() {
