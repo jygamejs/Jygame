@@ -16,6 +16,7 @@ import { makeMockGL } from "./lib/MockGL.js";
 import { Text as TextComponent } from "../../../ecs/components/Text.js";
 import { Renderable } from "../../../ecs/components/Renderable.js";
 import { TextResourcePool } from "../../../ecs/render/TextResourcePool.js";
+import { TextRenderMode } from "../../../ecs/render/TextRenderMode.js";
 import { TextSystem } from "../../../ecs/systems/TextSystem.js";
 import { Font } from "../../../loaders/Font.js";
 import { FontLoader } from "../../../loaders/FontLoader.js";
@@ -615,7 +616,7 @@ describe("WebGLRenderer — rasterized text", () => {
       world.set(e, Transform, { x: 10, y: 20, rotation: 0, scaleX: 1, scaleY: 1, _prevX: 10, _prevY: 20, _interpValid: 1 });
       world.set(e, Renderable, { fillColor: 0xffffff, layer: 1, depth: 0, imageSmoothing: 1 });
       const handle = pool.allocate("AB");
-      world.set(e, TextComponent, { fontHandle: font.id, contentHandle: handle, align: 0, letterSpacing: 0, version: 1, surfaceVersion: 1, colorEnabled: 0 });
+      world.set(e, TextComponent, { fontHandle: font.id, contentHandle: handle, align: 0, letterSpacing: 0, version: 1, surfaceVersion: 1, colorEnabled: 0, renderMode: TextRenderMode.RASTERIZED });
       world.set(e, Visible, { value: 1 });
       world.update(16);
 

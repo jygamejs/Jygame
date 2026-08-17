@@ -17,6 +17,7 @@ import { Camera } from "../../../view/Camera.js";
 import { Viewport } from "../../../view/Viewport.js";
 import { Text as TextComponent } from "../../../ecs/components/Text.js";
 import { TextResourcePool } from "../../../ecs/render/TextResourcePool.js";
+import { TextRenderMode } from "../../../ecs/render/TextRenderMode.js";
 import { TextSystem } from "../../../ecs/systems/TextSystem.js";
 import { Font } from "../../../loaders/Font.js";
 import { FontLoader } from "../../../loaders/FontLoader.js";
@@ -370,7 +371,7 @@ describe("CanvasRenderer text integration", () => {
     world.addMany(e, Transform, Renderable, TextComponent, Visible);
     world.set(e, Transform, { x, y, rotation: 0, scaleX: 1, scaleY: 1, _prevX: x, _prevY: y, _interpValid: 1 });
     world.set(e, Renderable, { fillColor: 0xffffff, layer: 1, depth: 0, imageSmoothing: 1 });
-    world.set(e, TextComponent, { fontHandle: font.id, contentHandle: handle, align: 0, letterSpacing: 0, version: 1, surfaceVersion: 1 });
+    world.set(e, TextComponent, { fontHandle: font.id, contentHandle: handle, align: 0, letterSpacing: 0, version: 1, surfaceVersion: 1, renderMode: TextRenderMode.RASTERIZED });
     world.set(e, Visible, { value: 1 });
     return e;
   }

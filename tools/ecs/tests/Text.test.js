@@ -279,11 +279,11 @@ describe("Text renderMode", () => {
     Text._defaultWorld = null;
   });
 
-  it("defaults to RASTERIZED", () => {
+  it("defaults to GLYPH", () => {
     Text._defaultWorld = null;
     const t = new Text(0, 0, font, "hi");
-    assert.strictEqual(t.renderMode, TextRenderMode.RASTERIZED);
-    assert.strictEqual(t.world.get(t.entity, TextComponent).renderMode, TextRenderMode.RASTERIZED);
+    assert.strictEqual(t.renderMode, TextRenderMode.GLYPH);
+    assert.strictEqual(t.world.get(t.entity, TextComponent).renderMode, TextRenderMode.GLYPH);
   });
 
   it("setter/getter round-trips GLYPH and RASTERIZED", () => {
@@ -342,7 +342,7 @@ describe("Text renderMode", () => {
 
   it("exports TextRenderMode from jygame", async () => {
     const mod = await import("../../../jygame.js");
-    assert.strictEqual(mod.TextRenderMode.RASTERIZED, 0);
-    assert.strictEqual(mod.TextRenderMode.GLYPH, 1);
+    assert.strictEqual(mod.TextRenderMode.GLYPH, 0, "GLYPH is the default (zero)");
+    assert.strictEqual(mod.TextRenderMode.RASTERIZED, 1);
   });
 });

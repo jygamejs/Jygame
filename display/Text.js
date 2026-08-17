@@ -119,7 +119,9 @@ export class Text {
     wld.set(eid, Visible, { value: 1 });
 
     const contentHandle = pool.allocate(content);
-    wld.set(eid, TextComponent, { fontHandle: fontObj.id, contentHandle, align: 0, letterSpacing: 0, version: 1, colorEnabled: 0, surfaceVersion: 1, renderMode: TextRenderMode.RASTERIZED });
+    // renderMode is intentionally not set here: its ECS `u8` field zero-fills
+    // to `TextRenderMode.GLYPH` (value 0), so glyph mode is the default.
+    wld.set(eid, TextComponent, { fontHandle: fontObj.id, contentHandle, align: 0, letterSpacing: 0, version: 1, colorEnabled: 0, surfaceVersion: 1 });
 
     if (options) {
       if (options.color != null) this.color = options.color;
@@ -273,8 +275,8 @@ export class Text {
     this._bumpLayout();
   }
 
-  // The rendering representation: `TextRenderMode.RASTERIZED` (default) or
-  // `TextRenderMode.GLYPH`. Changing the mode only selects how the shared
+  // The rendering representation: `TextRenderMode.GLYPH` (default) or
+  // `TextRenderMode.RASTERIZED`. Changing the mode only selects how the shared
   // layout is represented — it never rebuilds the layout, the content, or the
   // rasterized surface.
   get renderMode() {

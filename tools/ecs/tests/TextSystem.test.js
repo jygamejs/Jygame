@@ -120,7 +120,7 @@ function makeWorld() {
   return world;
 }
 
-function addTextEntity(world, { x, y, fontId, handle, align = 0, letterSpacing = 0, version = 1, surfaceVersion = 1, fillColor = 0xffffff, colorEnabled = 0, layer = 1, depth = 0, renderMode = 0 }) {
+function addTextEntity(world, { x, y, fontId, handle, align = 0, letterSpacing = 0, version = 1, surfaceVersion = 1, fillColor = 0xffffff, colorEnabled = 0, layer = 1, depth = 0, renderMode = TextRenderMode.RASTERIZED }) {
   const e = world.createEntity();
   world.addMany(e, Transform, Renderable, Text, Visible);
   world.set(e, Transform, { x, y, rotation: 0, scaleX: 1, scaleY: 1, _prevX: x, _prevY: y, _interpValid: 1 });
@@ -677,17 +677,19 @@ describe("TextSystem render modes", () => {
     Font.clear();
   });
 
-  it("defaults to RASTERIZED — one command, one surface", () => {
+  it("GLYPH (value 0) renders as glyph mode — one command per glyph, no surface", () => {
     const world = makeWorld();
     const pool = world.getResource(TextResourcePool);
     const queue = world.getResource(RenderQueue);
     const handle = pool.allocate("AB");
-    addTextEntity(world, { x: 100, y: 50, fontId: font.id, handle });
+    const e = addTextEntity(world, { x: 100, y: 50, fontId: font.id, handle, renderMode: TextRenderMode.GLYPH });
     world.update(16);
 
+    assert.strictEqual(world.get(e, Text).renderMode, TextRenderMode.GLYPH,
+      "GLYPH is value 0 — the zero-fill default of the Text component");
     const cmds = collectCommands(queue);
-    assert.strictEqual(cmds.length, 1, "rasterized default emits one command");
-    assert.ok(pool.surface(handle), "rasterized mode builds a surface");
+    assert.strictEqual(cmds.length, 2, "glyph mode — one command per glyph");
+    assert.strictEqual(pool.surface(handle), null, "glyph mode never builds a rasterized surface");
   });
 
   it("GLYPH mode emits one command per glyph and no rasterized surface", () => {
