@@ -264,6 +264,40 @@ describe("WebGLRenderer", () => {
     }
   });
 
+  it("forwards property writes on the immediate context to the 2D context", () => {
+    const previous = globalThis.document;
+    const real2d = {
+      clearRect() {},
+      fillRect() {},
+      _smoothing: true,
+      get imageSmoothingEnabled() { return this._smoothing; },
+      set imageSmoothingEnabled(v) {
+        // A real CanvasRenderingContext2D throws "Illegal invocation" when its
+        // accessor setter runs with a `this` that is not the real context.
+        assert.strictEqual(this, real2d, "setter must run on the real context");
+        this._smoothing = v;
+      },
+    };
+    globalThis.document = {
+      createElement: () => ({
+        width: 0,
+        height: 0,
+        getContext: (kind) => (kind === "2d" ? real2d : null),
+      }),
+    };
+    try {
+      const { gl } = makeMockGL();
+      const renderer = new WebGLRenderer({ context: gl, width: 800, height: 600 });
+      assert.doesNotThrow(() => {
+        renderer.immediateContext.imageSmoothingEnabled = false;
+      });
+      assert.strictEqual(real2d._smoothing, false);
+    } finally {
+      if (previous === undefined) delete globalThis.document;
+      else globalThis.document = previous;
+    }
+  });
+
   it("composites the background overlay before the world is drawn", () => {
     const previous = globalThis.document;
     globalThis.document = {

@@ -58,6 +58,15 @@ export class ImmediateCanvas {
         }
         return value;
       },
+      // Without a set trap, a bare assignment forwards as
+      // Reflect.set(target, prop, value, receiver=proxy), which runs accessor
+      // setters like CanvasRenderingContext2D.imageSmoothingEnabled with
+      // `this` set to the proxy — a DOM object that rejects any receiver that
+      // is not a real context ("Illegal invocation"). Forward to the target so
+      // the setter binds to the actual context.
+      set(obj, prop, value) {
+        return Reflect.set(obj, prop, value);
+      },
     });
     return this._drawingContext;
   }
