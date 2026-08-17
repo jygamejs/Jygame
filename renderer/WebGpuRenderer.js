@@ -53,6 +53,7 @@ export class WebGpuRenderer extends Renderer {
 
     this._immediateBg = new ImmediateCanvas(width, height);
     this._immediateFg = new ImmediateCanvas(width, height);
+    this._applyImmediateSmoothing();
     this._clearColor = [0, 0, 0, 0];
     this._tmpParticle = {};
     this._matrix = null;
@@ -427,7 +428,11 @@ export class WebGpuRenderer extends Renderer {
       width: w,
       height: h,
       u0, v0, u1, v1,
-      r: inst.r, g: inst.g, b: inst.b,
+      // Premultiplied blend (one, one-minus-src-alpha): untextured particles
+      // must carry a premultiplied tint or faded particles wash out the scene.
+      r: inst.texture ? inst.r : inst.r * inst.alpha,
+      g: inst.texture ? inst.g : inst.g * inst.alpha,
+      b: inst.texture ? inst.b : inst.b * inst.alpha,
       a: inst.alpha,
       depth,
       shape: 0,
@@ -585,6 +590,7 @@ export class WebGpuRenderer extends Renderer {
     }
     this._immediateBg.resize(width, height);
     this._immediateFg.resize(width, height);
+    this._applyImmediateSmoothing();
   }
 
   destroy() {
@@ -606,5 +612,16 @@ export class WebGpuRenderer extends Renderer {
 
   get immediateBackgroundContext() {
     return this._immediateBg.drawingContext;
+  }
+
+  // Match the game's imageSmoothing option on both immediate 2D layers (see
+  // WebGLRenderer._applyImmediateSmoothing). Re-applied after resize, since
+  // resizing a canvas resets its 2D context state.
+  _applyImmediateSmoothing() {
+    if (this._options.imageSmoothing === undefined) return;
+    const bg = this._immediateBg.drawingContext;
+    const fg = this._immediateFg.drawingContext;
+    if (bg) bg.imageSmoothingEnabled = this._options.imageSmoothing;
+    if (fg) fg.imageSmoothingEnabled = this._options.imageSmoothing;
   }
 }

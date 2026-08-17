@@ -540,6 +540,105 @@ describe("WebGLRenderer particles", () => {
       renderer.destroy();
     }
   });
+
+  it("premultiplies untextured particle color by alpha", () => {
+    const { gl } = makeMockGL();
+    const renderer = new WebGLRenderer({ context: gl, width: 800, height: 600 });
+    const world = makeEffectWorld();
+    ParticleEffect._defaultWorld = world;
+    try {
+      const effect = Particle.create({
+        initializer: (p) => {
+          p.size = 10;
+          p.r = 200;
+          p.g = 100;
+          p.b = 50;
+          p.alpha = 0.5;
+        },
+      });
+      effect.burst(1);
+      renderer.render(world);
+
+      const d = renderer._batch.data;
+      // Instance color attributes live at offsets 11..14 (r, g, b, a).
+      assert.ok(Math.abs(d[11] - (200 / 255) * 0.5) < 1e-6, "r premultiplied");
+      assert.ok(Math.abs(d[12] - (100 / 255) * 0.5) < 1e-6, "g premultiplied");
+      assert.ok(Math.abs(d[13] - (50 / 255) * 0.5) < 1e-6, "b premultiplied");
+      assert.ok(Math.abs(d[14] - 0.5) < 1e-6, "alpha untouched");
+      effect.destroy();
+    } finally {
+      ParticleEffect._defaultWorld = null;
+      renderer.destroy();
+    }
+  });
+
+  it("keeps a textured particle's tint straight (texture is premultiplied)", () => {
+    const { gl } = makeMockGL();
+    const renderer = new WebGLRenderer({ context: gl, width: 800, height: 600 });
+    const world = makeEffectWorld();
+    ParticleEffect._defaultWorld = world;
+    try {
+      const img = { width: 8, height: 8 };
+      const effect = Particle.create({
+        initializer: (p) => {
+          p.texture = img;
+          p.size = 10;
+          p.r = 200;
+          p.g = 100;
+          p.b = 50;
+          p.alpha = 0.5;
+        },
+      });
+      effect.burst(1);
+      renderer.render(world);
+
+      const d = renderer._batch.data;
+      assert.ok(Math.abs(d[11] - 200 / 255) < 1e-6, "textured tint not premultiplied");
+      assert.ok(Math.abs(d[12] - 100 / 255) < 1e-6);
+      assert.ok(Math.abs(d[13] - 50 / 255) < 1e-6);
+      assert.ok(Math.abs(d[14] - 0.5) < 1e-6);
+      effect.destroy();
+    } finally {
+      ParticleEffect._defaultWorld = null;
+      renderer.destroy();
+    }
+  });
+});
+
+
+describe("WebGLRenderer immediate layers", () => {
+  it("applies imageSmoothing to both immediate 2D contexts", () => {
+    const previous = globalThis.document;
+    const bg2d = { _s: true, set imageSmoothingEnabled(v) { this._s = v; } };
+    const fg2d = { _s: true, set imageSmoothingEnabled(v) { this._s = v; } };
+    const contexts = [bg2d, fg2d];
+    let n = 0;
+    globalThis.document = {
+      createElement: () => {
+        const idx = n++;
+        return { width: 0, height: 0, getContext: (k) => (k === "2d" ? contexts[idx] : null) };
+      },
+    };
+    try {
+      const { gl } = makeMockGL();
+      const renderer = new WebGLRenderer({
+        context: gl, width: 800, height: 600, options: { imageSmoothing: false },
+      });
+      assert.strictEqual(bg2d._s, false, "background layer must not smooth");
+      assert.strictEqual(fg2d._s, false, "foreground layer must not smooth");
+
+      // Resizing a canvas resets its 2D context state; re-apply on resize.
+      bg2d._s = true;
+      fg2d._s = true;
+      renderer.resize(800, 600);
+      assert.strictEqual(bg2d._s, false, "background smoothing re-applied on resize");
+      assert.strictEqual(fg2d._s, false, "foreground smoothing re-applied on resize");
+      renderer.destroy();
+    } finally {
+      if (previous === undefined) delete globalThis.document;
+      else globalThis.document = previous;
+    }
+  });
 });
 
 

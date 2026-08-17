@@ -160,6 +160,7 @@ export class WebGLRenderer extends Renderer {
 
     this._immediateBg = new ImmediateCanvas(width, height);
     this._immediateFg = new ImmediateCanvas(width, height);
+    this._applyImmediateSmoothing();
     this._clearColor = [0, 0, 0, 0];
     this._trailBatch = null;
     this._tmpParticle = {};
@@ -472,6 +473,16 @@ export class WebGLRenderer extends Renderer {
       }
     }
 
+    // The sprite path blends premultiplied alpha (ONE, ONE_MINUS_SRC_ALPHA),
+    // so an untextured particle's straight tint must be premultiplied by its
+    // alpha or faded particles paint full-strength color and wash out the
+    // scene instead of fading. Textured particles keep the straight tint: the
+    // uploaded texture is already premultiplied, and the tint multiplies it.
+    const a = inst.alpha;
+    const tintPremultiplied = texture
+      ? inst.r
+      : inst.r * a;
+
     this._batch.add({
       x: inst.x + cosR * ox - sinR * oy,
       y: inst.y + sinR * ox + cosR * oy,
@@ -481,8 +492,10 @@ export class WebGLRenderer extends Renderer {
       width: w,
       height: h,
       u0, v0, u1, v1,
-      r: inst.r, g: inst.g, b: inst.b,
-      a: inst.alpha,
+      r: tintPremultiplied,
+      g: texture ? inst.g : inst.g * a,
+      b: texture ? inst.b : inst.b * a,
+      a,
       depth,
       shape: 0,
     });
@@ -599,6 +612,7 @@ export class WebGLRenderer extends Renderer {
     gl.viewport(0, 0, this.canvas ? this.canvas.width : width, this.canvas ? this.canvas.height : height);
     this._immediateBg.resize(width, height);
     this._immediateFg.resize(width, height);
+    this._applyImmediateSmoothing();
   }
 
   destroy() {
@@ -623,6 +637,20 @@ export class WebGLRenderer extends Renderer {
 
   get immediateBackgroundContext() {
     return this._immediateBg.drawingContext;
+  }
+
+  // The two immediate 2D layers are handed to scene code (render /
+  // renderUI) and later composited as textures. Their 2D contexts default to
+  // imageSmoothingEnabled = true, which would blur nearest-neighbour drawing
+  // (bitmap fonts scaled up, pixel art) on GPU renderers. Match the game's
+  // imageSmoothing option on both layers. Re-applied after resize, since
+  // resizing a canvas resets its 2D context state.
+  _applyImmediateSmoothing() {
+    if (this._options.imageSmoothing === undefined) return;
+    const bg = this._immediateBg.drawingContext;
+    const fg = this._immediateFg.drawingContext;
+    if (bg) bg.imageSmoothingEnabled = this._options.imageSmoothing;
+    if (fg) fg.imageSmoothingEnabled = this._options.imageSmoothing;
   }
 
   get gl() {
