@@ -2,6 +2,11 @@ import { describe, it } from "node:test";
 import * as assert from "node:assert";
 import { WebGpuRenderer } from "../../../renderer/WebGpuRenderer.js";
 import { Renderer } from "../../../renderer/index.js";
+import {
+  SPRITE_FRAGMENT_WGSL,
+  COMPOSITE_VERTEX_WGSL,
+  COMPOSITE_FRAGMENT_WGSL,
+} from "../../../renderer/wgpu/index.js";
 import { World } from "../../../ecs/core/World.js";
 import { RenderQueue } from "../../../ecs/render/RenderQueue.js";
 import { RenderConfig } from "../../../view/RenderConfig.js";
@@ -286,6 +291,55 @@ describe("WebGpuRenderer", () => {
       if (previous === undefined) delete globalThis.document;
       else globalThis.document = previous;
     }
+  });
+
+  it("composite destination texture has the usages copyExternalImageToTexture requires", async () => {
+    const previous = globalThis.document;
+    globalThis.document = {
+      createElement: () => ({
+        width: 0,
+        height: 0,
+        getContext: (kind) => (kind === "2d" ? { clearRect() {}, fillRect() {} } : null),
+      }),
+    };
+    try {
+      const mock = makeMockGPU();
+      const renderer = await makeRenderer(mock);
+      renderer.immediateContext.fillRect(0, 0, 1, 1);
+      renderer.endFrame();
+      const tex = mock.log.createTexture.find((t) => t.format === "rgba8unorm");
+      assert.ok(tex, "composite texture created");
+      assert.ok((tex.usage & GPUTextureUsage.COPY_DST) !== 0, "has COPY_DST");
+      assert.ok((tex.usage & GPUTextureUsage.RENDER_ATTACHMENT) !== 0, "has RENDER_ATTACHMENT");
+      renderer.destroy();
+    } finally {
+      if (previous === undefined) delete globalThis.document;
+      else globalThis.document = previous;
+    }
+  });
+
+  it("uploaded sprite textures carry COPY_DST and RENDER_ATTACHMENT for copyExternalImageToTexture", async () => {
+    const mock = makeMockGPU();
+    const renderer = await makeRenderer(mock);
+    renderer._textures.get({ width: 8, height: 8 });
+    const tex = mock.log.createTexture.find((t) => t.width === 8 && t.height === 8);
+    assert.ok(tex, "sprite texture created");
+    assert.ok((tex.usage & GPUTextureUsage.COPY_DST) !== 0, "has COPY_DST");
+    assert.ok((tex.usage & GPUTextureUsage.RENDER_ATTACHMENT) !== 0, "has RENDER_ATTACHMENT");
+    assert.ok(mock.log.copyExternalImageToTexture.length >= 1, "used copyExternalImageToTexture");
+    renderer.destroy();
+  });
+
+  it("sprite fragment shader uses select() instead of the invalid WGSL ternary", () => {
+    assert.ok(!SPRITE_FRAGMENT_WGSL.includes(" ? "), "no ternary operator in WGSL");
+    assert.ok(SPRITE_FRAGMENT_WGSL.includes("select("), "uses select()");
+  });
+
+  it("composite fragment shader declares the sampler and texture it samples", () => {
+    assert.ok(COMPOSITE_FRAGMENT_WGSL.includes("var texSampler: sampler"), "sampler declared");
+    assert.ok(COMPOSITE_FRAGMENT_WGSL.includes("var tex: texture_2d"), "texture declared");
+    assert.ok(!COMPOSITE_VERTEX_WGSL.includes("texSampler"), "vertex shader does not declare them");
+    assert.ok(COMPOSITE_FRAGMENT_WGSL.includes("textureSample(tex, texSampler, input.uv)"));
   });
 
   it("endFrame skips compositing when the foreground overlay is clean", async () => {

@@ -75,7 +75,8 @@ struct FragmentInput {
 @fragment
 fn fs_main(input: FragmentInput) -> @location(0) vec4<f32> {
   if (input.shape > 0.5) {
-    let p = (input.scale.x != 0.0 && input.scale.y != 0.0) ? input.local / input.scale : vec2(0.0, 0.0);
+    // WGSL has no ternary ?: operator; use select().
+    let p = select(vec2(0.0, 0.0), input.local / input.scale, input.scale.x != 0.0 && input.scale.y != 0.0);
     if (length(p) > input.radius) { discard; }
   }
   var color = textureSample(tex, texSampler, input.uv) * input.color;
@@ -118,9 +119,6 @@ fn fs_main(input: FragmentInput) -> @location(0) vec4<f32> {
 `;
 
 export const COMPOSITE_VERTEX_WGSL = /* wgsl */ `
-@group(0) @binding(0) var texSampler: sampler;
-@group(0) @binding(1) var tex: texture_2d<f32>;
-
 const POS = array<vec2<f32>, 4>(
   vec2(-1.0, -1.0), vec2(1.0, -1.0), vec2(-1.0, 1.0), vec2(1.0, 1.0),
 );
@@ -143,6 +141,9 @@ fn vs_main(@builtin(vertex_index) vi: u32) -> VertexOutput {
 `;
 
 export const COMPOSITE_FRAGMENT_WGSL = /* wgsl */ `
+@group(0) @binding(0) var texSampler: sampler;
+@group(0) @binding(1) var tex: texture_2d<f32>;
+
 struct FragmentInput {
   @location(0) uv: vec2<f32>,
 };

@@ -452,7 +452,9 @@ export class WebGpuRenderer extends Renderer {
       tex = device.createTexture({
         size: { width: source.width, height: source.height, depthOrArrayLayers: 1 },
         format: "rgba8unorm",
-        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+        // copyExternalImageToTexture validates the destination for both
+        // COPY_DST and RENDER_ATTACHMENT usage.
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT,
       });
       this._compositeTexture = tex;
     }
