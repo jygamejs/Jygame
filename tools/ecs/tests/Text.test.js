@@ -152,11 +152,41 @@ describe("Text facade", () => {
     assert.throws(() => new Text(0, 0, "Nope", "hi"), /not found/);
   });
 
-  it("rejects native fonts for world-space text", async () => {
+  it("rejects native fonts for world-space text with a capability error", async () => {
     const native = await Font.load("NativeFace", "/fonts/n.ttf");
     Text._defaultWorld = null;
-    assert.throws(() => new Text(0, 0, native, "hi"), /native/);
-    assert.throws(() => new Text(0, 0, "NativeFace", "hi"), /native/);
+    assert.throws(() => new Text(0, 0, native, "hi"), /does not support render mode "glyph"/);
+    assert.throws(() => new Text(0, 0, "NativeFace", "hi"), /does not support render mode "glyph"/);
+    assert.throws(
+      () => new Text(0, 0, native, "hi", { renderMode: TextRenderMode.RASTERIZED }),
+      /does not support render mode "raster"/,
+    );
+    assert.throws(
+      () => new Text(0, 0, "NativeFace", "hi", { renderMode: TextRenderMode.RASTER }),
+      /does not support render mode "raster"/,
+    );
+  });
+
+  it("rejects native fonts on runtime font and renderMode changes", async () => {
+    Text._defaultWorld = null;
+    const t = new Text(0, 0, font, "hi");
+
+    // bitmap/glyph → bitmap/raster → bitmap/glyph: supported
+    t.renderMode = TextRenderMode.RASTERIZED;
+    assert.strictEqual(t.renderMode, TextRenderMode.RASTERIZED);
+    t.renderMode = TextRenderMode.GLYPH;
+    assert.strictEqual(t.renderMode, TextRenderMode.GLYPH);
+
+    // bitmap/glyph → native/glyph: throws
+    const native = await Font.load("SwitchFace", "/fonts/s.ttf");
+    assert.throws(() => { t.font = native; }, /does not support render mode "glyph"/);
+    assert.strictEqual(t.font, font, "font unchanged after rejected swap");
+
+    // bitmap/raster → native/raster: throws
+    t.renderMode = TextRenderMode.RASTERIZED;
+    assert.throws(() => { t.font = native; }, /does not support render mode "raster"/);
+    assert.strictEqual(t.font, font, "font unchanged after rejected swap");
+    assert.strictEqual(t.renderMode, TextRenderMode.RASTERIZED, "mode unchanged after rejected swap");
   });
 
   it("mutations update components, Renderable, and the pool, bumping version", () => {
@@ -321,6 +351,20 @@ describe("Text renderMode", () => {
     Text._defaultWorld = null;
     const t = new Text(0, 0, font, "hi", { renderMode: TextRenderMode.GLYPH });
     assert.strictEqual(t.renderMode, TextRenderMode.GLYPH);
+    const t2 = new Text(0, 0, font, "hi", { renderMode: TextRenderMode.RASTERIZED });
+    assert.strictEqual(t2.renderMode, TextRenderMode.RASTERIZED);
+    const t3 = new Text(0, 0, font, "hi", { renderMode: TextRenderMode.RASTER });
+    assert.strictEqual(t3.renderMode, TextRenderMode.RASTERIZED);
+    const t4 = new Text(0, 0, font, "hi", { renderMode: "raster" });
+    assert.strictEqual(t4.renderMode, TextRenderMode.RASTERIZED);
+  });
+
+  it("RASTER aliases RASTERIZED", () => {
+    Text._defaultWorld = null;
+    const t = new Text(0, 0, font, "hi");
+    t.renderMode = TextRenderMode.RASTER;
+    assert.strictEqual(t.renderMode, TextRenderMode.RASTERIZED);
+    assert.strictEqual(TextRenderMode.RASTER, TextRenderMode.RASTERIZED);
   });
 
   it("changing renderMode does not bump version or surfaceVersion", () => {

@@ -437,6 +437,27 @@ Query: `{ all: [Transform, Renderable, Text, Visible] }`. On relayout (only when
 and pushes one `RenderQueue` command per glyph. Steady state is allocation-free:
 it reads the cached layout and pushes pooled commands.
 
+### Font render-mode capabilities
+
+Retained-`Text` rendering is gated by an explicit capability contract between
+`Text` and the font — never by switching on the concrete font class. Every font
+type extends `FontBase`, which exposes `font.capabilities` (`{ glyph, raster }`)
+and `font.supportsRenderMode(mode)`.
+
+```text
+BitmapFont: capabilities = { glyph: true,  raster: true }
+NativeFont: capabilities = { glyph: false, raster: false }
+```
+
+`Text` validates the requested render mode (default `TextRenderMode.GLYPH`)
+against the font at construction, on every `font`/`renderMode` change, and in
+`TextSystem` before any renderer runs. An unsupported combination throws
+`Text: font "<name>" does not support render mode "<mode>".` — it is never
+silently rerouted to another mode, and a renderer only ever receives a `Text`
+whose font declares support for that renderer's mode. Immediate
+`Font.render(ctx, ...)` is unaffected. Adding native raster support later is a
+flag change on `NativeFont`, not a redesign of `Text`.
+
 ### Font registry numeric ids
 
 `Font.load()` assigns each font a monotonic, never-reused numeric `id`

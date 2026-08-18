@@ -624,6 +624,30 @@ describe("TextSystem", () => {
     assert.strictEqual(layout.glyphs[0].region.sourceImage, atlas, "layout stored the atlas records");
   });
 
+  it("throws when a font does not support the entity's render mode", async () => {
+    const native = await Font.load("NativeSystemFace", "/fonts/ns.ttf");
+    const world = makeWorld();
+    const pool = world.getResource(TextResourcePool);
+    const handle = pool.allocate("AB");
+    addTextEntity(world, {
+      x: 0, y: 0,
+      fontId: native.id,
+      handle,
+      renderMode: TextRenderMode.GLYPH,
+    });
+    assert.throws(() => world.update(16), /does not support render mode "glyph"/);
+
+    const world2 = makeWorld();
+    const handle2 = world2.getResource(TextResourcePool).allocate("AB");
+    addTextEntity(world2, {
+      x: 0, y: 0,
+      fontId: native.id,
+      handle: handle2,
+      renderMode: TextRenderMode.RASTERIZED,
+    });
+    assert.throws(() => world2.update(16), /does not support render mode "raster"/);
+  });
+
   it("throws when RenderQueue is missing", () => {
     const world = new World();
     world.register(Transform);

@@ -153,6 +153,109 @@ describe("Font.load (native)", () => {
   });
 });
 
+describe("Font capabilities", () => {
+  const origLoad = ImageLoader.load;
+  const origFLoad = FontLoader.load;
+
+  before(() => {
+    ImageLoader.load = async () => separatorImage();
+    FontLoader.load = async () => {};
+  });
+
+  after(() => {
+    ImageLoader.load = origLoad;
+    FontLoader.load = origFLoad;
+    Font.clear();
+  });
+
+  it("bitmap fonts declare glyph + raster support", async () => {
+    const font = await Font.load("CapBitmap", {
+      image: "sep.png",
+      characters: "AB",
+      separator: "#FF00FF",
+    });
+    assert.deepStrictEqual(font.capabilities, { glyph: true, raster: true });
+    assert.strictEqual(font.supportsRenderMode(0), true, "GLYPH");
+    assert.strictEqual(font.supportsRenderMode(1), true, "RASTERIZED");
+    assert.strictEqual(font.supportsRenderMode("glyph"), true);
+    assert.strictEqual(font.supportsRenderMode("raster"), true);
+    assert.strictEqual(font.supportsRenderMode(2), false, "unknown mode");
+    assert.strictEqual(font.supportsRenderMode("wave"), false);
+  });
+
+  it("native fonts declare no retained render mode support", async () => {
+    const font = await Font.load("CapNative", "/fonts/cap.ttf");
+    assert.deepStrictEqual(font.capabilities, { glyph: false, raster: false });
+    assert.strictEqual(font.supportsRenderMode(0), false, "GLYPH unsupported");
+    assert.strictEqual(font.supportsRenderMode(1), false, "RASTERIZED unsupported");
+    assert.strictEqual(font.supportsRenderMode("glyph"), false);
+    assert.strictEqual(font.supportsRenderMode("raster"), false);
+  });
+});
+
+describe("NativeFont immediate rendering", () => {
+  const origFLoad = FontLoader.load;
+
+  before(() => {
+    FontLoader.load = async (name) => { calls.push(["load", name]); };
+  });
+
+  after(() => {
+    FontLoader.load = origFLoad;
+    Font.clear();
+  });
+
+  const calls = [];
+
+  function mockCtx() {
+    const calls2 = [];
+    return {
+      calls: calls2,
+      _font: null,
+      _align: null,
+      _baseline: null,
+      _style: null,
+      set font(v) { this._font = v; calls2.push(["font", v]); },
+      get font() { return this._font; },
+      set textAlign(v) { this._align = v; calls2.push(["align", v]); },
+      get textAlign() { return this._align; },
+      set textBaseline(v) { this._baseline = v; calls2.push(["baseline", v]); },
+      get textBaseline() { return this._baseline; },
+      set fillStyle(v) { this._style = v; calls2.push(["fillStyle", v]); },
+      get fillStyle() { return this._style; },
+      fillText(text, x, y) { calls2.push(["fillText", text, x, y]); },
+      measureText(text) { return { width: text.length * 7 }; },
+    };
+  }
+
+  it("renders immediate canvas text with ctx.font/fillText", async () => {
+    const font = await Font.load("ImmediateFace", "/fonts/im.ttf");
+    const ctx = mockCtx();
+    font.render(ctx, "Hello", 10, 40, { color: "#ffffff", size: 24 });
+    assert.deepStrictEqual(ctx._font, "24px ImmediateFace");
+    assert.strictEqual(ctx._align, "left");
+    assert.strictEqual(ctx._baseline, "top");
+    assert.strictEqual(ctx._style, "#ffffff");
+    assert.deepStrictEqual(ctx.calls.filter((c) => c[0] === "fillText")[0], ["fillText", "Hello", 10, 40]);
+  });
+
+  it("honors align and scale for immediate rendering", async () => {
+    const font = await Font.load("ImmediateAlign", "/fonts/ia.ttf");
+    const ctx = mockCtx();
+    font.render(ctx, "Hi", 50, 60, { color: "#ff0000", align: "center", size: 12, scale: 2 });
+    assert.deepStrictEqual(ctx._font, "24px ImmediateAlign", "size * scale = px");
+    assert.strictEqual(ctx._align, "center");
+  });
+
+  it("measures native text", async () => {
+    const font = await Font.load("ImmediateMeasure", "/fonts/im2.ttf");
+    const ctx = mockCtx();
+    const m = font.measure("ABC", { size: 10 }, ctx);
+    assert.strictEqual(m.width, 21, "7px per glyph at 10px font");
+    assert.strictEqual(m.height, 10);
+  });
+});
+
 describe("Font.load (bitmap validation)", () => {
   const origLoad = ImageLoader.load;
   const origFLoad = FontLoader.load;

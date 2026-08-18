@@ -5,7 +5,7 @@ import { Text } from "../components/Text.js";
 import { Visible } from "../components/Visible.js";
 import { RenderQueue } from "../render/RenderQueue.js";
 import { TextResourcePool } from "../render/TextResourcePool.js";
-import { TextRenderMode } from "../render/TextRenderMode.js";
+import { TextRenderMode, renderModeName } from "../render/TextRenderMode.js";
 import { layoutText } from "../render/TextLayout.js";
 import { rasterizeText } from "../render/TextRasterizer.js";
 import { GlyphBuffer } from "../render/GlyphBuffer.js";
@@ -125,11 +125,22 @@ export class TextSystem extends System {
         const handle = contentHandle[r];
         if (handle === 0) continue;
 
+        // Capability contract: the font must declare support for the entity's
+        // render mode. This is checked every frame (not only at relayout) so a
+        // raw ECS font/mode mutation can never slip an unsupported combination
+        // past the boundary into a renderer — it fails clearly instead.
+        const font = fontHandle[r] ? Font.byId(fontHandle[r]) : null;
+        if (!font) continue;
+        if (typeof font.supportsRenderMode !== "function" || !font.supportsRenderMode(renderMode[r])) {
+          throw new Error(
+            `Text: font "${font.name}" does not support render mode "${renderModeName(renderMode[r])}".`
+          );
+        }
+        if (typeof font.getGlyph !== "function") continue;
+
         let layout = pool.layout(handle);
         let relayouted = false;
         if (layout === null || version[r] !== pool.layoutVersion(handle)) {
-          const font = fontHandle[r] ? Font.byId(fontHandle[r]) : null;
-          if (!font || typeof font.getGlyph !== "function") continue;
           const content = pool.get(handle);
           if (typeof content !== "string") continue;
           layout = pool.layoutTarget(handle);

@@ -618,9 +618,39 @@ in v1.
   ```
 - Immediate rendering via `Font.render(ctx, ...)` remains the native-font path
   for v1 — correct for UI/debug text on all backends.
-- The `Text` component/system contract does not preclude the future native path:
-  it would rasterize a whole string per (content+style) and push one quad through
-  the same region seam. No new component, no new facade.
+
+### 11.1 Render-mode capabilities
+
+The retained-Text boundary is an explicit capability contract, not a
+concrete-class check. Both font types extend the shared `FontBase` abstraction,
+which exposes `font.capabilities` (`{ glyph, raster }`) and
+`font.supportsRenderMode(mode)`; `Text` validates the requested render mode
+against the font at construction, on any `font`/`renderMode` change, and again
+in `TextSystem` every frame before any renderer runs.
+
+```text
+BitmapFont: capabilities = { glyph: true,  raster: true }
+NativeFont: capabilities = { glyph: false, raster: false }
+```
+
+`TextRenderMode.GLYPH` and `TextRenderMode.RASTERIZED` are both accepted for
+bitmap fonts. Native fonts report neither retained mode, so any `Text` that
+targets them throws:
+
+```text
+Text: font "Pixel" does not support render mode "glyph".
+```
+
+The mode is honored or rejected — never silently rerouted (no `glyph → raster`
+or `raster → glyph` fallback). Unsupported combinations fail at the API boundary
+and again in `TextSystem`, so a renderer only ever receives a `Text` whose font
+declares support for that renderer's mode.
+
+The `Text` component/system contract does not preclude the future native path:
+once native rasterization exists, `NativeFont.capabilities.raster` flips to
+`true` and the existing pipeline (whole-string raster → one quad through the
+same region seam) applies — no new component, no new facade, no public `Text`
+API change. The same applies to a future native glyph representation.
 
 ---
 

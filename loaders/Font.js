@@ -116,20 +116,111 @@ function _sliceRegion(source, sx, sy, sw, sh) {
   return c;
 }
 
-export class NativeFont {
+let _sharedCtx = null;
+function _measureCtx() {
+  if (typeof document !== "undefined" && typeof document.createElement === "function") {
+    if (!_sharedCtx) {
+      const c = document.createElement("canvas");
+      _sharedCtx = c.getContext ? c.getContext("2d") : null;
+    }
+  }
+  return _sharedCtx || null;
+}
+
+// Render-mode keys map TextRenderMode values (0 = GLYPH, 1 = RASTERIZED) and
+// their string forms onto capability keys. A capability object uses the keys
+// "glyph" and "raster" so it reads as a plain, documented contract.
+const _MODE_KEY = {
+  0: "glyph",
+  1: "raster",
+  glyph: "glyph",
+  raster: "raster",
+};
+
+// FontBase — the shared font abstraction. Every font type declares which
+// retained `Text` render modes it supports; `Text` selects its renderer by
+// asking the font, never by switching on the concrete font class. This keeps
+// the capability contract part of the abstraction so future font types (or
+// future capabilities on existing ones) change only a flag here.
+export class FontBase {
+  constructor() {
+    // Each subclass sets `this._capabilities` to an object with boolean keys:
+    //   { glyph: <bool>, raster: <bool> }
+    this._capabilities = { glyph: false, raster: false };
+  }
+
+  get capabilities() {
+    return this._capabilities;
+  }
+
+  supportsRenderMode(mode) {
+    const key = _MODE_KEY[mode];
+    if (!key) return false;
+    return !!(this._capabilities && this._capabilities[key]);
+  }
+}
+
+// NativeFont — a web font (loaded via FontFace). It supports immediate-mode
+// `font.render(ctx, ...)` canvas text only; retained `Text` rendering is not
+// implemented yet, so both retained render modes report unsupported.
+export class NativeFont extends FontBase {
   constructor(name) {
+    super();
     this.name = name;
     this.kind = "native";
     this.id = _nextId++;
+    this._capabilities = { glyph: false, raster: false };
   }
 
   get family() {
     return this.name;
   }
+
+  _pxSize(options) {
+    const base = options.size != null ? options.size : 16;
+    const scale = options.scale != null ? options.scale : 1;
+    return base * scale;
+  }
+
+  _textAlign(align) {
+    if (align === "center") return "center";
+    if (align === "right") return "right";
+    return "left";
+  }
+
+  // Immediate-mode measure. Matches BitmapFont.measure's shape:
+  //   { width, height }
+  // `options` accepts `{ size, scale }` (final pixel size = size * scale);
+  // an explicit 2D context may be passed to avoid allocating a hidden canvas.
+  measure(text, options = {}, ctx) {
+    const px = this._pxSize(options);
+    const c = ctx || _measureCtx();
+    let width = 0;
+    if (c && typeof c.measureText === "function") {
+      c.font = `${px}px ${this.family}`;
+      width = c.measureText(String(text)).width || 0;
+    }
+    return { width, height: px };
+  }
+
+  // Immediate-mode render: draws native canvas text (ctx.font/fillText). This
+  // is the NativeFont immediate path and does not touch retained-Text
+  // infrastructure. `options` accepts `{ size, scale, color, align, baseline }`.
+  render(ctx, text, x, y, options = {}) {
+    const px = this._pxSize(options);
+    const color = options.color != null ? options.color : "#000000";
+    const align = options.align != null ? options.align : "left";
+    ctx.font = `${px}px ${this.family}`;
+    ctx.textAlign = this._textAlign(align);
+    ctx.textBaseline = options.baseline != null ? options.baseline : "top";
+    ctx.fillStyle = color;
+    ctx.fillText(String(text), x, y);
+  }
 }
 
-export class BitmapFont {
+export class BitmapFont extends FontBase {
   constructor(name, config, image) {
+    super();
     this.name = name;
     this.kind = "bitmap";
     this._config = config;
@@ -144,6 +235,7 @@ export class BitmapFont {
       ? (Array.isArray(config.colors) ? config.colors : [config.colors]).map(_parseColor)
       : null;
     this.id = _nextId++;
+    this._capabilities = { glyph: true, raster: true };
   }
 
   _slice() {

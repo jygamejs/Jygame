@@ -605,8 +605,9 @@ to `CollisionSystem`. Optional `SpatialHash` acceleration.
 
 World-space text goes through the ECS (`TextSystem` → `RenderQueue`), so it
 follows the camera, respects `layer`/`depth` ordering, and renders identically
-on Canvas, WebGL, and WebGPU. Bitmap fonts only — native fonts use
-`Font.render(ctx, ...)` (see below).
+on Canvas, WebGL, and WebGPU. Retained `Text` rendering is gated by the font's
+declared capabilities: a requested render mode that the font does not support
+throws a clear error instead of silently falling back.
 
 ```js
 const ink = await Font.load("Ink", { image: "ink.png", gridX: 16, gridY: 16 });
@@ -628,6 +629,42 @@ instance. The facade is a thin wrapper over `Transform` + `Renderable` +
 correct for UI/debug overlays in `renderUI()`/`render()`. `Text` is the
 world-space, camera-following consumer; native fonts (`Font.load("Native",
 { family: ... })`) are immediate-only in v1.
+
+### Font render-mode capabilities
+
+Every font type declares which retained `Text` render modes it supports, and
+`Text` asks the font (never switching on the concrete font class). The contract
+is intentional: unsupported combinations fail loudly, they are never silently
+rerouted to another mode.
+
+```text
+Bitmap font:
+  glyph rendering: supported          (TextRenderMode.GLYPH)
+  raster rendering: supported         (TextRenderMode.RASTERIZED)
+
+Native font:
+  glyph rendering: not currently supported
+  raster rendering: not currently supported
+```
+
+Native fonts can still be used through the immediate `Font.render(ctx, ...)`
+API — see below.
+
+```js
+const pixel = await Font.load("Pixel", "assets/fonts/pixel.ttf");
+pixel.render(ctx, "SCORE 0", 10, 40, { color: "#ffffff" }); // immediate canvas text
+
+// Retained Text is rejected until NativeFont gains a raster/glyph capability:
+const label = new Text(350, 100, "Pixel", "SCORE 0", {
+  renderMode: TextRenderMode.GLYPH,
+}); // throws: font "Pixel" does not support render mode "glyph"
+```
+
+Requesting an unsupported mode throws `Text: font "<name>" does not support
+render mode "<mode>".` — both at construction and on any later `font`/`renderMode`
+change. The capability flags (`font.capabilities`) are part of the font
+abstraction, so future native raster support is a flag change, not a redesign of
+`Text`.
 
 ### Input Actions
 

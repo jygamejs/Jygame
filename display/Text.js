@@ -4,7 +4,7 @@ import { Renderable } from "../ecs/components/Renderable.js";
 import { Visible } from "../ecs/components/Visible.js";
 import { Text as TextComponent } from "../ecs/components/Text.js";
 import { TextResourcePool } from "../ecs/render/TextResourcePool.js";
-import { TextRenderMode } from "../ecs/render/TextRenderMode.js";
+import { TextRenderMode, renderModeName } from "../ecs/render/TextRenderMode.js";
 import { Font } from "../loaders/Font.js";
 import { Layer } from "../view/Layer.js";
 
@@ -46,10 +46,17 @@ export class Text {
     } else if (font == null || typeof font !== "object" || typeof font.id !== "number") {
       throw new TypeError("Text: font must be a registered font name or a Font instance.");
     }
-    if (font.kind !== "bitmap") {
+    return font;
+  }
+
+  // The explicit contract between Text and its font: the requested render mode
+  // must be one the font declares support for. Unsupported combinations throw
+  // here — never a silent fallback to another mode.
+  static _validateMode(font, mode) {
+    if (!font || typeof font.supportsRenderMode !== "function" || !font.supportsRenderMode(mode)) {
+      const name = font && font.name != null ? font.name : "unknown";
       throw new Error(
-        "Text: native fonts are not supported for world-space text yet. " +
-        "Use Font.render(ctx, ...) in renderUI()/render() for native font drawing."
+        `Text: font "${name}" does not support render mode "${renderModeName(mode)}".`
       );
     }
     return font;
@@ -108,6 +115,15 @@ export class Text {
     }
 
     const fontObj = Text._resolveFont(font);
+    // Validate the font + requested render mode before any entity is created so
+    // an unsupported combination cannot leak a half-built Text into the world.
+    // The ECS `u8` field defaults to TextRenderMode.GLYPH (value 0) when no
+    // renderMode option is given.
+    const initialMode = options && options.renderMode != null
+      ? Text._normalizeRenderMode(options.renderMode)
+      : TextRenderMode.GLYPH;
+    Text._validateMode(fontObj, initialMode);
+
     const eid = wld.createEntity();
     this.#entity = eid;
 
@@ -119,9 +135,7 @@ export class Text {
     wld.set(eid, Visible, { value: 1 });
 
     const contentHandle = pool.allocate(content);
-    // renderMode is intentionally not set here: its ECS `u8` field zero-fills
-    // to `TextRenderMode.GLYPH` (value 0), so glyph mode is the default.
-    wld.set(eid, TextComponent, { fontHandle: fontObj.id, contentHandle, align: 0, letterSpacing: 0, version: 1, colorEnabled: 0, surfaceVersion: 1 });
+    wld.set(eid, TextComponent, { fontHandle: fontObj.id, contentHandle, align: 0, letterSpacing: 0, version: 1, colorEnabled: 0, surfaceVersion: 1, renderMode: initialMode });
 
     if (options) {
       if (options.color != null) this.color = options.color;
@@ -131,7 +145,6 @@ export class Text {
       if (options.depth != null) this.depth = options.depth;
       if (options.scale != null) this.scale = options.scale;
       if (options.visible != null) this.visible = options.visible;
-      if (options.renderMode != null) this.renderMode = options.renderMode;
     }
   }
 
@@ -213,7 +226,11 @@ export class Text {
   set font(v) {
     this._assertAlive();
     const resolved = Text._resolveFont(v);
-    this._getText().fontHandle = resolved.id;
+    const t = this._getText();
+    // A font swap must keep the current render mode valid — an unsupported
+    // combination throws here rather than failing later inside a renderer.
+    Text._validateMode(resolved, t.renderMode);
+    t.fontHandle = resolved.id;
     this._bumpLayout();
   }
 
@@ -278,7 +295,7 @@ export class Text {
   // The rendering representation: `TextRenderMode.GLYPH` (default) or
   // `TextRenderMode.RASTERIZED`. Changing the mode only selects how the shared
   // layout is represented — it never rebuilds the layout, the content, or the
-  // rasterized surface.
+  // rasterized surface. The font must declare support for the requested mode.
   get renderMode() {
     this._assertAlive();
     return this._getText().renderMode;
@@ -286,7 +303,10 @@ export class Text {
 
   set renderMode(v) {
     this._assertAlive();
-    this._getText().renderMode = Text._normalizeRenderMode(v);
+    const mode = Text._normalizeRenderMode(v);
+    const font = this.font;
+    if (font) Text._validateMode(font, mode);
+    this._getText().renderMode = mode;
   }
 
   get layer() {

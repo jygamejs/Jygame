@@ -18,4 +18,13 @@
 export const TextRenderMode = {
   GLYPH: 0,
   RASTERIZED: 1,
+  // Alias for the rasterized representation. RASTERIZED is the canonical name;
+  // RASTER exists so capability checks and docs can speak in glyph/raster terms.
+  RASTER: 1,
 };
+
+// The display name of a render mode, used in capability errors. Mirrors the
+// font capability keys ("glyph" / "raster").
+export function renderModeName(mode) {
+  return mode === TextRenderMode.RASTERIZED ? "raster" : "glyph";
+}
