@@ -120,8 +120,9 @@ export class TextResourcePool {
 
   // Returns the reusable layout structure for this slot, creating it on first
   // use. `layoutText` (see TextLayout.js) refills it in place from the font's
-  // glyph records on relayout; `setLayout` then stores the result and mirrors
-  // the measured bounds. The pool itself performs no glyph work.
+  // glyph records, or `layoutNativeText` from Canvas2D text metrics, on
+  // relayout; `setLayout` then stores the result and mirrors the measured
+  // bounds. The pool itself performs no glyph or measurement work.
   layoutTarget(handle) {
     const slot = this._slotOf(handle);
     if (slot < 0) return null;
@@ -141,15 +142,15 @@ export class TextResourcePool {
   }
 
   // Stores a filled layout for this slot and mirrors its measured bounds. The
-  // layout is produced by `layoutText` from the font's glyph records; the pool
-  // does not interpret it.
+  // layout is produced by `layoutText`/`layoutNativeText`; the pool does not
+  // interpret it.
   setLayout(handle, layout) {
     const slot = this._slotOf(handle);
     if (slot < 0) return false;
     if (layout == null || typeof layout.count !== "number") {
       throw new TypeError(
         "TextResourcePool.setLayout failed: layout must be a filled layout structure " +
-        "(produced by TextLayout.layoutText)."
+        "(produced by TextLayout.layoutText or TextLayout.layoutNativeText)."
       );
     }
     this._layout[slot] = layout;

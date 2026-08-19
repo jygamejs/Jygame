@@ -152,22 +152,21 @@ describe("Text facade", () => {
     assert.throws(() => new Text(0, 0, "Nope", "hi"), /not found/);
   });
 
-  it("rejects native fonts for world-space text with a capability error", async () => {
+  it("accepts native fonts in raster mode and rejects glyph mode", async () => {
     const native = await Font.load("NativeFace", "/fonts/n.ttf");
     Text._defaultWorld = null;
+    // Default mode is GLYPH — a bare native Text still fails, as designed.
     assert.throws(() => new Text(0, 0, native, "hi"), /does not support render mode "glyph"/);
     assert.throws(() => new Text(0, 0, "NativeFace", "hi"), /does not support render mode "glyph"/);
-    assert.throws(
-      () => new Text(0, 0, native, "hi", { renderMode: TextRenderMode.RASTERIZED }),
-      /does not support render mode "raster"/,
-    );
-    assert.throws(
-      () => new Text(0, 0, "NativeFace", "hi", { renderMode: TextRenderMode.RASTER }),
-      /does not support render mode "raster"/,
-    );
+    // Explicit raster mode is valid.
+    const t = new Text(0, 0, native, "hi", { renderMode: TextRenderMode.RASTERIZED });
+    assert.strictEqual(t.renderMode, TextRenderMode.RASTERIZED);
+    assert.strictEqual(t.font, native);
+    const t2 = new Text(0, 0, "NativeFace", "hi", { renderMode: TextRenderMode.RASTER });
+    assert.strictEqual(t2.renderMode, TextRenderMode.RASTERIZED);
   });
 
-  it("rejects native fonts on runtime font and renderMode changes", async () => {
+  it("handles runtime font swaps between bitmap and native", async () => {
     Text._defaultWorld = null;
     const t = new Text(0, 0, font, "hi");
 
@@ -177,16 +176,25 @@ describe("Text facade", () => {
     t.renderMode = TextRenderMode.GLYPH;
     assert.strictEqual(t.renderMode, TextRenderMode.GLYPH);
 
-    // bitmap/glyph → native/glyph: throws
+    // bitmap/glyph → native/glyph: throws (mode unchanged after rejected swap)
     const native = await Font.load("SwitchFace", "/fonts/s.ttf");
     assert.throws(() => { t.font = native; }, /does not support render mode "glyph"/);
     assert.strictEqual(t.font, font, "font unchanged after rejected swap");
 
-    // bitmap/raster → native/raster: throws
+    // bitmap/raster → native/raster: supported
     t.renderMode = TextRenderMode.RASTERIZED;
-    assert.throws(() => { t.font = native; }, /does not support render mode "raster"/);
-    assert.strictEqual(t.font, font, "font unchanged after rejected swap");
-    assert.strictEqual(t.renderMode, TextRenderMode.RASTERIZED, "mode unchanged after rejected swap");
+    t.font = native;
+    assert.strictEqual(t.font, native, "native font accepted in raster mode");
+    assert.strictEqual(t.renderMode, TextRenderMode.RASTERIZED, "mode preserved");
+
+    // native/raster → bitmap/raster: supported
+    t.font = font;
+    assert.strictEqual(t.font, font);
+
+    // back on native/raster, GLYPH is rejected (mode unchanged after the throw)
+    t.font = native;
+    assert.throws(() => { t.renderMode = TextRenderMode.GLYPH; }, /does not support render mode "glyph"/);
+    assert.strictEqual(t.renderMode, TextRenderMode.RASTERIZED, "mode unchanged after rejected switch");
   });
 
   it("mutations update components, Renderable, and the pool, bumping version", () => {
@@ -279,6 +287,31 @@ describe("Text facade", () => {
     assert.strictEqual(Text._defaultWorld, scene.world);
     scene.exit();
     assert.strictEqual(Text._defaultWorld, prev);
+  });
+
+  it("fontSize defaults to 16 and can be set via option and property", () => {
+    Text._defaultWorld = null;
+    const t = new Text(0, 0, font, "hi");
+    assert.strictEqual(t.fontSize, 16, "default logical size");
+    assert.strictEqual(t.world.get(t.entity, TextComponent).fontSize, 16);
+
+    const t2 = new Text(0, 0, font, "hi", { fontSize: 24 });
+    assert.strictEqual(t2.fontSize, 24);
+
+    const w = t2.world;
+    const e = t2.entity;
+    const v = w.get(e, TextComponent).version;
+    const sv = w.get(e, TextComponent).surfaceVersion;
+    t2.fontSize = 32;
+    assert.strictEqual(t2.fontSize, 32);
+    assert.strictEqual(w.get(e, TextComponent).version, v + 1, "size change invalidates layout");
+    assert.strictEqual(w.get(e, TextComponent).surfaceVersion, sv + 1, "size change invalidates surface");
+
+    t2.fontSize = 32;
+    assert.strictEqual(w.get(e, TextComponent).version, v + 1, "setting the same size is a no-op");
+
+    assert.throws(() => { t2.fontSize = -1; }, /fontSize/);
+    assert.throws(() => { t2.fontSize = "nope"; }, /fontSize/);
   });
 
   it("exports facade Text and component TextComponent without collision", async () => {

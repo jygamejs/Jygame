@@ -446,7 +446,7 @@ and `font.supportsRenderMode(mode)`.
 
 ```text
 BitmapFont: capabilities = { glyph: true,  raster: true }
-NativeFont: capabilities = { glyph: false, raster: false }
+NativeFont: capabilities = { glyph: false, raster: true }
 ```
 
 `Text` validates the requested render mode (default `TextRenderMode.GLYPH`)
@@ -455,8 +455,16 @@ against the font at construction, on every `font`/`renderMode` change, and in
 `Text: font "<name>" does not support render mode "<mode>".` — it is never
 silently rerouted to another mode, and a renderer only ever receives a `Text`
 whose font declares support for that renderer's mode. Immediate
-`Font.render(ctx, ...)` is unaffected. Adding native raster support later is a
-flag change on `NativeFont`, not a redesign of `Text`.
+`Font.render(ctx, ...)` is unaffected.
+
+`NativeFont + RASTERIZED` produces the same retained representation as a
+rasterized bitmap `Text`: the whole string is measured with Canvas2D text
+metrics (`ctx.measureText` + `actualBoundingBox*`) and rasterized into one
+cached text surface with a single `fillText`, then emitted as one textured
+quad. The layout stage dispatches on whether the font has glyph records
+(`getGlyph`) — glyph layout for bitmap fonts, metric layout for native fonts —
+and both refill the identical layout target, so the renderer never knows which
+font kind produced a surface.
 
 ### Font registry numeric ids
 

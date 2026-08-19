@@ -135,7 +135,7 @@ export class Text {
     wld.set(eid, Visible, { value: 1 });
 
     const contentHandle = pool.allocate(content);
-    wld.set(eid, TextComponent, { fontHandle: fontObj.id, contentHandle, align: 0, letterSpacing: 0, version: 1, colorEnabled: 0, surfaceVersion: 1, renderMode: initialMode });
+    wld.set(eid, TextComponent, { fontHandle: fontObj.id, contentHandle, align: 0, letterSpacing: 0, version: 1, colorEnabled: 0, surfaceVersion: 1, renderMode: initialMode, fontSize: 16 });
 
     if (options) {
       if (options.color != null) this.color = options.color;
@@ -144,6 +144,7 @@ export class Text {
       if (options.layer != null) this.layer = options.layer;
       if (options.depth != null) this.depth = options.depth;
       if (options.scale != null) this.scale = options.scale;
+      if (options.fontSize != null) this.fontSize = options.fontSize;
       if (options.visible != null) this.visible = options.visible;
     }
   }
@@ -289,6 +290,26 @@ export class Text {
   set letterSpacing(v) {
     this._assertAlive();
     this._getText().letterSpacing = v;
+    this._bumpLayout();
+  }
+
+  // The logical font size in pixels that retained native text is rasterized
+  // at (before Transform.scale). Bitmap fonts ignore it — their glyphs are a
+  // fixed pixel size. A change re-measures and re-rasterizes native text.
+  get fontSize() {
+    this._assertAlive();
+    return this._getText().fontSize;
+  }
+
+  set fontSize(v) {
+    this._assertAlive();
+    const n = Number(v);
+    if (!Number.isFinite(n) || n <= 0) {
+      throw new TypeError("Text.fontSize: expected a positive number.");
+    }
+    const t = this._getText();
+    if (t.fontSize === n) return;
+    t.fontSize = n;
     this._bumpLayout();
   }
 

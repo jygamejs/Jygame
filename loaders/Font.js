@@ -161,19 +161,40 @@ export class FontBase {
 }
 
 // NativeFont — a web font (loaded via FontFace). It supports immediate-mode
-// `font.render(ctx, ...)` canvas text only; retained `Text` rendering is not
-// implemented yet, so both retained render modes report unsupported.
+// `font.render(ctx, ...)` canvas text and retained `Text` rendering in raster
+// mode: the whole string is measured with Canvas2D text metrics and rasterized
+// with one `fillText`, then consumed as a cached text surface. Glyph mode
+// (per-character retained rendering) is not implemented, so `glyph` stays
+// unsupported.
 export class NativeFont extends FontBase {
   constructor(name) {
     super();
     this.name = name;
     this.kind = "native";
     this.id = _nextId++;
-    this._capabilities = { glyph: false, raster: false };
+    this._capabilities = { glyph: false, raster: true };
   }
 
   get family() {
     return this.name;
+  }
+
+  // The single source of truth for how NativeFont maps its stored properties to
+  // a Canvas2D font string. Both the immediate path (`render`/`measure`) and the
+  // retained rasterizer build `ctx.font` through this method, so the two paths
+  // can never drift. `options` may carry optional `style` ("italic"…), `weight`
+  // ("bold"…), and `size`/`scale` (via `_pxSize`); the base representation is
+  // `<px>px <family>`.
+  getCanvasFont(px, options = {}) {
+    const style = options.style ? options.style + " " : "";
+    const weight = options.weight ? options.weight + " " : "";
+    return `${style}${weight}${px}px ${this.family}`;
+  }
+
+  // Applies the canvas font state (`ctx.font`) for `px` pixels. Callers set the
+  // remaining draw state (align, baseline, fillStyle) themselves.
+  applyToContext(ctx, px, options = {}) {
+    ctx.font = this.getCanvasFont(px, options);
   }
 
   _pxSize(options) {
@@ -197,7 +218,7 @@ export class NativeFont extends FontBase {
     const c = ctx || _measureCtx();
     let width = 0;
     if (c && typeof c.measureText === "function") {
-      c.font = `${px}px ${this.family}`;
+      this.applyToContext(c, px, options);
       width = c.measureText(String(text)).width || 0;
     }
     return { width, height: px };
@@ -205,12 +226,13 @@ export class NativeFont extends FontBase {
 
   // Immediate-mode render: draws native canvas text (ctx.font/fillText). This
   // is the NativeFont immediate path and does not touch retained-Text
-  // infrastructure. `options` accepts `{ size, scale, color, align, baseline }`.
+  // infrastructure. `options` accepts `{ size, scale, color, align, baseline,
+  // style, weight }`.
   render(ctx, text, x, y, options = {}) {
     const px = this._pxSize(options);
     const color = options.color != null ? options.color : "#000000";
     const align = options.align != null ? options.align : "left";
-    ctx.font = `${px}px ${this.family}`;
+    this.applyToContext(ctx, px, options);
     ctx.textAlign = this._textAlign(align);
     ctx.textBaseline = options.baseline != null ? options.baseline : "top";
     ctx.fillStyle = color;

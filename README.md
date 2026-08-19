@@ -644,18 +644,28 @@ Bitmap font:
 
 Native font:
   glyph rendering: not currently supported
-  raster rendering: not currently supported
+  raster rendering: supported         (TextRenderMode.RASTERIZED)
 ```
 
-Native fonts can still be used through the immediate `Font.render(ctx, ...)`
-API — see below.
+Native fonts work both immediately and through retained `Text` in raster mode.
+`NativeFont + RASTERIZED` measures the whole string with Canvas2D text metrics
+and rasterizes it with one `fillText` into the same cached text surface that
+rasterized bitmap text produces — so a native `Text` is one textured quad, no
+different to any renderer from a rasterized bitmap `Text`. Glyph mode is the
+high-frequency path for per-character text and needs a bitmap font.
 
 ```js
 const pixel = await Font.load("Pixel", "assets/fonts/pixel.ttf");
 pixel.render(ctx, "SCORE 0", 10, 40, { color: "#ffffff" }); // immediate canvas text
 
-// Retained Text is rejected until NativeFont gains a raster/glyph capability:
+// Retained raster Text with a native font — explicit opt-in:
 const label = new Text(350, 100, "Pixel", "SCORE 0", {
+  renderMode: TextRenderMode.RASTERIZED, // native fonts do NOT support glyph mode
+});
+
+// Glyph mode with a native font is rejected (also the default — a bare
+// `new Text(...)` with a native font throws until raster is requested):
+const bad = new Text(350, 100, "Pixel", "SCORE 0", {
   renderMode: TextRenderMode.GLYPH,
 }); // throws: font "Pixel" does not support render mode "glyph"
 ```
@@ -663,7 +673,7 @@ const label = new Text(350, 100, "Pixel", "SCORE 0", {
 Requesting an unsupported mode throws `Text: font "<name>" does not support
 render mode "<mode>".` — both at construction and on any later `font`/`renderMode`
 change. The capability flags (`font.capabilities`) are part of the font
-abstraction, so future native raster support is a flag change, not a redesign of
+abstraction, so the raster/glyph matrix stays a flag change, not a redesign of
 `Text`.
 
 ### Input Actions

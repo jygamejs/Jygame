@@ -8,5 +8,6 @@ export class Text {
     colorEnabled: "u8",
     surfaceVersion: "u32",
     renderMode: "u8",
+    fontSize: "f32",
   };
 }

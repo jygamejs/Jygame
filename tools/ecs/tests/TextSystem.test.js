@@ -96,6 +96,29 @@ if (typeof global.document === "undefined") {
               fillStyle: null,
               globalCompositeOperation: null,
               putImageData(img) { this._put = img; },
+              // Native retained text measures with Canvas2D metrics and draws
+              // with a single fillText. The mock returns deterministic metrics
+              // that scale with the applied font size: advance = 7px/char at a
+              // 16px font, ascent 0.5×px, descent 0.125×px.
+              font: null,
+              textAlign: null,
+              textBaseline: null,
+              measureText(text) {
+                const m = /([\d.]+)px/.exec(this.font || "");
+                const px = m ? parseFloat(m[1]) : 16;
+                const per = (px / 16) * 7;
+                return {
+                  width: text.length * per,
+                  actualBoundingBoxLeft: 0,
+                  actualBoundingBoxRight: text.length * per,
+                  actualBoundingBoxAscent: px * 0.5,
+                  actualBoundingBoxDescent: px * 0.125,
+                };
+              },
+              fillText(text, x, y) {
+                this._fillTextCalls = this._fillTextCalls || [];
+                this._fillTextCalls.push([text, x, y]);
+              },
             };
           }
           return canvas._ctx;
@@ -120,12 +143,12 @@ function makeWorld() {
   return world;
 }
 
-function addTextEntity(world, { x, y, fontId, handle, align = 0, letterSpacing = 0, version = 1, surfaceVersion = 1, fillColor = 0xffffff, colorEnabled = 0, layer = 1, depth = 0, renderMode = TextRenderMode.RASTERIZED }) {
+function addTextEntity(world, { x, y, fontId, handle, align = 0, letterSpacing = 0, version = 1, surfaceVersion = 1, fillColor = 0xffffff, colorEnabled = 0, layer = 1, depth = 0, renderMode = TextRenderMode.RASTERIZED, fontSize = 16 }) {
   const e = world.createEntity();
   world.addMany(e, Transform, Renderable, Text, Visible);
   world.set(e, Transform, { x, y, rotation: 0, scaleX: 1, scaleY: 1, _prevX: x, _prevY: y, _interpValid: 1 });
   world.set(e, Renderable, { fillColor, layer, depth, imageSmoothing: 1 });
-  world.set(e, Text, { fontHandle: fontId, contentHandle: handle, align, letterSpacing, version, colorEnabled, surfaceVersion, renderMode });
+  world.set(e, Text, { fontHandle: fontId, contentHandle: handle, align, letterSpacing, version, colorEnabled, surfaceVersion, renderMode, fontSize });
   world.set(e, Visible, { value: 1 });
   return e;
 }
@@ -645,7 +668,9 @@ describe("TextSystem", () => {
       handle: handle2,
       renderMode: TextRenderMode.RASTERIZED,
     });
-    assert.throws(() => world2.update(16), /does not support render mode "raster"/);
+    world2.update(16);
+    assert.strictEqual(collectCommands(world2.getResource(RenderQueue)).length, 1,
+      "native + RASTERIZED is valid and renders");
   });
 
   it("throws when RenderQueue is missing", () => {
@@ -972,5 +997,281 @@ describe("TextSystem render modes", () => {
     assert.strictEqual(cmds[0].layer, 3);
     assert.strictEqual(cmds[0].depth, 9);
     assert.strictEqual(cmds[0].imageSmoothing, true);
+  });
+});
+
+describe("TextSystem native raster text", () => {
+  const origImgLoad = ImageLoader.load;
+  const origFLoad = FontLoader.load;
+  let native;
+  let bitmap;
+
+  before(async () => {
+    ImageLoader.load = async () => gridImage();
+    FontLoader.load = async () => {};
+    native = await Font.load("NativeRetained", "/fonts/nr.ttf");
+    bitmap = await Font.load("NativeGrid", { image: "grid.png", characters: "AB", gridX: 2, gridY: 1 });
+  });
+
+  after(() => {
+    ImageLoader.load = origImgLoad;
+    FontLoader.load = origFLoad;
+    Font.clear();
+  });
+
+  it("rasterizes a native string into one cached surface and one command", () => {
+    const world = makeWorld();
+    const pool = world.getResource(TextResourcePool);
+    const queue = world.getResource(RenderQueue);
+    const handle = pool.allocate("Hello");
+    addTextEntity(world, { x: 100, y: 50, fontId: native.id, handle, renderMode: TextRenderMode.RASTERIZED });
+    world.update(16);
+
+    const cmds = collectCommands(queue);
+    assert.strictEqual(cmds.length, 1, "one command for the whole string");
+    const surface = surfaceOf(world, handle);
+    assert.ok(surface, "a cached surface was created");
+    assert.strictEqual(cmds[0].sourceImage, surface, "command draws the rasterized surface");
+    assert.strictEqual(cmds[0].x, 100);
+    assert.strictEqual(cmds[0].y, 50);
+    assert.strictEqual(cmds[0].width, 35, "5 chars × 7px advance");
+    assert.strictEqual(cmds[0].height, 10, "ascent 8 + descent 2");
+    assert.deepStrictEqual(surfaceCtx(world, handle)._fillTextCalls, [["Hello", 0, 8]],
+      "one fillText of the whole string at the surface-local baseline origin");
+    assert.strictEqual(surfaceCtx(world, handle).textBaseline, "alphabetic",
+      "alphabetic baseline drives the measured metrics");
+  });
+
+  it("empty native text emits no command and no surface", () => {
+    const world = makeWorld();
+    const pool = world.getResource(TextResourcePool);
+    const queue = world.getResource(RenderQueue);
+    const handle = pool.allocate("");
+    addTextEntity(world, { x: 0, y: 0, fontId: native.id, handle, renderMode: TextRenderMode.RASTERIZED });
+    world.update(16);
+    assert.strictEqual(collectCommands(queue).length, 0);
+    assert.strictEqual(pool.surface(handle), null);
+  });
+
+  it("multi-word text stays one surface — spaces are not separate commands", () => {
+    for (const text of ["Hello World", "SCORE: 100", "HELLO   WORLD"]) {
+      const world = makeWorld();
+      const pool = world.getResource(TextResourcePool);
+      const queue = world.getResource(RenderQueue);
+      const handle = pool.allocate(text);
+      addTextEntity(world, { x: 0, y: 0, fontId: native.id, handle, renderMode: TextRenderMode.RASTERIZED });
+      world.update(16);
+      assert.strictEqual(collectCommands(queue).length, 1, `${JSON.stringify(text)} → one command`);
+      assert.strictEqual(surfaceOf(world, handle).width, text.length * 7, "advance spans the whole string");
+      assert.deepStrictEqual(surfaceCtx(world, handle)._fillTextCalls, [[text, 0, 8]],
+        "one fillText of the whole string");
+    }
+  });
+
+  it("reuses the cached surface across frames — no fillText every frame", () => {
+    const world = makeWorld();
+    const pool = world.getResource(TextResourcePool);
+    const queue = world.getResource(RenderQueue);
+    const handle = pool.allocate("SCORE 0");
+    addTextEntity(world, { x: 0, y: 0, fontId: native.id, handle, renderMode: TextRenderMode.RASTERIZED });
+    world.update(16);
+    const s1 = surfaceOf(world, handle);
+    assert.strictEqual(surfaceCtx(world, handle)._fillTextCalls.length, 1);
+
+    world.update(16);
+    assert.strictEqual(surfaceOf(world, handle), s1, "surface identity stable");
+    assert.strictEqual(surfaceCtx(world, handle)._fillTextCalls.length, 1,
+      "no re-measure/re-rasterize for stable text");
+    assert.strictEqual(collectCommands(queue).length, 1, "one command every frame");
+  });
+
+  it("aligns native text by shifting the surface relative to the anchor", () => {
+    const cases = [
+      [0, 100],
+      [1, 93],
+      [2, 86],
+    ];
+    for (const [align, x] of cases) {
+      const world = makeWorld();
+      const pool = world.getResource(TextResourcePool);
+      const queue = world.getResource(RenderQueue);
+      const handle = pool.allocate("AB");
+      addTextEntity(world, { x: 100, y: 0, fontId: native.id, handle, align, renderMode: TextRenderMode.RASTERIZED });
+      world.update(16);
+      const cmds = collectCommands(queue);
+      assert.strictEqual(cmds.length, 1, `align ${align}`);
+      assert.ok(Math.abs(cmds[0].x - x) < 1e-5, `align ${align} → x ${cmds[0].x}`);
+    }
+  });
+
+  it("white is a real native color — default text rasterizes white", () => {
+    const world = makeWorld();
+    const pool = world.getResource(TextResourcePool);
+    const queue = world.getResource(RenderQueue);
+    const handle = pool.allocate("Hi");
+    addTextEntity(world, { x: 0, y: 0, fontId: native.id, handle, colorEnabled: 0, fillColor: 0xffffff, renderMode: TextRenderMode.RASTERIZED });
+    world.update(16);
+    assert.strictEqual(collectCommands(queue).length, 1);
+    assert.strictEqual(surfaceCtx(world, handle).fillStyle, "#ffffff",
+      "default native text is genuinely white (baked via fillStyle)");
+  });
+
+  it("color change re-rasterizes the surface without relayouting", () => {
+    const world = makeWorld();
+    const pool = world.getResource(TextResourcePool);
+    const queue = world.getResource(RenderQueue);
+    const handle = pool.allocate("Hi");
+    const e = addTextEntity(world, { x: 0, y: 0, fontId: native.id, handle, colorEnabled: 1, fillColor: 0xff0000, renderMode: TextRenderMode.RASTERIZED });
+    world.update(16);
+    const s1 = surfaceOf(world, handle);
+    const layout1 = pool.layout(handle);
+    assert.strictEqual(surfaceCtx(world, handle).fillStyle, "#ff0000", "initial color baked in");
+
+    world.set(e, Renderable, { fillColor: 0xffffff });
+    world.set(e, Text, { surfaceVersion: 2 });
+    world.update(16);
+    assert.strictEqual(surfaceOf(world, handle), s1, "same-size surface reused");
+    assert.strictEqual(pool.layout(handle), layout1, "layout untouched by a color change");
+    assert.strictEqual(pool.surfaceVersion(handle), 2);
+    assert.strictEqual(surfaceCtx(world, handle).fillStyle, "#ffffff", "re-rasterized with the new color");
+    assert.strictEqual(surfaceCtx(world, handle)._fillTextCalls.length, 2, "surface re-rasterized");
+  });
+
+  it("content change rebuilds both measurement/layout and surface", () => {
+    const world = makeWorld();
+    const pool = world.getResource(TextResourcePool);
+    const queue = world.getResource(RenderQueue);
+    const handle = pool.allocate("SCORE 9");
+    const e = addTextEntity(world, { x: 0, y: 0, fontId: native.id, handle, renderMode: TextRenderMode.RASTERIZED });
+    world.update(16);
+    assert.strictEqual(surfaceOf(world, handle).width, 49, '"SCORE 9" = 7 chars');
+
+    pool.setContent(handle, "SCORE 100");
+    world.set(e, Text, { version: 2, surfaceVersion: 2 });
+    world.update(16);
+    assert.strictEqual(pool.layout(handle).width, 63, '"SCORE 100" = 9 chars — width re-measured');
+    assert.strictEqual(surfaceOf(world, handle).width, 63);
+    assert.deepStrictEqual(surfaceCtx(world, handle)._fillTextCalls.at(-1), ["SCORE 100", 0, 8]);
+  });
+
+  it("transform, layer, depth and visibility changes do not re-rasterize", () => {
+    const world = makeWorld();
+    const pool = world.getResource(TextResourcePool);
+    const queue = world.getResource(RenderQueue);
+    const handle = pool.allocate("AB");
+    const e = addTextEntity(world, { x: 0, y: 0, fontId: native.id, handle, renderMode: TextRenderMode.RASTERIZED });
+    world.update(16);
+    const s1 = surfaceOf(world, handle);
+    const callsAfterFirst = surfaceCtx(world, handle)._fillTextCalls.length;
+    assert.strictEqual(callsAfterFirst, 1);
+
+    world.set(e, Transform, { x: 50, y: 30, rotation: 0.5, scaleX: 2, scaleY: 2 });
+    world.set(e, Renderable, { layer: 3, depth: 9 });
+    world.set(e, Visible, { value: 0 });
+    world.update(16);
+    assert.strictEqual(surfaceOf(world, handle), s1, "surface untouched by transform/layer/visibility");
+    assert.strictEqual(surfaceCtx(world, handle)._fillTextCalls.length, callsAfterFirst, "no re-rasterization");
+
+    world.set(e, Visible, { value: 1 });
+    world.update(16);
+    const cmds = collectCommands(queue);
+    assert.strictEqual(cmds.length, 1);
+    assert.strictEqual(cmds[0].x, 50);
+    assert.strictEqual(cmds[0].rotation, 0.5);
+    assert.strictEqual(cmds[0].scaleX, 2);
+    assert.strictEqual(cmds[0].layer, 3);
+    assert.strictEqual(cmds[0].depth, 9);
+  });
+
+  it("fontSize scales the rasterized measurement", () => {
+    const world = makeWorld();
+    const pool = world.getResource(TextResourcePool);
+    const queue = world.getResource(RenderQueue);
+    const handle = pool.allocate("AB");
+    addTextEntity(world, { x: 0, y: 0, fontId: native.id, handle, fontSize: 24, renderMode: TextRenderMode.RASTERIZED });
+    world.update(16);
+    const cmds = collectCommands(queue);
+    assert.strictEqual(cmds.length, 1);
+    assert.strictEqual(cmds[0].width, 21, "24px font → 2 chars × 10.5px advance");
+    assert.strictEqual(cmds[0].height, 15, "24px font → ascent 12 + descent 3");
+    assert.strictEqual(surfaceCtx(world, handle).font, "24px NativeRetained", "canvas font applied at the size");
+  });
+
+  it("swapping between native fonts invalidates layout and surface", async () => {
+    const native2 = await Font.load("NativeRetained2", "/fonts/nr2.ttf");
+    const world = makeWorld();
+    const pool = world.getResource(TextResourcePool);
+    const queue = world.getResource(RenderQueue);
+    const handle = pool.allocate("Hi");
+    const e = addTextEntity(world, { x: 0, y: 0, fontId: native.id, handle, renderMode: TextRenderMode.RASTERIZED });
+    world.update(16);
+    const s1 = surfaceOf(world, handle);
+    assert.strictEqual(surfaceCtx(world, handle).font, "16px NativeRetained");
+
+    world.set(e, Text, { fontHandle: native2.id, version: 2, surfaceVersion: 2 });
+    world.update(16);
+    assert.strictEqual(surfaceOf(world, handle), s1, "same-size surface reused");
+    assert.strictEqual(surfaceCtx(world, handle).font, "16px NativeRetained2", "re-measured with the new font");
+    assert.strictEqual(surfaceCtx(world, handle)._fillTextCalls.length, 2,
+      "surface re-rasterized for the new font");
+    assert.strictEqual(collectCommands(queue).length, 1);
+  });
+
+  it("switches between bitmap and native fonts in raster mode", async () => {
+    const world = makeWorld();
+    const pool = world.getResource(TextResourcePool);
+    const queue = world.getResource(RenderQueue);
+    const handle = pool.allocate("AB");
+    const e = addTextEntity(world, { x: 0, y: 0, fontId: bitmap.id, handle, renderMode: TextRenderMode.RASTERIZED });
+    world.update(16);
+    assert.strictEqual(collectCommands(queue).length, 1);
+    assert.strictEqual(surfaceCtx(world, handle)._img, bitmap.glyph("B").region.sourceImage, "bitmap raster path");
+
+    world.set(e, Text, { fontHandle: native.id, version: 2, surfaceVersion: 2 });
+    world.update(16);
+    assert.strictEqual(collectCommands(queue).length, 1, "native raster → still one command");
+    assert.strictEqual(surfaceCtx(world, handle).font, "16px NativeRetained", "native rasterized via canvas text");
+    assert.strictEqual(pool.layout(handle).count, 0, "native layout has no glyph placements");
+    assert.ok(Math.abs(pool.layout(handle).width - 14) < 1e-5, "native layout measured from text metrics");
+
+    world.set(e, Text, { fontHandle: bitmap.id, version: 3, surfaceVersion: 3 });
+    world.update(16);
+    assert.strictEqual(collectCommands(queue).length, 1, "back to bitmap raster → one command");
+    assert.strictEqual(surfaceCtx(world, handle)._img, bitmap.glyph("B").region.sourceImage, "bitmap raster path again");
+    assert.strictEqual(pool.layout(handle).count, 2, "bitmap layout has glyph placements");
+  });
+
+  it("a loaded native font is ready immediately after await Font.load", async () => {
+    const ready = await Font.load("ReadyNative", "/fonts/rdy.ttf");
+    const world = makeWorld();
+    const pool = world.getResource(TextResourcePool);
+    const queue = world.getResource(RenderQueue);
+    const handle = pool.allocate("Ready");
+    addTextEntity(world, { x: 0, y: 0, fontId: ready.id, handle, renderMode: TextRenderMode.RASTERIZED });
+    world.update(16);
+    const cmds = collectCommands(queue);
+    assert.strictEqual(cmds.length, 1, "immediately usable after load");
+    assert.strictEqual(cmds[0].width, 35, "measured with the loaded font (5 chars), no zero-width fallback");
+  });
+
+  it("emits the same textured-quad command shape as bitmap raster text", () => {
+    const world = makeWorld();
+    const pool = world.getResource(TextResourcePool);
+    const queue = world.getResource(RenderQueue);
+    const hNative = pool.allocate("AB");
+    const hBitmap = pool.allocate("AB");
+    addTextEntity(world, { x: 10, y: 20, fontId: native.id, handle: hNative, renderMode: TextRenderMode.RASTERIZED });
+    addTextEntity(world, { x: 10, y: 20, fontId: bitmap.id, handle: hBitmap, renderMode: TextRenderMode.RASTERIZED });
+    world.update(16);
+
+    const cmds = collectCommands(queue);
+    assert.strictEqual(cmds.length, 2, "one native + one bitmap raster command");
+    const nativeCmd = cmds.find((c) => c.sourceImage === surfaceOf(world, hNative));
+    const bitmapCmd = cmds.find((c) => c.sourceImage === surfaceOf(world, hBitmap));
+    assert.ok(nativeCmd && bitmapCmd, "both commands present");
+    assert.deepStrictEqual(Object.keys(nativeCmd), Object.keys(bitmapCmd),
+      "identical command shape — no native-text command type exists");
+    assert.strictEqual(nativeCmd.layer, bitmapCmd.layer);
+    assert.strictEqual(nativeCmd.depth, bitmapCmd.depth);
   });
 });

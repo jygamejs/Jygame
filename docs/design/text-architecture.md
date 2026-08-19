@@ -606,18 +606,25 @@ directly.
 
 ## 11. Native Fonts
 
-**Proposed** — native fonts are **not** forced into the bitmap rendering pipeline
-in v1.
+**Proven** — native fonts work through the browser (`ctx.font` + `fillText`) and
+through retained `Text` in **raster** mode:
 
-- **Proven:** native fonts are natively consumed by the browser
-  (`ctx.font = "24px Pixel"; ctx.fillText(...)`). `NativeFont` also receives a
-  stable numeric id in v1 (uniform registry), but its world-space rendering is
-  **Future**:
-  ```text
-  NativeFont → Canvas 2D rasterization → cached texture → single quad → RenderQueue
-  ```
-- Immediate rendering via `Font.render(ctx, ...)` remains the native-font path
-  for v1 — correct for UI/debug text on all backends.
+```text
+NativeFont → Canvas 2D text metrics → cached text surface → single quad → RenderQueue
+```
+
+The whole string is measured once with `ctx.measureText` (using
+`actualBoundingBoxLeft/Right/Ascent/Descent` where available) and rasterized
+with a single `fillText` into the same cached surface a rasterized bitmap font
+produces — so a native `Text` is one textured quad, indistinguishable to any
+renderer from a rasterized bitmap `Text`. There is no separate native-text
+`RenderQueue` command and no backend-specific native-font code. The layout
+stage (`layoutNativeText`) and the rasterizer (`rasterizeNativeText`) dispatch
+on whether the font has glyph records (`getGlyph`), not on the concrete class.
+
+The immediate path via `Font.render(ctx, ...)` remains — correct for UI/debug
+text on all backends. Native **glyph** mode (per-character retained rendering)
+is not implemented.
 
 ### 11.1 Render-mode capabilities
 
@@ -630,12 +637,12 @@ in `TextSystem` every frame before any renderer runs.
 
 ```text
 BitmapFont: capabilities = { glyph: true,  raster: true }
-NativeFont: capabilities = { glyph: false, raster: false }
+NativeFont: capabilities = { glyph: false, raster: true }
 ```
 
 `TextRenderMode.GLYPH` and `TextRenderMode.RASTERIZED` are both accepted for
-bitmap fonts. Native fonts report neither retained mode, so any `Text` that
-targets them throws:
+bitmap fonts. Native fonts accept `RASTERIZED` and reject `GLYPH`; because the
+default mode is `GLYPH`, a bare `new Text(...)` with a native font still throws:
 
 ```text
 Text: font "Pixel" does not support render mode "glyph".
@@ -646,11 +653,9 @@ or `raster → glyph` fallback). Unsupported combinations fail at the API bounda
 and again in `TextSystem`, so a renderer only ever receives a `Text` whose font
 declares support for that renderer's mode.
 
-The `Text` component/system contract does not preclude the future native path:
-once native rasterization exists, `NativeFont.capabilities.raster` flips to
-`true` and the existing pipeline (whole-string raster → one quad through the
-same region seam) applies — no new component, no new facade, no public `Text`
-API change. The same applies to a future native glyph representation.
+Changing `NativeFont.capabilities.raster` to `false` (or `glyph` to `true`)
+later is a flag change — no new component, no new facade, no public `Text` API
+change. The retained pipeline already handles both font kinds.
 
 ---
 
@@ -1086,7 +1091,8 @@ TextSystem priority, TextResourcePool, handle conventions).
   shape for `TextResourcePool`, `AnimationResourcePool`, etc. Not required by Text.
 - **Atlas-backed `BitmapFont`** — glyph atlas + UV regions through the existing
   region seam (§10.3).
-- **Native world-space text** — rasterization + texture cache (§11).
+- **Native glyph mode** — per-character retained rendering for `NativeFont`
+  (raster mode is done; §11).
 - **Two-layer serialization** for Text (§17).
 - **Whole-text culling** (§9.3).
 - **WASM ABI** — a numeric handle ABI at the ECS boundary (§2).
@@ -1116,9 +1122,9 @@ TextSystem priority, TextResourcePool, handle conventions).
 | 17 | How does camera transformation work? | §9.3 — commands carry world coords; renderers apply the camera. |
 | 18 | How does backend abstraction remain intact? | §16 — queue commands + texture caches; no backend-specific code. |
 | 19 | How does `Font.render()` remain available? | §12 — unchanged immediate path. |
-| 20 | What happens with NativeFont? | §11 — immediate-only in v1; world-space is future rasterization. |
+| 20 | What happens with NativeFont? | §11 — immediate `Font.render()` always; retained `Text` raster mode via Canvas2D metrics → cached surface → one quad. Glyph mode unsupported. |
 | 21 | What happens during serialization? | §17 — ECS layer numeric; resource layer separate, not in v1. |
-| 22 | What is explicitly out of scope? | §23 — native world-space text, atlas, generic pools, WASM ABI, serialization, `ref`. |
+| 22 | What is explicitly out of scope? | §23 — native glyph mode, native font atlases, generic pools, WASM ABI, serialization, `ref`. |
 | 23 | What depends on current implementation details? | §4 — numeric columns, RenderSystem clears once (priority-4 requirement), queue pooling, `onEntityDestroyed` ordering, texture-cache keying, tint cache, monotonic id convention. |
 
 ---

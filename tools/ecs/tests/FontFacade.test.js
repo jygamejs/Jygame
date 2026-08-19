@@ -183,13 +183,13 @@ describe("Font capabilities", () => {
     assert.strictEqual(font.supportsRenderMode("wave"), false);
   });
 
-  it("native fonts declare no retained render mode support", async () => {
+  it("native fonts declare raster (not glyph) retained support", async () => {
     const font = await Font.load("CapNative", "/fonts/cap.ttf");
-    assert.deepStrictEqual(font.capabilities, { glyph: false, raster: false });
+    assert.deepStrictEqual(font.capabilities, { glyph: false, raster: true });
     assert.strictEqual(font.supportsRenderMode(0), false, "GLYPH unsupported");
-    assert.strictEqual(font.supportsRenderMode(1), false, "RASTERIZED unsupported");
+    assert.strictEqual(font.supportsRenderMode(1), true, "RASTERIZED supported");
     assert.strictEqual(font.supportsRenderMode("glyph"), false);
-    assert.strictEqual(font.supportsRenderMode("raster"), false);
+    assert.strictEqual(font.supportsRenderMode("raster"), true);
   });
 });
 
@@ -227,6 +227,16 @@ describe("NativeFont immediate rendering", () => {
       measureText(text) { return { width: text.length * 7 }; },
     };
   }
+
+  it("exposes a single source of truth for the canvas font string", async () => {
+    const font = await Font.load("FontSrc", "/fonts/src.ttf");
+    assert.strictEqual(font.getCanvasFont(24), "24px FontSrc");
+    assert.strictEqual(font.getCanvasFont(12, { weight: "bold" }), "bold 12px FontSrc");
+    assert.strictEqual(font.getCanvasFont(16, { style: "italic", weight: "700" }), "italic 700 16px FontSrc");
+    const ctx = mockCtx();
+    font.applyToContext(ctx, 16);
+    assert.strictEqual(ctx._font, "16px FontSrc", "applyToContext sets ctx.font through the same source");
+  });
 
   it("renders immediate canvas text with ctx.font/fillText", async () => {
     const font = await Font.load("ImmediateFace", "/fonts/im.ttf");

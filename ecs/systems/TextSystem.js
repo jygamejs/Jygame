@@ -6,7 +6,7 @@ import { Visible } from "../components/Visible.js";
 import { RenderQueue } from "../render/RenderQueue.js";
 import { TextResourcePool } from "../render/TextResourcePool.js";
 import { TextRenderMode, renderModeName } from "../render/TextRenderMode.js";
-import { layoutText } from "../render/TextLayout.js";
+import { layoutText, layoutNativeText } from "../render/TextLayout.js";
 import { rasterizeText } from "../render/TextRasterizer.js";
 import { GlyphBuffer } from "../render/GlyphBuffer.js";
 import { fillGlyphBuffer, pushGlyphs } from "../render/GlyphRenderer.js";
@@ -23,16 +23,27 @@ import { Font } from "../../loaders/Font.js";
 // the font's glyph records) and the SAME glyph-region contract.  The layout is
 // renderer-independent — it is shared, never duplicated per mode.
 //
+// The layout itself has two sources, picked per font — never by concrete class:
+//
+//   fonts with `getGlyph`  → `layoutText` (glyph records + advances + offsets)
+//   fonts without          → `layoutNativeText` (Canvas2D text metrics)
+//
+// Both refill the identical layout target (`drawX`/`width`/`height`), so a
+// `BitmapFont + RASTERIZED` and a `NativeFont + RASTERIZED` converge on the
+// exact same retained representation: one cached bitmap surface drawn as one
+// textured quad.
+//
 // Two independent caches live in the TextResourcePool, invalidated separately:
 //
 //   version         (Text.version)          → layout cache (glyph records + positions)
 //   surfaceVersion  (Text.surfaceVersion)   → rasterized bitmap cache
 //
-// Layout-affecting changes (content, font, alignment, letter spacing) bump
-// both; a color change bumps only surfaceVersion (the bitmap must be redrawn
-// with the new tint, but the positions are unchanged). A render-mode change
-// bumps NEITHER — it only selects which representation consumes the existing
-// layout. Transform and Renderable changes never bump either.
+// Layout-affecting changes (content, font, alignment, letter spacing, and —
+// for native text — fontSize) bump both; a color change bumps only
+// surfaceVersion (the bitmap must be redrawn with the new tint, but the
+// positions are unchanged). A render-mode change bumps NEITHER — it only
+// selects which representation consumes the existing layout. Transform and
+// Renderable changes never bump either.
 //
 // A single reusable `GlyphBuffer` is shared by every GLYPH entity in the
 // world; it is cleared and refilled per entity, so switching modes or iterating
@@ -114,11 +125,12 @@ export class TextSystem extends System {
       const colorEnabled = table.getColumn(txid, "colorEnabled");
       const surfaceVersion = table.getColumn(txid, "surfaceVersion");
       const renderMode = table.getColumn(txid, "renderMode");
+      const fontSize = table.getColumn(txid, "fontSize");
 
       const visible = table.getColumn(vid, "value");
       if (!tx || !ty || !trot || !tsx || !tsy || !fillCol || !layer || !depth || !smoothing
           || !fontHandle || !contentHandle || !align || !letterSpacing || !version || !colorEnabled
-          || !surfaceVersion || !renderMode || !visible) continue;
+          || !surfaceVersion || !renderMode || !fontSize || !visible) continue;
 
       for (let r = 0; r < count; r++) {
         if (!visible[r]) continue;
@@ -136,7 +148,9 @@ export class TextSystem extends System {
             `Text: font "${font.name}" does not support render mode "${renderModeName(renderMode[r])}".`
           );
         }
-        if (typeof font.getGlyph !== "function") continue;
+        // Fonts with glyph records lay out per character; fonts without
+        // (NativeFont) lay out from Canvas2D text metrics.
+        const isGlyphFont = typeof font.getGlyph === "function";
 
         let layout = pool.layout(handle);
         let relayouted = false;
@@ -145,12 +159,17 @@ export class TextSystem extends System {
           if (typeof content !== "string") continue;
           layout = pool.layoutTarget(handle);
           if (!layout) continue;
-          layoutText(layout, font, content, align[r], letterSpacing[r]);
+          if (isGlyphFont) {
+            layoutText(layout, font, content, align[r], letterSpacing[r]);
+          } else {
+            layoutNativeText(layout, font, content, align[r], letterSpacing[r], fontSize[r]);
+          }
           pool.setLayout(handle, layout);
           pool.setLayoutVersion(handle, version[r]);
           relayouted = true;
         }
-        if (layout === null || layout.count === 0) continue;
+        // Empty text has no ink extent in either layout source — skip it.
+        if (layout === null || layout.width === 0) continue;
 
         const canInterp = tiv !== null && tiv[r] === 1;
         const prevX = canInterp && tpx ? tpx[r] : tx[r];
@@ -194,19 +213,23 @@ export class TextSystem extends System {
   // Rasterized representation: the whole text is composited into one cached
   // surface and emitted as a single RenderQueue command.  The surface is only
   // rebuilt when the surfaceVersion changed (a color change or a fresh layout);
-  // everything else reuses the cached surface.
+  // everything else reuses the cached surface. The rasterizer dispatches
+  // internally on the font source (glyph regions vs Canvas2D text), so this
+  // method never branches on the font kind.
   _renderRasterized(queue, pool, handle, layout, relayouted, fontHandle, colorEnabled,
                     surfaceVersion, fillCol, layer, depth, imageSmoothing,
                     tx, ty, trot, tsx, tsy, prevX, prevY, canInterp) {
     if (relayouted || surfaceVersion !== pool.surfaceVersion(handle)) {
       const font = fontHandle ? Font.byId(fontHandle) : null;
-      if (!font || typeof font.getTintedGlyph !== "function") return;
-      const tint = colorEnabled ? "#" + fillCol.toString(16).padStart(6, "0") : null;
+      if (!font) return;
+      const content = pool.get(handle);
+      if (typeof content !== "string") return;
       const surface = pool.ensureSurface(handle, layout.width, layout.height);
       if (!surface) return;
       const sctx = surface.getContext("2d");
       sctx.clearRect(0, 0, surface.width, surface.height);
-      rasterizeText(sctx, font, layout, tint);
+      const tint = colorEnabled ? "#" + fillCol.toString(16).padStart(6, "0") : null;
+      rasterizeText(sctx, font, layout, tint, content);
       pool.setSurfaceVersion(handle, surfaceVersion);
     }
 
