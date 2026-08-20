@@ -654,19 +654,22 @@ rasterized bitmap text produces — so a native `Text` is one textured quad, no
 different to any renderer from a rasterized bitmap `Text`. Glyph mode is the
 high-frequency path for per-character text and needs a bitmap font.
 
+The default render mode is chosen **automatically** from the font's
+capabilities: a bitmap font defaults to `GLYPH`, a native font (which cannot
+do glyph) defaults to `RASTERIZED`. An explicit `renderMode` option is a
+deliberate override — e.g. `bitmap + RASTERIZED`:
+
 ```js
 const pixel = await Font.load("Pixel", "assets/fonts/pixel.ttf");
 pixel.render(ctx, "SCORE 0", 10, 40, { color: "#ffffff" }); // immediate canvas text
 
-// Retained raster Text with a native font — explicit opt-in:
-const label = new Text(350, 100, "Pixel", "SCORE 0", {
-  renderMode: TextRenderMode.RASTERIZED, // native fonts do NOT support glyph mode
-});
+// Retained Text with a native font — the auto default picks raster:
+const label = new Text(350, 100, "Pixel", "SCORE 0");
 
-// Glyph mode with a native font is rejected (also the default — a bare
-// `new Text(...)` with a native font throws until raster is requested):
+// Explicit modes are honored as-is, and unsupported ones throw:
+const bit = new Text(350, 100, "Ink", "SCORE 0", { renderMode: TextRenderMode.RASTERIZED }); // ok
 const bad = new Text(350, 100, "Pixel", "SCORE 0", {
-  renderMode: TextRenderMode.GLYPH,
+  renderMode: TextRenderMode.GLYPH, // native fonts cannot render per-glyph
 }); // throws: font "Pixel" does not support render mode "glyph"
 ```
 

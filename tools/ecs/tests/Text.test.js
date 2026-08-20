@@ -152,18 +152,29 @@ describe("Text facade", () => {
     assert.throws(() => new Text(0, 0, "Nope", "hi"), /not found/);
   });
 
-  it("accepts native fonts in raster mode and rejects glyph mode", async () => {
+  it("defaults native fonts to raster mode and still rejects glyph", async () => {
     const native = await Font.load("NativeFace", "/fonts/n.ttf");
     Text._defaultWorld = null;
-    // Default mode is GLYPH — a bare native Text still fails, as designed.
-    assert.throws(() => new Text(0, 0, native, "hi"), /does not support render mode "glyph"/);
-    assert.throws(() => new Text(0, 0, "NativeFace", "hi"), /does not support render mode "glyph"/);
-    // Explicit raster mode is valid.
-    const t = new Text(0, 0, native, "hi", { renderMode: TextRenderMode.RASTERIZED });
-    assert.strictEqual(t.renderMode, TextRenderMode.RASTERIZED);
+    // No renderMode option → auto: a native font defaults to raster.
+    const t = new Text(0, 0, native, "hi");
+    assert.strictEqual(t.renderMode, TextRenderMode.RASTERIZED, "native defaults to raster");
     assert.strictEqual(t.font, native);
-    const t2 = new Text(0, 0, "NativeFace", "hi", { renderMode: TextRenderMode.RASTER });
+    const tByName = new Text(0, 0, "NativeFace", "hi");
+    assert.strictEqual(tByName.renderMode, TextRenderMode.RASTERIZED);
+    // Explicit glyph is still rejected for native fonts.
+    assert.throws(
+      () => new Text(0, 0, native, "hi", { renderMode: TextRenderMode.GLYPH }),
+      /does not support render mode "glyph"/,
+    );
+    assert.throws(
+      () => new Text(0, 0, "NativeFace", "hi", { renderMode: "glyph" }),
+      /does not support render mode "glyph"/,
+    );
+    // Explicit raster remains valid, via either the constant or the alias.
+    const t2 = new Text(0, 0, native, "hi", { renderMode: TextRenderMode.RASTERIZED });
     assert.strictEqual(t2.renderMode, TextRenderMode.RASTERIZED);
+    const t3 = new Text(0, 0, "NativeFace", "hi", { renderMode: TextRenderMode.RASTER });
+    assert.strictEqual(t3.renderMode, TextRenderMode.RASTERIZED);
   });
 
   it("handles runtime font swaps between bitmap and native", async () => {

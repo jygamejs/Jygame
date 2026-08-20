@@ -641,8 +641,12 @@ NativeFont: capabilities = { glyph: false, raster: true }
 ```
 
 `TextRenderMode.GLYPH` and `TextRenderMode.RASTERIZED` are both accepted for
-bitmap fonts. Native fonts accept `RASTERIZED` and reject `GLYPH`; because the
-default mode is `GLYPH`, a bare `new Text(...)` with a native font still throws:
+bitmap fonts. Native fonts accept `RASTERIZED` and reject `GLYPH`. Without an
+explicit `renderMode` option the default is chosen automatically from the
+font's capabilities — a bitmap font defaults to `GLYPH`, a native font (which
+cannot do glyph) to `RASTERIZED` — so a bare `new Text(...)` with a native font
+is valid and renders in raster mode. An explicit `renderMode` is a deliberate
+override and is validated like any other:
 
 ```text
 Text: font "Pixel" does not support render mode "glyph".

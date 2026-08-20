@@ -81,6 +81,16 @@ export class Text {
     );
   }
 
+  // The automatic default render mode for a font: GLYPH when the font supports
+  // it (bitmap fonts), otherwise RASTERIZED (native fonts). This is what a
+  // `new Text(...)` without a `renderMode` option gets — an explicit option
+  // always overrides it.
+  static _defaultModeFor(font) {
+    return font.supportsRenderMode(TextRenderMode.GLYPH)
+      ? TextRenderMode.GLYPH
+      : TextRenderMode.RASTERIZED;
+  }
+
   #world;
   #entity;
   #dead = false;
@@ -115,13 +125,15 @@ export class Text {
     }
 
     const fontObj = Text._resolveFont(font);
-    // Validate the font + requested render mode before any entity is created so
-    // an unsupported combination cannot leak a half-built Text into the world.
-    // The ECS `u8` field defaults to TextRenderMode.GLYPH (value 0) when no
-    // renderMode option is given.
+    // Render mode selection: an explicit `renderMode` option is honored as-is
+    // (a deliberate choice such as "bitmap + raster"). Without one, the mode
+    // is chosen automatically from the font's capabilities — a bitmap font
+    // defaults to GLYPH, a native font (which cannot do glyph) to RASTERIZED.
+    // Validation happens before any entity is created so an unsupported
+    // combination cannot leak a half-built Text into the world.
     const initialMode = options && options.renderMode != null
       ? Text._normalizeRenderMode(options.renderMode)
-      : TextRenderMode.GLYPH;
+      : Text._defaultModeFor(fontObj);
     Text._validateMode(fontObj, initialMode);
 
     const eid = wld.createEntity();

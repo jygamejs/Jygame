@@ -449,9 +449,12 @@ BitmapFont: capabilities = { glyph: true,  raster: true }
 NativeFont: capabilities = { glyph: false, raster: true }
 ```
 
-`Text` validates the requested render mode (default `TextRenderMode.GLYPH`)
-against the font at construction, on every `font`/`renderMode` change, and in
-`TextSystem` before any renderer runs. An unsupported combination throws
+`Text` validates the requested render mode against the font at construction, on
+every `font`/`renderMode` change, and in `TextSystem` before any renderer runs.
+Without an explicit `renderMode` option the mode is chosen automatically from
+the font's capabilities — a bitmap font defaults to `GLYPH`, a native font
+(which cannot do glyph) to `RASTERIZED`. An explicit option is a deliberate
+override and is validated like any other. An unsupported combination throws
 `Text: font "<name>" does not support render mode "<mode>".` — it is never
 silently rerouted to another mode, and a renderer only ever receives a `Text`
 whose font declares support for that renderer's mode. Immediate
