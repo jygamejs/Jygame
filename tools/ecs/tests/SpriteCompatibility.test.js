@@ -1046,6 +1046,52 @@ describe("Lazy Size Resolution", () => {
 
     assert.strictEqual(w.get(s.entity, Renderable).image, id0);
   });
+
+  it("late image resolution keeps the top-left anchored", () => {
+    const s = new Sprite(200, 452);
+    const reg = new AssetRegistry();
+    const assetId = reg.register({ sourceImage: {}, sw: 64, sh: 48 });
+    s.world.setResource(AssetRegistry, reg);
+
+    s.image = assetId;
+
+    assert.strictEqual(s.x, 200);
+    assert.strictEqual(s.y, 452);
+    assert.strictEqual(s.width, 64);
+    assert.strictEqual(s.height, 48);
+  });
+
+  it("late size resolution honors scale without moving the top-left", () => {
+    const s = new Sprite(200, 452);
+    s.scale = 3;
+    const reg = new AssetRegistry();
+    const assetId = reg.register({ sourceImage: {}, sw: 32, sh: 32 });
+    s.world.setResource(AssetRegistry, reg);
+
+    s.image = assetId;
+
+    assert.strictEqual(s.x, 200);
+    assert.strictEqual(s.y, 452);
+    assert.strictEqual(s.width, 96);
+    assert.strictEqual(s.height, 96);
+  });
+
+  it("first animation frame keeps the top-left anchored", () => {
+    const s = new Sprite(200, 452);
+    const reg = new AssetRegistry();
+    const assetId = reg.register({ sourceImage: {}, sw: 32, sh: 32 });
+    s.world.setResource(AssetRegistry, reg);
+    const clipReg = new AnimationClipRegistry();
+    s.world.setResource(AnimationClipRegistry, clipReg);
+
+    s.animation.add("idle", new AnimationClip({ frames: [assetId], fps: 10, loop: true }));
+    s.animation.play("idle");
+
+    assert.strictEqual(s.x, 200);
+    assert.strictEqual(s.y, 452);
+    assert.strictEqual(s.width, 32);
+    assert.strictEqual(s.height, 32);
+  });
 });
 
 // ─────────────────────────────────────────────────────────

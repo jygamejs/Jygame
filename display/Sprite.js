@@ -578,6 +578,20 @@ export class Sprite {
   _resolveNativeSize(w, h) {
     const r = this.#world.get(this.#entity, Renderable);
     if (r.nativeWidth === 0 && r.nativeHeight === 0) {
+      const t = this._getT();
+      // The constructor anchors the transform at the top-left when the size is
+      // still unknown (width = height = 0), so when the real size finally
+      // resolves — an image set late, or an animation clip's first frame —
+      // grow from that same corner instead of from the old center. Without
+      // this, x/y shift by half the resolved size the moment the image lands.
+      const sx = Math.abs(t.scaleX);
+      const sy = Math.abs(t.scaleY);
+      t.x += (w * sx) / 2;
+      t.y += (h * sy) / 2;
+      if (t._interpValid) {
+        t._prevX += (w * sx) / 2;
+        t._prevY += (h * sy) / 2;
+      }
       r.nativeWidth = w;
       r.nativeHeight = h;
       if (this.#world.has(this.#entity, RenderBounds)) {
