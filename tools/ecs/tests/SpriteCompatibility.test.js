@@ -1092,6 +1092,39 @@ describe("Lazy Size Resolution", () => {
     assert.strictEqual(s.width, 32);
     assert.strictEqual(s.height, 32);
   });
+
+  it("scale after size resolution keeps the top-left anchored", () => {
+    const s = new Sprite(200, 452);
+    const reg = new AssetRegistry();
+    const assetId = reg.register({ sourceImage: {}, sw: 32, sh: 32 });
+    s.world.setResource(AssetRegistry, reg);
+
+    s.image = assetId;
+    assert.strictEqual(s.x, 200);
+    assert.strictEqual(s.y, 452);
+
+    s.scale = 3;
+    assert.strictEqual(s.x, 200);
+    assert.strictEqual(s.y, 452);
+    assert.strictEqual(s.width, 96);
+    assert.strictEqual(s.height, 96);
+  });
+
+  it("width/height setters keep the top-left anchored", () => {
+    const s = new Sprite(0, 0, 100, 100);
+    assert.strictEqual(s.x, 0);
+    assert.strictEqual(s.y, 0);
+
+    s.width = 200;
+    assert.strictEqual(s.x, 0);
+    assert.strictEqual(s.y, 0);
+    assert.strictEqual(s.width, 200);
+
+    s.height = 300;
+    assert.strictEqual(s.x, 0);
+    assert.strictEqual(s.y, 0);
+    assert.strictEqual(s.height, 300);
+  });
 });
 
 // ─────────────────────────────────────────────────────────

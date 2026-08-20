@@ -277,8 +277,12 @@ export class Sprite {
   }
   set width(v) {
     this._assertAlive();
-    const scale = Math.abs(this._getT().scaleX) || 1;
-    this._getRB().width = v / scale;
+    const t = this._getT();
+    const scale = Math.abs(t.scaleX) || 1;
+    const rb = this._getRB();
+    const oldW = rb.width * scale;
+    rb.width = v / scale;
+    if (v !== oldW) this._reAnchor(v - oldW, 0);
     this._syncCollider();
   }
 
@@ -288,8 +292,12 @@ export class Sprite {
   }
   set height(v) {
     this._assertAlive();
-    const scale = Math.abs(this._getT().scaleY) || 1;
-    this._getRB().height = v / scale;
+    const t = this._getT();
+    const scale = Math.abs(t.scaleY) || 1;
+    const rb = this._getRB();
+    const oldH = rb.height * scale;
+    rb.height = v / scale;
+    if (v !== oldH) this._reAnchor(0, v - oldH);
     this._syncCollider();
   }
 
@@ -584,14 +592,7 @@ export class Sprite {
       // resolves — an image set late, or an animation clip's first frame —
       // grow from that same corner instead of from the old center. Without
       // this, x/y shift by half the resolved size the moment the image lands.
-      const sx = Math.abs(t.scaleX);
-      const sy = Math.abs(t.scaleY);
-      t.x += (w * sx) / 2;
-      t.y += (h * sy) / 2;
-      if (t._interpValid) {
-        t._prevX += (w * sx) / 2;
-        t._prevY += (h * sy) / 2;
-      }
+      this._reAnchor(w * Math.abs(t.scaleX), h * Math.abs(t.scaleY));
       r.nativeWidth = w;
       r.nativeHeight = h;
       if (this.#world.has(this.#entity, RenderBounds)) {
@@ -600,6 +601,20 @@ export class Sprite {
         rb.height = h;
       }
       this._syncCollider();
+    }
+  }
+
+  // The public x/y are the sprite's top-left corner, while the entity
+  // transform tracks the center. Whenever the drawn size changes — image
+  // resolution, scale, or explicit width/height — move the center (and the
+  // interpolation seed) by half the delta so the top-left stays put.
+  _reAnchor(dw, dh) {
+    const t = this._getT();
+    t.x += dw / 2;
+    t.y += dh / 2;
+    if (t._interpValid) {
+      t._prevX += dw / 2;
+      t._prevY += dh / 2;
     }
   }
 
@@ -803,6 +818,9 @@ export class Sprite {
   set scale(v) {
     this._assertAlive();
     const t = this._getT();
+    const rb = this._getRB();
+    const oldW = rb.width * Math.abs(t.scaleX);
+    const oldH = rb.height * Math.abs(t.scaleY);
     if (typeof v === "number") {
       t.scaleX = v;
       t.scaleY = v;
@@ -810,6 +828,9 @@ export class Sprite {
       if (v.x != null) t.scaleX = v.x;
       if (v.y != null) t.scaleY = v.y;
     }
+    const newW = rb.width * Math.abs(t.scaleX);
+    const newH = rb.height * Math.abs(t.scaleY);
+    if (newW !== oldW || newH !== oldH) this._reAnchor(newW - oldW, newH - oldH);
     this._syncCollider();
   }
 
