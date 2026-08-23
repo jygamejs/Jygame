@@ -26,6 +26,7 @@ const TYPED_ARRAYS = [
   ['_seed', Float32Array],
   ['_segment', Int32Array],
   ['_id', Int32Array],
+  ['_visualType', Uint8Array],
 ];
 
 export class SoAParticleStorage extends ParticleStorage {
@@ -85,6 +86,7 @@ export class SoAParticleStorage extends ParticleStorage {
     this._seed[i] = 0;
     this._segment[i] = 0;
     this._id[i] = 0;
+    this._visualType[i] = 0;
     this._accessors[i].reset();
   }
 
@@ -252,7 +254,7 @@ export class SoAParticleStorage extends ParticleStorage {
     const active = this._activeAccessors;
     const { _x, _y, _vx, _vy, _ax, _ay, _life, _maxLife, _ageRatio,
             _rotation, _rotationSpeed, _size, _alpha, _depth,
-            _r, _g, _b, _alive, _seed, _segment } = this;
+            _r, _g, _b, _alive, _seed, _segment, _visualType } = this;
     const stride = ParticleBufferLayout.STRIDE;
 
     for (let i = 0; i < count; i++) {
@@ -278,6 +280,7 @@ export class SoAParticleStorage extends ParticleStorage {
       data[base + 17] = _alive[idx];
       data[base + 18] = _seed[idx];
       data[base + 19] = _segment[idx];
+      data[base + 20] = _visualType[idx];
     }
   }
 

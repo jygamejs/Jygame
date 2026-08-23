@@ -6,6 +6,7 @@ export class ParticleEffect {
 
   constructor({ asset, x = 0, y = 0, renderer, backend } = {}) {
     this._asset = asset;
+    this._visual = asset._visual ?? null;
     this._destroyed = false;
     this._autoDestroy = false;
     this._finished = false;
@@ -105,6 +106,10 @@ export class ParticleEffect {
 
   get asset() {
     return this._asset;
+  }
+
+  get visual() {
+    return this._visual;
   }
 
   get emitter() {

@@ -69,11 +69,19 @@ export class CanvasParticleRenderer extends ParticleRenderer {
       const frameY = d[off + 14];
       const frameWidth = d[off + 15];
       const frameHeight = d[off + 16];
+      const visualType = d[off + 17];
       const texture = t[i];
 
       ctx.globalAlpha = alpha;
 
-      if (texture) {
+      if (visualType === 1) {
+        // Circle visual — renderer-independent, size drives diameter
+        ctx.fillStyle = `rgba(${r},${g},${b},${alpha})`;
+        ctx.beginPath();
+        ctx.arc(x, y, size * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+        primitives++;
+      } else if (texture) {
         const w = width > 0 ? width : size;
         const h = height > 0 ? height : size;
         ctx.save();

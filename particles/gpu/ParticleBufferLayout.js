@@ -7,6 +7,7 @@ const FIELD_NAMES = [
   "alive",
   "seed",
   "segment",
+  "visualType",
 ];
 
 const FIELD_INDEX = {};
@@ -14,7 +15,7 @@ for (let i = 0; i < FIELD_NAMES.length; i++) {
   FIELD_INDEX[FIELD_NAMES[i]] = i;
 }
 
-const U32_FIELDS = new Set(["r", "g", "b", "alive", "segment"]);
+const U32_FIELDS = new Set(["r", "g", "b", "alive", "segment", "visualType"]);
 
 export class ParticleBufferLayout {
   static get FIELD_NAMES() {

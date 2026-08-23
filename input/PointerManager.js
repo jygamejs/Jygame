@@ -10,12 +10,22 @@ export class PointerManager extends Device {
     super();
     this._storage = new PointerStorage(historyCapacity);
     this._pointers = new Map();
+    this._position = { x: 0, y: 0 };
+    this._hasPosition = false;
   }
 
   get type() { return PointerManager; }
   get storage() { return this._storage; }
 
   get count() { return this._storage.activeCount; }
+
+  get position() {
+    return this._position;
+  }
+
+  get hasPosition() {
+    return this._hasPosition;
+  }
 
   getPointer(id) {
     const slot = this._pointers.get(id);
@@ -65,6 +75,12 @@ export class PointerManager extends Device {
   }
 
   _onPointerDown(data) {
+    if (Number.isFinite(data.x) && Number.isFinite(data.y)) {
+      this._position.x = data.x;
+      this._position.y = data.y;
+      this._hasPosition = true;
+    }
+
     const slot = this._storage.allocate();
     if (slot < 0) return;
 
@@ -103,6 +119,12 @@ export class PointerManager extends Device {
   }
 
   _onPointerMove(data, dt) {
+    if (Number.isFinite(data.x) && Number.isFinite(data.y)) {
+      this._position.x = data.x;
+      this._position.y = data.y;
+      this._hasPosition = true;
+    }
+
     const slot = this._pointers.get(data.pointerId);
     if (slot === undefined) return;
     const pd = this._storage.getPointerData(slot);
@@ -126,6 +148,20 @@ export class PointerManager extends Device {
   }
 
   _onPointerUp(data) {
+    if (Number.isFinite(data.x) && Number.isFinite(data.y)) {
+      this._position.x = data.x;
+      this._position.y = data.y;
+      this._hasPosition = true;
+    } else {
+      const slotTmp = this._pointers.get(data.pointerId);
+      const pdTmp = slotTmp !== undefined ? this._storage.getPointerData(slotTmp) : null;
+      if (pdTmp) {
+        this._position.x = pdTmp.x;
+        this._position.y = pdTmp.y;
+        this._hasPosition = true;
+      }
+    }
+
     const slot = this._pointers.get(data.pointerId);
     if (slot === undefined) return;
     const pd = this._storage.getPointerData(slot);

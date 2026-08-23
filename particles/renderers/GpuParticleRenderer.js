@@ -3,7 +3,7 @@ import { ParticleRenderCommandBuffer } from "../renderdata/ParticleRenderCommand
 import { resolveMetricIds } from "../../debug/index.js";
 
 /*
- * Instance buffer layout (stride = 17 floats = 68 bytes):
+ * Instance buffer layout (stride = 18 floats = 72 bytes):
  *
  *  float  0: x
  *  float  1: y
@@ -22,9 +22,10 @@ import { resolveMetricIds } from "../../debug/index.js";
  *  float 14: frameY
  *  float 15: frameWidth
  *  float 16: frameHeight
+ *  float 17: visualType
  */
 
-const INSTANCE_STRIDE = 68; // bytes
+const INSTANCE_STRIDE = 72; // bytes
 
 const INSTANCE_ATTRIBS = [
   { name: 'a_iPos',     size: 2, type: 'FLOAT', offset: 0 },
@@ -37,6 +38,7 @@ const INSTANCE_ATTRIBS = [
   { name: 'a_iOrigin',  size: 2, type: 'FLOAT', offset: 40 },
   { name: 'a_iDepth',   size: 1, type: 'FLOAT', offset: 48 },
   { name: 'a_iFrame',   size: 4, type: 'FLOAT', offset: 52 },
+  { name: 'a_iVisualType', size: 1, type: 'FLOAT', offset: 68 },
 ];
 
 const VS_SRC = `#version 300 es
@@ -53,11 +55,13 @@ in vec3  a_iColor;
 in vec2  a_iOrigin;
 in float a_iDepth;
 in vec4  a_iFrame;
+in float a_iVisualType;
 
 out vec2  v_uv;
 out vec3  v_color;
 out float v_alpha;
 flat out float v_hasFrame;
+flat out float v_visualType;
 
 uniform vec2 u_resolution;
 
@@ -82,6 +86,7 @@ void main() {
   v_uv = a_uv;
   v_color  = a_iColor;
   v_alpha  = a_iAlpha;
+  v_visualType = a_iVisualType;
 }
 `;
 
@@ -92,6 +97,7 @@ in vec2  v_uv;
 in vec3  v_color;
 in float v_alpha;
 flat in float v_hasFrame;
+flat in float v_visualType;
 
 uniform sampler2D u_texture;
 uniform vec2 u_texSize;
@@ -101,6 +107,12 @@ uniform vec4 u_frame;
 out vec4 fragColor;
 
 void main() {
+  // Circle visual: discard outside unit circle
+  if (v_visualType > 0.5 && v_visualType < 1.5) {
+    vec2 c = v_uv - vec2(0.5);
+    if (dot(c, c) > 0.25) discard;
+  }
+
   vec2 uv = v_uv;
   if (v_hasFrame > 0.5) {
     vec2 frameSize = u_frame.zw;

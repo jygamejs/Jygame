@@ -42,6 +42,7 @@ function _resetParticle(p) {
   p.frameWidth = 0;
   p.frameHeight = 0;
   p.userData = null;
+  p.visualType = 0;
   p.__jygameSortOrder = 0;
   p.__jygameId = 0;
 }

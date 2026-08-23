@@ -1,10 +1,11 @@
-const STRIDE = 17;
+const STRIDE = 18;
 const OFF = {
   x: 0, y: 1, rotation: 2, size: 3,
   width: 4, height: 5, alpha: 6,
   r: 7, g: 8, b: 9,
   originX: 10, originY: 11, depth: 12,
   frameX: 13, frameY: 14, frameWidth: 15, frameHeight: 16,
+  visualType: 17,
 };
 
 export class ParticleRenderCommandBuffer {
@@ -48,6 +49,7 @@ export class ParticleRenderCommandBuffer {
     this._data[off + OFF.frameY] = p.frameY;
     this._data[off + OFF.frameWidth] = p.frameWidth;
     this._data[off + OFF.frameHeight] = p.frameHeight;
+    this._data[off + OFF.visualType] = p.visualType ?? 0;
     this._textures[this._count] = p.texture;
     this._particleRefs[this._count] = p;
     this._count++;
@@ -73,6 +75,7 @@ export class ParticleRenderCommandBuffer {
     target.frameY = this._data[off + OFF.frameY];
     target.frameWidth = this._data[off + OFF.frameWidth];
     target.frameHeight = this._data[off + OFF.frameHeight];
+    target.visualType = this._data[off + OFF.visualType];
     target.texture = this._textures[i];
     target._p = this._particleRefs[i];
     return target;

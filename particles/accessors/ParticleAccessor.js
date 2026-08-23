@@ -33,6 +33,18 @@ export class ParticleAccessor {
   get alive() { return 0; } set alive(v) {}
   get seed() { return 0; } set seed(v) {}
   get segment() { return 0; } set segment(v) {}
+  get visualType() { return 0; } set visualType(v) {}
+  get texture() { return null; } set texture(v) {}
+  get originX() { return 0.5; } set originX(v) {}
+  get originY() { return 0.5; } set originY(v) {}
+  get width() { return 0; } set width(v) {}
+  get height() { return 0; } set height(v) {}
+  get frameX() { return 0; } set frameX(v) {}
+  get frameY() { return 0; } set frameY(v) {}
+  get frameWidth() { return 0; } set frameWidth(v) {}
+  get frameHeight() { return 0; } set frameHeight(v) {}
+  get color() { return "#ffffff"; } set color(v) {}
+  get userData() { return null; } set userData(v) {}
 
   get collides() { return false; } set collides(v) {}
   get radius() { return 0; } set radius(v) {}

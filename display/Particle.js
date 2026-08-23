@@ -46,6 +46,8 @@ export class Particle {
 
     this.userData = null;
 
+    this.visualType = 0;
+
     this.depth = 0;
     this.ageRatio = 0;
     this.collides = false;

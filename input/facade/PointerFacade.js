@@ -22,41 +22,71 @@ export class PointerFacade {
   }
 
   get x() {
+    const pm = this._pm;
     const ptr = this._getPrimary();
-    if (!ptr) return 0;
     const cs = this._cs;
-    if (cs) return cs.toViewport(ptr.position).x;
-    return ptr.position.x;
+    if (ptr) {
+      if (cs) return cs.toViewport(ptr.position).x;
+      return ptr.position.x;
+    }
+    if (!pm) return 0;
+    const pos = pm.position;
+    if (cs) return cs.toViewport(pos).x;
+    return pos.x;
   }
 
   get y() {
+    const pm = this._pm;
     const ptr = this._getPrimary();
-    if (!ptr) return 0;
     const cs = this._cs;
-    if (cs) return cs.toViewport(ptr.position).y;
-    return ptr.position.y;
+    if (ptr) {
+      if (cs) return cs.toViewport(ptr.position).y;
+      return ptr.position.y;
+    }
+    if (!pm) return 0;
+    const pos = pm.position;
+    if (cs) return cs.toViewport(pos).y;
+    return pos.y;
   }
 
   get worldX() {
+    const pm = this._pm;
     const ptr = this._getPrimary();
-    if (!ptr) return 0;
     const cs = this._cs;
+    if (ptr) {
+      if (cs) {
+        const world = cs.toWorld(cs.toViewport(ptr.position));
+        return world.x;
+      }
+      return ptr.position.x;
+    }
+    if (!pm) return 0;
+    const pos = pm.position;
     if (cs) {
-      const world = cs.toWorld(cs.toViewport(ptr.position));
+      const world = cs.toWorld(cs.toViewport(pos));
       return world.x;
     }
-    return ptr.position.x;
+    return pos.x;
   }
 
   get worldY() {
+    const pm = this._pm;
     const ptr = this._getPrimary();
-    if (!ptr) return 0;
     const cs = this._cs;
+    if (ptr) {
+      if (cs) {
+        const world = cs.toWorld(cs.toViewport(ptr.position));
+        return world.y;
+      }
+      return ptr.position.y;
+    }
+    if (!pm) return 0;
+    const pos = pm.position;
     if (cs) {
-      const world = cs.toWorld(cs.toViewport(ptr.position));
+      const world = cs.toWorld(cs.toViewport(pos));
       return world.y;
     }
-    return ptr.position.y;
+    return pos.y;
   }
 
   get down() {
@@ -87,5 +117,10 @@ export class PointerFacade {
   get pressure() {
     const ptr = this._getPrimary();
     return ptr ? ptr.pressure : 0;
+  }
+
+  get hasPosition() {
+    const pm = this._pm;
+    return pm ? pm.hasPosition : false;
   }
 }

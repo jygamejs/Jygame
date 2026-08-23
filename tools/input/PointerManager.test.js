@@ -1,10 +1,13 @@
 import { describe, it } from "node:test";
 import * as assert from "node:assert";
 import { PointerManager } from "../../input/PointerManager.js";
+import { PointerFacade } from "../../input/facade/PointerFacade.js";
+import { CoordinateSystem } from "../../input/CoordinateSystem.js";
 import { InputEventQueue } from "../../input/InputEventQueue.js";
 import { InputEvent } from "../../input/InputEvent.js";
 import { EventType } from "../../input/EventType.js";
 import { Tier } from "../../input/Tier.js";
+import * as fs from "node:fs";
 
 function pointerEvent(type, data = {}) {
   return new InputEvent(type, {
@@ -203,5 +206,129 @@ describe("PointerManager", () => {
     // because wasDown was only re-synced for *active* pointers).
     pm.update(queueWith(pointerEvent(EventType.POINTER_DOWN, { pointerId: 1 })));
     assert.strictEqual(pm.getPointer(1).justDown, true);
+  });
+
+  describe("persistent position and hasPosition", () => {
+    it("initial state hasPosition false and position 0,0", () => {
+      const pm = new PointerManager();
+      assert.strictEqual(pm.hasPosition, false);
+      assert.strictEqual(pm.position.x, 0);
+      assert.strictEqual(pm.position.y, 0);
+    });
+
+    it("first POINTER_MOVE at non-zero sets hasPosition true", () => {
+      const pm = new PointerManager();
+      pm.update(queueWith(pointerEvent(EventType.POINTER_MOVE, { pointerId: 0, x: 150, y: 250 })));
+      assert.strictEqual(pm.hasPosition, true);
+      assert.strictEqual(pm.position.x, 150);
+      assert.strictEqual(pm.position.y, 250);
+      assert.strictEqual(pm.getPointers().length, 0);
+    });
+
+    it("first POINTER_MOVE at exactly (0,0) sets hasPosition true", () => {
+      const pm = new PointerManager();
+      pm.update(queueWith(pointerEvent(EventType.POINTER_MOVE, { pointerId: 0, x: 0, y: 0 })));
+      assert.strictEqual(pm.hasPosition, true);
+      assert.strictEqual(pm.position.x, 0);
+      assert.strictEqual(pm.position.y, 0);
+    });
+
+    it("POINTER_DOWN at (0,0) sets hasPosition true", () => {
+      const pm = new PointerManager();
+      pm.update(queueWith(pointerEvent(EventType.POINTER_DOWN, { pointerId: 1, x: 0, y: 0 })));
+      assert.strictEqual(pm.hasPosition, true);
+      assert.strictEqual(pm.position.x, 0);
+      assert.strictEqual(pm.position.y, 0);
+    });
+
+    it("POINTER_UP preserves hasPosition and last position", () => {
+      const pm = new PointerManager();
+      pm.update(queueWith(pointerEvent(EventType.POINTER_DOWN, { pointerId: 1, x: 100, y: 100 })));
+      pm.update(queueWith(pointerEvent(EventType.POINTER_UP, { pointerId: 1, x: 100, y: 100 })));
+      assert.strictEqual(pm.hasPosition, true);
+      assert.strictEqual(pm.position.x, 100);
+      assert.strictEqual(pm.position.y, 100);
+      assert.strictEqual(pm.getPointers().length, 0);
+    });
+
+    it("movement after release updates position but not active pointers", () => {
+      const pm = new PointerManager();
+      pm.update(queueWith(pointerEvent(EventType.POINTER_DOWN, { pointerId: 0, x: 100, y: 100 })));
+      pm.update(queueWith(pointerEvent(EventType.POINTER_UP, { pointerId: 0, x: 100, y: 100 })));
+      pm.update(queueWith(pointerEvent(EventType.POINTER_MOVE, { pointerId: 0, x: 300, y: 200 })));
+      assert.strictEqual(pm.hasPosition, true);
+      assert.strictEqual(pm.position.x, 300);
+      assert.strictEqual(pm.position.y, 200);
+      assert.strictEqual(pm.getPointers().length, 0);
+    });
+
+    it("getPointers remains drag-only after hover moves", () => {
+      const pm = new PointerManager();
+      pm.update(queueWith(pointerEvent(EventType.POINTER_MOVE, { pointerId: 0, x: 10, y: 10 })));
+      pm.update(queueWith(pointerEvent(EventType.POINTER_MOVE, { pointerId: 0, x: 20, y: 20 })));
+      assert.strictEqual(pm.getPointers().length, 0);
+      assert.strictEqual(pm.hasPosition, true);
+    });
+  });
+
+  describe("PointerFacade hasPosition", () => {
+    function makeFacade(pm, cs = null) {
+      const facade = new PointerFacade({ devices: { get: (c) => c === PointerManager ? pm : null }, coordinateSystem: cs });
+      // PointerFacade expects _system.devices.get and _system.coordinateSystem
+      facade._system = { devices: { get: (c) => c === PointerManager ? pm : null }, coordinateSystem: cs };
+      return facade;
+    }
+
+    it("initial hasPosition false and x/y 0", () => {
+      const pm = new PointerManager();
+      const facade = makeFacade(pm);
+      assert.strictEqual(facade.hasPosition, false);
+      assert.strictEqual(facade.x, 0);
+      assert.strictEqual(facade.y, 0);
+    });
+
+    it("hasPosition true after first move and x/y reflect position", () => {
+      const pm = new PointerManager();
+      pm.update(queueWith(pointerEvent(EventType.POINTER_MOVE, { pointerId: 0, x: 50, y: 60 })));
+      const facade = makeFacade(pm);
+      assert.strictEqual(facade.hasPosition, true);
+      assert.strictEqual(facade.x, 50);
+      assert.strictEqual(facade.y, 60);
+    });
+
+    it("hasPosition true after move to (0,0)", () => {
+      const pm = new PointerManager();
+      pm.update(queueWith(pointerEvent(EventType.POINTER_MOVE, { pointerId: 0, x: 0, y: 0 })));
+      const facade = makeFacade(pm);
+      assert.strictEqual(facade.hasPosition, true);
+      assert.strictEqual(facade.x, 0);
+      assert.strictEqual(facade.y, 0);
+    });
+
+    it("hasPosition remains true after release", () => {
+      const pm = new PointerManager();
+      pm.update(queueWith(pointerEvent(EventType.POINTER_DOWN, { pointerId: 0, x: 100, y: 100 })));
+      pm.update(queueWith(pointerEvent(EventType.POINTER_UP, { pointerId: 0, x: 100, y: 100 })));
+      const facade = makeFacade(pm);
+      assert.strictEqual(facade.hasPosition, true);
+      assert.strictEqual(facade.x, 100);
+      assert.strictEqual(pm.getPointers().length, 0);
+    });
+
+    it("coordinate conversion applies to persistent position", () => {
+      const pm = new PointerManager();
+      pm.update(queueWith(pointerEvent(EventType.POINTER_MOVE, { pointerId: 0, x: 100, y: 100 })));
+      const cs = new CoordinateSystem({ canvasRect: { x: 10, y: 20, width: 800, height: 600 }, devicePixelRatio: 2 });
+      const facade = makeFacade(pm, cs);
+      // toViewport: (100-10)/2=45, (100-20)/2=40
+      assert.strictEqual(facade.x, 45);
+      assert.strictEqual(facade.y, 40);
+      assert.strictEqual(facade.hasPosition, true);
+    });
+
+    it("does not import Mouse", () => {
+      const content = fs.readFileSync(new URL("../../input/facade/PointerFacade.js", import.meta.url), "utf8");
+      assert.ok(!content.includes("Mouse"), "PointerFacade should not import Mouse");
+    });
   });
 });

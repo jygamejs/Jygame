@@ -99,6 +99,7 @@ export class SoAParticleAccessor extends ParticleAccessor {
   get alive() { return this._s._alive[this._i]; } set alive(v) { this._s._alive[this._i] = v; }
   get seed() { return this._s._seed[this._i]; } set seed(v) { this._s._seed[this._i] = v; }
   get segment() { return this._s._segment[this._i]; } set segment(v) { this._s._segment[this._i] = v; }
+  get visualType() { return this._s._visualType[this._i]; } set visualType(v) { this._s._visualType[this._i] = v; }
 
   get texture() { return this._texture; } set texture(v) { this._texture = v; }
   get originX() { return this._originX; } set originX(v) { this._originX = v; }

@@ -3,6 +3,8 @@ import { ParticleEffect } from "./ParticleEffect.js";
 import { BackendResolver } from "./EngineResolvers.js";
 import { StorageResolver } from "./storage/StorageResolver.js";
 import { Renderer } from "../renderer/index.js";
+import { VisualType } from "../visuals/ParticleVisual.js";
+import { DefaultParticleVisual } from "../visuals/DefaultParticleVisual.js";
 
 const DEFAULT_CAPACITY = 256;
 const CAPACITY_SAFETY_MULTIPLIER = 1.5;
@@ -13,6 +15,41 @@ function _resolvePosition(position) {
     return { x: position[0] ?? 0, y: position[1] ?? 0 };
   }
   return { x: position.x ?? 0, y: position.y ?? 0 };
+}
+
+function _createVisualInitializer(visual) {
+  if (!visual) return null;
+  if (visual.visualType === VisualType.CIRCLE) {
+    const radius = visual.radius;
+    if (radius != null) {
+      return (p) => {
+        p.visualType = VisualType.CIRCLE;
+        // radius overrides size if provided; otherwise size drives diameter
+        if (radius != null) p.size = radius * 2;
+      };
+    }
+    return (p) => {
+      p.visualType = VisualType.CIRCLE;
+    };
+  }
+  if (visual.visualType === VisualType.TEXTURE) {
+    return (p) => {
+      p.visualType = VisualType.TEXTURE;
+      p.texture = visual.texture;
+      p.width = visual.width;
+      p.height = visual.height;
+      p.originX = visual.originX;
+      p.originY = visual.originY;
+      p.frameX = visual.frameX;
+      p.frameY = visual.frameY;
+      p.frameWidth = visual.frameWidth;
+      p.frameHeight = visual.frameHeight;
+    };
+  }
+  // DEFAULT
+  return (p) => {
+    p.visualType = VisualType.DEFAULT;
+  };
 }
 
 function _createLifetimeInitializer(lifetime, userInitializer) {
@@ -35,6 +72,14 @@ function _createLifetimeInitializer(lifetime, userInitializer) {
     };
   }
   return setLife;
+}
+
+function _combineInitializers(visualInit, lifetimeInit, userInit) {
+  return (p, i, emitter) => {
+    if (visualInit) visualInit(p, i, emitter);
+    if (lifetimeInit) lifetimeInit(p, i, emitter);
+    if (userInit) userInit(p, i, emitter);
+  };
 }
 
 function _estimateCapacity(rate, lifetime, capacity) {
@@ -72,19 +117,24 @@ export function createParticleEffect({
   backend,
   renderer,
   gl,
+  visual,
 } = {}) {
   const storage = StorageResolver.createDefault();
   const contextSource = _resolveContextSource({ renderer, gl });
   const backendInstance = BackendResolver.resolve({ backend, storage, renderer: contextSource });
 
+  const effectiveVisual = visual ?? new DefaultParticleVisual();
+  const visualInit = _createVisualInitializer(effectiveVisual);
+  const lifetimeInit = lifetime !== undefined ? _createLifetimeInitializer(lifetime, null) : null;
+  const combinedInit = _combineInitializers(visualInit, lifetimeInit, initializer);
+
   const asset = new ParticleAsset({
     capacity: _estimateCapacity(rate, lifetime, capacity),
     modifiers,
     shape,
+    visual: effectiveVisual,
     emitter: { rate },
-    initializer: lifetime !== undefined
-      ? _createLifetimeInitializer(lifetime, initializer)
-      : initializer,
+    initializer: combinedInit,
     backend: backendInstance,
   });
 

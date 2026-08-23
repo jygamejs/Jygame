@@ -2,8 +2,12 @@ import { ModifierStack } from "../modifiers/ModifierStack.js";
 import { ModifierRegistry } from "../modifiers/ModifierRegistry.js";
 import { ShapeRegistry } from "../shapes/ShapeRegistry.js";
 import { ParticleEffect } from "./ParticleEffect.js";
+import { CircleParticleVisual } from "../visuals/CircleParticleVisual.js";
+import { TextureParticleVisual } from "../visuals/TextureParticleVisual.js";
 
 const _assetVersion = 1;
+
+import { DefaultParticleVisual } from "../visuals/DefaultParticleVisual.js";
 
 export class ParticleAsset {
   constructor({
@@ -16,6 +20,7 @@ export class ParticleAsset {
     renderParticle,
     renderer,
     backend,
+    visual,
     displayName,
     description,
   } = {}) {
@@ -28,6 +33,7 @@ export class ParticleAsset {
     this._renderer = renderer || null;
     this._backend = backend || null;
     this._shape = shape || null;
+    this._visual = visual ?? new DefaultParticleVisual();
 
     if (modifierStack) {
       if (!(modifierStack instanceof ModifierStack)) {
@@ -63,6 +69,7 @@ export class ParticleAsset {
     return new ParticleAsset({
       capacity: overrides.capacity ?? this._capacity,
       shape: overrides.shape ?? this._shape,
+      visual: overrides.visual ?? this._visual,
       modifierStack: overrides.modifierStack ?? (overrides.modifiers ? undefined : this._modifierStack),
       modifiers: overrides.modifiers,
       emitter: { ...this._emitterConfig, ...overrides.emitter },
@@ -74,6 +81,8 @@ export class ParticleAsset {
       description: overrides.description ?? this._description,
     });
   }
+
+  get visual() { return this._visual; }
 
   get displayName() { return this._displayName; }
   set displayName(v) { this._displayName = v; }
@@ -88,6 +97,9 @@ export class ParticleAsset {
     }
     if (this._shape) {
       obj.shape = this._shape.toJSON();
+    }
+    if (this._visual && this._visual.type !== "default") {
+      obj.visual = this._visual.toJSON();
     }
     if (this._displayName) obj.displayName = this._displayName;
     if (this._description) obj.description = this._description;
@@ -119,6 +131,13 @@ export class ParticleAsset {
     }
     if (data.shape) {
       opts.shape = ShapeRegistry.create(data.shape);
+    }
+    if (data.visual) {
+      if (data.visual.type === "circle") {
+        opts.visual = new CircleParticleVisual(data.visual);
+      } else if (data.visual.type === "texture") {
+        opts.visual = new TextureParticleVisual(data.visual);
+      }
     }
     if (data.emitter) {
       opts.emitter = data.emitter;

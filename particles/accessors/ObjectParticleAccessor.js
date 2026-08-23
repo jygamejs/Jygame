@@ -43,6 +43,7 @@ export class ObjectParticleAccessor extends ParticleAccessor {
   get frameY() { return this._p.frameY; } set frameY(v) { this._p.frameY = v; }
   get frameWidth() { return this._p.frameWidth; } set frameWidth(v) { this._p.frameWidth = v; }
   get frameHeight() { return this._p.frameHeight; } set frameHeight(v) { this._p.frameHeight = v; }
+  get visualType() { return this._p.visualType; } set visualType(v) { this._p.visualType = v; }
 
   get collides() { return this._p.collides; } set collides(v) { this._p.collides = v; }
   get radius() { return this._p.radius; } set radius(v) { this._p.radius = v; }

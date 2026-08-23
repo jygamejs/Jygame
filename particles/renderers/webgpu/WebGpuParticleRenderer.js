@@ -10,6 +10,7 @@ struct Particle {
   alive: u32,
   seed: f32,
   segment: u32,
+  visualType: u32,
 };
 
 @group(0) @binding(0) var<storage, read> particles : array<Particle>;
@@ -24,6 +25,7 @@ struct VertexOutput {
   @location(0) uv: vec2<f32>,
   @location(1) color: vec3<f32>,
   @location(2) alpha: f32,
+  @location(3) visualType: f32,
 };
 
 const QUAD_POS = array<vec2<f32>, 4>(
@@ -60,6 +62,7 @@ fn vs_main(@builtin(vertex_index) vertexIndex: u32, @builtin(instance_index) ins
   output.uv = QUAD_UV[vertexIndex];
   output.color = vec3(f32(p.r) / 255.0, f32(p.g) / 255.0, f32(p.b) / 255.0);
   output.alpha = p.alpha;
+  output.visualType = f32(p.visualType);
   return output;
 }
 `;
@@ -72,10 +75,17 @@ struct FragmentInput {
   @location(0) uv: vec2<f32>,
   @location(1) color: vec3<f32>,
   @location(2) alpha: f32,
+  @location(3) visualType: f32,
 };
 
 @fragment
 fn fs_main(input: FragmentInput) -> @location(0) vec4<f32> {
+  if (input.visualType > 0.5 && input.visualType < 1.5) {
+    let c = input.uv - vec2(0.5);
+    if (dot(c, c) > 0.25) {
+      discard;
+    }
+  }
   let texColor = textureSample(particleTexture, textureSampler, input.uv);
   let resultColor = input.color * texColor.rgb;
   let resultAlpha = input.alpha * texColor.a;
