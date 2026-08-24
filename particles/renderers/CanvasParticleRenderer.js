@@ -95,8 +95,10 @@ export class CanvasParticleRenderer extends ParticleRenderer {
         ctx.restore();
         sprites++;
       } else {
+        const w = width > 0 ? width : size;
+        const h = height > 0 ? height : size;
         ctx.fillStyle = `rgb(${r},${g},${b})`;
-        ctx.fillRect(x - size * 0.5, y - size * 0.5, size, size);
+        ctx.fillRect(x - w * originX, y - h * originY, w, h);
         primitives++;
       }
     }
