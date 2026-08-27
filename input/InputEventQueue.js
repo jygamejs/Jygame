@@ -79,6 +79,12 @@ export class InputEventQueue {
     }
   }
 
+  snapshot() {
+    const arr = [];
+    this.each(e => arr.push(e));
+    return Object.freeze(arr);
+  }
+
   get length() {
     return this._tiers[Tier.HIGH].length
       + this._tiers[Tier.NORMAL].length

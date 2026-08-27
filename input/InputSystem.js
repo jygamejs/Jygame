@@ -7,6 +7,7 @@ export class InputSystem {
   constructor(options = {}) {
     this._devices = new DeviceRegistry();
     this._events = new InputEventQueue(options.queueCapacity || 64);
+    this._snapshotEvents = Object.freeze([]);
     this._backend = null;
     this._contextStack = null;
     this._coordinateSystem = null;
@@ -34,6 +35,7 @@ export class InputSystem {
 
   get devices() { return this._devices; }
   get events() { return this._events; }
+  get eventSnapshot() { return this._snapshotEvents; }
   get backend() { return this._backend; }
   get contextStack() { return this._contextStack; }
   get coordinateSystem() { return this._coordinateSystem; }
@@ -112,6 +114,7 @@ export class InputSystem {
       this._contextStack.evaluate(this._devices);
     }
 
+    this._snapshotEvents = this._events.snapshot();
     this._events.clear();
   }
 }
