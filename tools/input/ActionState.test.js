@@ -128,12 +128,12 @@ describe("ActionState", () => {
       assert.strictEqual(s.consumeBuffered(), false);
     });
 
-    it("snapshot decrements the buffer timer", () => {
+    it("snapshot expires buffer after time", async () => {
       const s = new ActionState();
       s.buffer(50);
       s.snapshot();
       assert.strictEqual(s.isBuffered, true);
-      s.snapshot();
+      await new Promise(r => setTimeout(r, 60));
       s.snapshot();
       assert.strictEqual(s.isBuffered, false);
     });

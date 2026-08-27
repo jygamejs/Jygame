@@ -7,7 +7,7 @@ export class ActionState {
     this._prevStrength = 0;
     this._vector = { x: 0, y: 0 };
     this._prevVector = { x: 0, y: 0 };
-    this._bufferTimer = 0;
+    this._bufferUntil = 0;
   }
 
   get kind() { return this._kind; }
@@ -23,15 +23,23 @@ export class ActionState {
     return { x: 0, y: 0 };
   }
 
-  get isBuffered() { return this._bufferTimer > 0; }
+  get isBuffered() {
+    return this._bufferUntil > 0 && performance.now() < this._bufferUntil;
+  }
+
+  get bufferedRemaining() {
+    if (this._bufferUntil === 0) return 0;
+    const rem = this._bufferUntil - performance.now();
+    return rem > 0 ? rem : 0;
+  }
 
   buffer(durationMs) {
-    this._bufferTimer = durationMs;
+    this._bufferUntil = performance.now() + durationMs;
   }
 
   consumeBuffered() {
-    if (this._bufferTimer > 0) {
-      this._bufferTimer = 0;
+    if (this.isBuffered) {
+      this._bufferUntil = 0;
       return true;
     }
     return false;
@@ -42,9 +50,8 @@ export class ActionState {
     this._prevVector.x = this._vector.x;
     this._prevVector.y = this._vector.y;
 
-    if (this._bufferTimer > 0) {
-      this._bufferTimer -= 16.67;
-      if (this._bufferTimer < 0) this._bufferTimer = 0;
+    if (this._bufferUntil !== 0 && performance.now() >= this._bufferUntil) {
+      this._bufferUntil = 0;
     }
   }
 

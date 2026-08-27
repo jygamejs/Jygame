@@ -27,7 +27,8 @@ export class StringResolver {
     const stack = this._contextStack;
     if (!stack) return null;
 
-    for (const ctx of stack._contexts) {
+    const sorted = [...stack._contexts].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+    for (const ctx of sorted) {
       const state = ctx.actionMap.getState(name);
       if (state) return state;
     }
@@ -337,10 +338,33 @@ export class StringResolver {
   buffer(name, ms) {
     if (!this._system || !this._system.contextStack) return;
 
-    const state = this._findActionState(name);
-    if (state) {
-      state.buffer(ms);
+    const stack = this._system.contextStack;
+    const sorted = [...stack._contexts].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+    for (const ctx of sorted) {
+      const st = ctx.actionMap.getState(name);
+      if (st) {
+        st.buffer(ms);
+        return;
+      }
     }
+  }
+
+  buffered(name) {
+    if (!this._system || !this._system.contextStack) return false;
+    const state = this._findActionState(name);
+    if (!state) return false;
+    return state.isBuffered;
+  }
+
+  consumeBuffered(name) {
+    if (!this._system || !this._system.contextStack) return false;
+    const stack = this._system.contextStack;
+    const sorted = [...stack._contexts].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+    for (const ctx of sorted) {
+      const st = ctx.actionMap.getState(name);
+      if (st) return st.consumeBuffered();
+    }
+    return false;
   }
 
   bindings() {

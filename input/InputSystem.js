@@ -1,5 +1,6 @@
 import { DeviceRegistry } from "./DeviceRegistry.js";
 import { InputEventQueue } from "./InputEventQueue.js";
+import { HistoryBuffer } from "./HistoryBuffer.js";
 import { EventType } from "./EventType.js";
 import { PointerManager } from "./PointerManager.js";
 
@@ -8,6 +9,7 @@ export class InputSystem {
     this._devices = new DeviceRegistry();
     this._events = new InputEventQueue(options.queueCapacity || 64);
     this._snapshotEvents = Object.freeze([]);
+    this._history = new HistoryBuffer(options.historyCapacity || 128);
     this._backend = null;
     this._contextStack = null;
     this._coordinateSystem = null;
@@ -36,6 +38,8 @@ export class InputSystem {
   get devices() { return this._devices; }
   get events() { return this._events; }
   get eventSnapshot() { return this._snapshotEvents; }
+  get history() { return this._history; }
+  get historySnapshot() { return this._history.snapshot(); }
   get backend() { return this._backend; }
   get contextStack() { return this._contextStack; }
   get coordinateSystem() { return this._coordinateSystem; }
@@ -115,6 +119,7 @@ export class InputSystem {
     }
 
     this._snapshotEvents = this._events.snapshot();
+    this._history.pushAll(this._snapshotEvents);
     this._events.clear();
   }
 }

@@ -10,6 +10,7 @@ import { KeyCode } from "./KeyCode.js";
 import { resolveKeyboardIdentifier, resolveGamepadIdentifier, resolveMouseButton } from "./facade/KeyStrings.js";
 import { Keyboard } from "./Keyboard.js";
 import { ActionKind } from "./ActionKind.js";
+import { HistoryBuffer } from "./HistoryBuffer.js";
 
 // The single input facade. Everything here resolves through the InputSystem
 // (devices, context stack, action maps).
@@ -167,6 +168,74 @@ function getKeyboardFacade() {
   return _keyboardFacade;
 }
 
+const _queues = new Map();
+const _queuesSeen = new Map();
+const _queueCapacity = 16;
+
+function getOrCreateQueue(name) {
+  if (!_queues.has(name)) {
+    _queues.set(name, new HistoryBuffer(_queueCapacity));
+    _queuesSeen.set(name, new WeakSet());
+  }
+  return _queues.get(name);
+}
+
+function enqueuePendingForQueue(name) {
+  const queue = _queues.get(name);
+  if (!queue) return;
+  const seen = _queuesSeen.get(name);
+  const hist = _system ? _system.historySnapshot : getSnapshot();
+  const stack = _system ? _system.contextStack : null;
+  let actionState = null;
+  let actionBindings = null;
+  let actionKind = null;
+  let isAction = false;
+  if (stack) {
+    const sorted = [...stack._contexts].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+    for (const ctx of sorted) {
+      const st = ctx.actionMap.getState(name);
+      if (st) {
+        actionState = st;
+        actionBindings = ctx.actionMap.getBindings(name);
+        actionKind = st.kind;
+        isAction = true;
+        break;
+      }
+    }
+  }
+  for (const ev of hist) {
+    if (!isPressEvent(ev)) continue;
+    if (seen.has(ev)) continue;
+    let matched = false;
+    let matchedVector = null;
+    if (isAction) {
+      for (const b of actionBindings) {
+        const m = bindingMatchesEvent(b, ev);
+        if (m.matched) {
+          matched = true;
+          if (m.vector) matchedVector = m.vector;
+          break;
+        }
+      }
+      if (matched) {
+        if (actionKind === ActionKind.VECTOR2 && matchedVector) {
+          queue.push({ x: matchedVector[0], y: matchedVector[1], timestamp: ev.timestamp });
+        } else if (actionKind === ActionKind.VECTOR2) {
+          queue.push({ x: 0, y: 0, timestamp: ev.timestamp });
+        } else {
+          queue.push({ timestamp: ev.timestamp, code: ev.data.code, key: ev.data.key, device: ev.device, type: ev.type });
+        }
+        seen.add(ev);
+      }
+    } else {
+      if (eventMatchesRawIdentifier(ev, name)) {
+        queue.push({ timestamp: ev.timestamp, code: ev.data.code, key: ev.data.key, device: ev.device, type: ev.type, data: ev.data });
+        seen.add(ev);
+      }
+    }
+  }
+}
+
 export const Input = {
   setSystem(system) {
     _system = system;
@@ -175,6 +244,8 @@ export const Input = {
     _touchFacade = new TouchFacade(system);
     _gamepadFacade = new GamepadFacade(system);
     _gestures.setSystem(system);
+    _queues.clear();
+    _queuesSeen.clear();
   },
 
   getSystem() {
@@ -233,6 +304,14 @@ export const Input = {
 
   buffer(name, ms) {
     getResolver().buffer(name, ms);
+  },
+
+  buffered(name) {
+    return getResolver().buffered(name);
+  },
+
+  consumeBuffered(name) {
+    return getResolver().consumeBuffered(name);
   },
 
   bindings() {
@@ -319,6 +398,48 @@ export const Input = {
 
   get keyboard() {
     return getKeyboardFacade();
+  },
+
+  history(limitOrOptions) {
+    if (!_system) return Object.freeze([]);
+    const snap = _system.historySnapshot;
+    if (limitOrOptions == null) return snap;
+    if (typeof limitOrOptions === "number") {
+      if (limitOrOptions <= 0) return Object.freeze([]);
+      if (limitOrOptions >= snap.length) return snap;
+      return Object.freeze(snap.slice(snap.length - limitOrOptions));
+    }
+    if (typeof limitOrOptions === "object") {
+      if (typeof limitOrOptions.within === "number") {
+        const cutoff = performance.now() - limitOrOptions.within;
+        const filtered = snap.filter(e => e.timestamp >= cutoff);
+        return Object.freeze(filtered);
+      }
+      if (typeof limitOrOptions.limit === "number") {
+        const n = limitOrOptions.limit;
+        if (n <= 0) return Object.freeze([]);
+        if (n >= snap.length) return snap;
+        return Object.freeze(snap.slice(snap.length - n));
+      }
+    }
+    return snap;
+  },
+
+  queue(name) {
+    if (!name) return Object.freeze([]);
+    getOrCreateQueue(name);
+    enqueuePendingForQueue(name);
+    const q = _queues.get(name);
+    return q ? q.snapshot() : Object.freeze([]);
+  },
+
+  next(name) {
+    if (!name) return null;
+    getOrCreateQueue(name);
+    enqueuePendingForQueue(name);
+    const q = _queues.get(name);
+    if (!q || q.length === 0) return null;
+    return q.shift();
   },
 
   get pointer() {
