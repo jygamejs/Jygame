@@ -11,6 +11,7 @@ import { resolveKeyboardIdentifier, resolveGamepadIdentifier, resolveMouseButton
 import { Keyboard } from "./Keyboard.js";
 import { ActionKind } from "./ActionKind.js";
 import { HistoryBuffer } from "./HistoryBuffer.js";
+import { RepeatConfig } from "./RepeatConfig.js";
 
 // The single input facade. Everything here resolves through the InputSystem
 // (devices, context stack, action maps).
@@ -25,6 +26,7 @@ let _pointerFacade = null;
 let _touchFacade = null;
 let _gamepadFacade = null;
 let _gestures = new GestureDispatcher(null);
+const _rawRepeatStates = new Map();
 
 function getResolver() {
   if (!_resolver) _resolver = new StringResolver(_system);
@@ -140,6 +142,80 @@ function eventMatchesRawIdentifier(e, name) {
   return false;
 }
 
+function getRawRepeatState(canonical) {
+  if (!_rawRepeatStates.has(canonical)) {
+    _rawRepeatStates.set(canonical, { pressedAt: 0, nextAt: 0, repeated: false, wasDown: false, lastTickId: -1, lastResult: false });
+  }
+  return _rawRepeatStates.get(canonical);
+}
+
+function rawRepeated(name, delayOverride, rateOverride) {
+  const upper = name.toUpperCase();
+  const kbResolved = resolveKeyboardIdentifier(name);
+  let canonical = null;
+  let isDown = false;
+  if (kbResolved) {
+    if (kbResolved.kind === "physical") {
+      canonical = `physical:${kbResolved.keyCode}`;
+      const kb = _system ? _system.devices.get(Keyboard) : null;
+      isDown = kb ? kb.isDown(kbResolved.keyCode) : false;
+    } else {
+      canonical = `logical:${kbResolved.key}`;
+      const kb = _system ? _system.devices.get(Keyboard) : null;
+      isDown = kb ? kb.isLogicalDown(kbResolved.key) : false;
+    }
+  } else {
+    const gpad = resolveGamepadIdentifier(upper);
+    if (gpad) {
+      if (gpad.kind === "button") {
+        canonical = `gamepad:${gpad.gamepadIndex}:${gpad.button}`;
+        const gp = _system ? _system.devices.get(Gamepad) : null;
+        isDown = gp ? gp.isDown(gpad.gamepadIndex, gpad.button) : false;
+      } else return false;
+    } else {
+      const mb = resolveMouseButton(upper);
+      if (mb !== null) {
+        canonical = `mouse:${mb}`;
+        const mouse = _system ? _system.devices.get(Mouse) : null;
+        isDown = mouse ? mouse.isDown(mb) : false;
+      } else return false;
+    }
+  }
+  const state = getRawRepeatState(canonical);
+  const tickId = _system ? _system.tickId : 0;
+  if (state.lastTickId === tickId) return state.lastResult;
+  state.lastTickId = tickId;
+  const now = performance.now();
+  const delay = delayOverride != null ? delayOverride : RepeatConfig.delay;
+  const rate = rateOverride != null ? rateOverride : RepeatConfig.rate;
+  const wasDown = state.wasDown;
+  let result = false;
+  if (!wasDown && isDown) {
+    state.pressedAt = now;
+    state.nextAt = now + delay;
+    state.wasDown = true;
+    state.repeated = true;
+    result = true;
+  } else if (wasDown && isDown) {
+    if (now >= state.nextAt) {
+      state.repeated = true;
+      do { state.nextAt += rate; } while (now >= state.nextAt);
+      result = true;
+    } else {
+      state.repeated = false;
+      result = false;
+    }
+  } else if (!isDown) {
+    state.pressedAt = 0;
+    state.nextAt = 0;
+    state.wasDown = false;
+    state.repeated = false;
+    result = false;
+  }
+  state.lastResult = result;
+  return result;
+}
+
 let _keyboardFacade = null;
 function getKeyboardFacade() {
   if (_keyboardFacade) return _keyboardFacade;
@@ -163,6 +239,30 @@ function getKeyboardFacade() {
         }
       }
       return null;
+    },
+    get repeatDelay() { return RepeatConfig.delay; },
+    set repeatDelay(v) {
+      if (typeof v !== "number" || v < 0 || !Number.isFinite(v)) throw new TypeError("repeatDelay must be a finite number >= 0");
+      RepeatConfig.delay = v;
+      if (_system && _system.contextStack) {
+        for (const ctx of _system.contextStack._contexts) {
+          for (const entry of ctx.actionMap.entries()) {
+            entry.state.repeatDelay = v;
+          }
+        }
+      }
+    },
+    get repeatRate() { return RepeatConfig.rate; },
+    set repeatRate(v) {
+      if (typeof v !== "number" || v <= 0 || !Number.isFinite(v)) throw new TypeError("repeatRate must be a finite number > 0");
+      RepeatConfig.rate = v;
+      if (_system && _system.contextStack) {
+        for (const ctx of _system.contextStack._contexts) {
+          for (const entry of ctx.actionMap.entries()) {
+            entry.state.repeatRate = v;
+          }
+        }
+      }
     },
   };
   return _keyboardFacade;
@@ -394,6 +494,43 @@ export const Input = {
     const snap = getSnapshot();
     for (const e of snap) if (isKeyboardRelease(e)) return true;
     return false;
+  },
+
+  repeated(name, options) {
+    if (!name) return false;
+    let delay = null, rate = null;
+    if (options) {
+      if (options.delay !== undefined) {
+        if (typeof options.delay !== "number" || options.delay < 0 || !Number.isFinite(options.delay)) throw new TypeError("repeatDelay must be a finite number >= 0");
+        delay = options.delay;
+      }
+      if (options.rate !== undefined) {
+        if (typeof options.rate !== "number" || options.rate <= 0 || !Number.isFinite(options.rate)) throw new TypeError("repeatRate must be a finite number > 0");
+        rate = options.rate;
+      }
+    }
+    const stack = _system ? _system.contextStack : null;
+    if (stack) {
+      const sorted = [...stack._contexts].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+      for (const ctx of sorted) {
+        const st = ctx.actionMap.getState(name);
+        if (st) {
+          if (st.kind === ActionKind.VECTOR2) return false;
+          if (delay !== null) {
+            st.repeatDelay = delay;
+            if (st.pressed && st._repeatPressedAt !== 0) {
+              const now = performance.now();
+              if (now < st._repeatNextAt) {
+                st._repeatNextAt = st._repeatPressedAt + delay;
+              }
+            }
+          }
+          if (rate !== null) st.repeatRate = rate;
+          return st.repeated;
+        }
+      }
+    }
+    return rawRepeated(name, delay, rate);
   },
 
   get keyboard() {

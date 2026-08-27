@@ -1,4 +1,5 @@
 import { ActionKind } from "../ActionKind.js";
+import { RepeatConfig } from "../RepeatConfig.js";
 
 export class ActionState {
   constructor(kind = ActionKind.DIGITAL) {
@@ -8,6 +9,11 @@ export class ActionState {
     this._vector = { x: 0, y: 0 };
     this._prevVector = { x: 0, y: 0 };
     this._bufferUntil = 0;
+    this._repeatDelay = RepeatConfig.delay;
+    this._repeatRate = RepeatConfig.rate;
+    this._repeatPressedAt = 0;
+    this._repeatNextAt = 0;
+    this._repeated = false;
   }
 
   get kind() { return this._kind; }
@@ -45,6 +51,18 @@ export class ActionState {
     return false;
   }
 
+  get repeatDelay() { return this._repeatDelay; }
+  set repeatDelay(v) {
+    if (typeof v !== "number" || v < 0 || !Number.isFinite(v)) throw new TypeError("repeatDelay must be a finite number >= 0");
+    this._repeatDelay = v;
+  }
+  get repeatRate() { return this._repeatRate; }
+  set repeatRate(v) {
+    if (typeof v !== "number" || v <= 0 || !Number.isFinite(v)) throw new TypeError("repeatRate must be a finite number > 0");
+    this._repeatRate = v;
+  }
+  get repeated() { return this._repeated; }
+
   snapshot() {
     this._prevStrength = this._strength;
     this._prevVector.x = this._vector.x;
@@ -53,6 +71,7 @@ export class ActionState {
     if (this._bufferUntil !== 0 && performance.now() >= this._bufferUntil) {
       this._bufferUntil = 0;
     }
+    this._repeated = false;
   }
 
   // justPressed/justReleased are a plain comparison against the snapshotted
@@ -64,6 +83,8 @@ export class ActionState {
   // contexts against live device state instead, which fixes only the case
   // that needed fixing.
   _update(strength, vector) {
+    const wasDown = this._prevStrength > 0;
+    const isDown = strength > 0;
     this._strength = Math.max(0, Math.min(1, strength));
     if (vector) {
       this._vector.x = vector.x;
@@ -71,6 +92,25 @@ export class ActionState {
     } else if (this._strength === 0) {
       this._vector.x = 0;
       this._vector.y = 0;
+    }
+    const now = performance.now();
+    if (!wasDown && isDown) {
+      this._repeatPressedAt = now;
+      this._repeatNextAt = now + this._repeatDelay;
+      this._repeated = true;
+    } else if (wasDown && isDown) {
+      if (now >= this._repeatNextAt) {
+        this._repeated = true;
+        do {
+          this._repeatNextAt += this._repeatRate;
+        } while (now >= this._repeatNextAt);
+      } else {
+        this._repeated = false;
+      }
+    } else if (!isDown) {
+      this._repeatPressedAt = 0;
+      this._repeatNextAt = 0;
+      this._repeated = false;
     }
   }
 }

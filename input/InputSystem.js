@@ -10,6 +10,7 @@ export class InputSystem {
     this._events = new InputEventQueue(options.queueCapacity || 64);
     this._snapshotEvents = Object.freeze([]);
     this._history = new HistoryBuffer(options.historyCapacity || 128);
+    this._tickId = 0;
     this._backend = null;
     this._contextStack = null;
     this._coordinateSystem = null;
@@ -40,6 +41,7 @@ export class InputSystem {
   get eventSnapshot() { return this._snapshotEvents; }
   get history() { return this._history; }
   get historySnapshot() { return this._history.snapshot(); }
+  get tickId() { return this._tickId; }
   get backend() { return this._backend; }
   get contextStack() { return this._contextStack; }
   get coordinateSystem() { return this._coordinateSystem; }
@@ -98,6 +100,7 @@ export class InputSystem {
   }
 
   update() {
+    this._tickId++;
     this.snapshot();
 
     if (this._backend) {
