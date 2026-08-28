@@ -131,6 +131,8 @@ export class BrowserBackend extends InputBackend {
       x: e.clientX,
       y: e.clientY,
       type: e.pointerType,
+      movementX: e.movementX ?? 0,
+      movementY: e.movementY ?? 0,
       pressure: e.pressure,
       tiltX: e.tiltX,
       tiltY: e.tiltY,

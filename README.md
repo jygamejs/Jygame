@@ -55,6 +55,27 @@ Input.gestures.on("pinch", (e) => camera.zoom *= e.scale);
 
 Bind once in a scene's declarative `input` block, and mix keyboards, gamepads, and touch without writing a single `if (event.key === ...)`.
 
+### 🖱️ Mouse, pointer, cursor and pointer lock
+Mouse-specific controls live under `Input.mouse` — unified pointer stays under `Input.pointer`:
+
+```js
+Input.mouse.x; Input.mouse.y; Input.mouse.worldX; // screen → viewport → world via CoordinateSystem
+Input.mouse.deltaX; Input.mouse.deltaY;             // movement since last tick; relative while pointer-locked
+Input.mouse.wheel; Input.mouse.wheelX;              // aliases: Input.wheel / Input.wheelX remain
+
+if (Input.mouse.left.pressed) this.select(Input.mouse.worldX, Input.mouse.worldY);
+if (Input.mouse.right.down) this.aim();
+Input.mouse.isDown("left"); Input.mouse.button("middle").pressed;
+
+Input.mouse.cursor.visible = false;                 // hides browser cursor without touching DOM
+Input.mouse.cursor.style = "crosshair";             // any CSS cursor keyword
+Input.mouse.cursor.setImage("assets/cursor.png", {x:4, y:4}); // CSS url() with hotspot, or engine-render deferred
+
+if (Input.mouse.left.pressed) await Input.mouse.pointerLock.lock(); // promise<boolean>, user-gesture required
+if (Input.mouse.pointerLock.isLocked) camera.rotate(Input.mouse.deltaX);
+Input.mouse.pointerLock.unlock();
+```
+
 ### 🎞️ Sprite sheets, atlases, and folders — animated in one call
 Whether your art is a folder of numbered PNGs, a packed TexturePacker atlas, or a hand-cut sprite sheet, `Image.animate()` turns it into ready-to-play clips:
 

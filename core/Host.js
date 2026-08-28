@@ -60,6 +60,11 @@ export class Host {
   // produces.
   getGamepads() { return []; }
 
+  // ─── Pointer lock (optional) ────────────────────────
+  requestPointerLock(element) { return Promise.reject(new Error("Pointer lock not supported")); }
+  exitPointerLock() {}
+  get pointerLockElement() { return null; }
+
   // ─── Misc ───────────────────────────────────────────
 
   // Used by the debug workspace, which opens a generated page in a new window.
@@ -135,6 +140,30 @@ export class BrowserHost extends Host {
       return navigator.getGamepads();
     }
     return [];
+  }
+
+  requestPointerLock(element) {
+    if (element && typeof element.requestPointerLock === "function") {
+      const res = element.requestPointerLock();
+      // Some browsers return void, normalize to promise
+      if (res && typeof res.then === "function") return res;
+      return Promise.resolve();
+    }
+    if (typeof document !== "undefined" && element === document.documentElement) {
+      return Promise.resolve();
+    }
+    return Promise.reject(new Error("Pointer lock not supported"));
+  }
+
+  exitPointerLock() {
+    if (typeof document !== "undefined" && typeof document.exitPointerLock === "function") {
+      document.exitPointerLock();
+    }
+  }
+
+  get pointerLockElement() {
+    if (typeof document !== "undefined") return document.pointerLockElement || null;
+    return null;
   }
 
   openWindow(url, name) {
@@ -278,6 +307,8 @@ export class HeadlessHost extends Host {
     this._resizeCallbacks = new Set();
     this._selectors = new Map();
     this._gamepads = [];
+    this._pointerLockElement = null;
+    this._mockPointerLockShouldFail = false;
     this.hiddenValue = false;
     this.openedWindows = [];
     this.createdObjectURLs = [];
@@ -290,6 +321,31 @@ export class HeadlessHost extends Host {
   setGamepads(pads) {
     this._gamepads = pads || [];
   }
+
+  get pointerLockElement() { return this._pointerLockElement || null; }
+
+  requestPointerLock(element) {
+    if (this._mockPointerLockShouldFail) {
+      const err = new Error("mock pointer lock failed");
+      this.emitDocument("pointerlockerror", err);
+      return Promise.reject(err);
+    }
+    this._pointerLockElement = element;
+    this.emitDocument("pointerlockchange", { target: element });
+    return Promise.resolve();
+  }
+
+  exitPointerLock() {
+    if (!this._pointerLockElement) return;
+    this._pointerLockElement = null;
+    this.emitDocument("pointerlockchange", { target: null });
+  }
+
+  /**
+   * Test hook: make the next requestPointerLock reject.
+   * Call with `false` to restore success.
+   */
+  set mockPointerLockShouldFail(v) { this._mockPointerLockShouldFail = !!v; }
 
   getGamepads() {
     return this._gamepads;

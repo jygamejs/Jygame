@@ -92,6 +92,8 @@ export class TestBackend extends InputBackend {
         x: options.x ?? 0,
         y: options.y ?? 0,
         type: options.type ?? "mouse",
+        movementX: options.movementX ?? 0,
+        movementY: options.movementY ?? 0,
         pressure: options.pressure ?? 0.5,
         tiltX: options.tiltX ?? 0,
         tiltY: options.tiltY ?? 0,

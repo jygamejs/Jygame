@@ -12,12 +12,15 @@ export class PointerManager extends Device {
     this._pointers = new Map();
     this._position = { x: 0, y: 0 };
     this._hasPosition = false;
+    this._pointerLocked = false;
   }
 
   get type() { return PointerManager; }
   get storage() { return this._storage; }
 
   get count() { return this._storage.activeCount; }
+
+  _setLocked(v) { this._pointerLocked = !!v; }
 
   get position() {
     return this._position;
@@ -119,6 +122,28 @@ export class PointerManager extends Device {
   }
 
   _onPointerMove(data, dt) {
+    if (this._pointerLocked) {
+      // While locked, absolute position stays frozen; delta is relative
+      const mx = typeof data.movementX === "number" ? data.movementX : 0;
+      const my = typeof data.movementY === "number" ? data.movementY : 0;
+      const slot = this._pointers.get(data.pointerId);
+      if (slot !== undefined) {
+        const pd = this._storage.getPointerData(slot);
+        if (pd && pd.isDown) {
+          pd.prevX = pd.x;
+          pd.prevY = pd.y;
+          // keep pd.x/y frozen, only delta moves
+          pd.deltaX = mx;
+          pd.deltaY = my;
+          const instantVx = dt > 0 ? (mx / dt) * 1000 : 0;
+          const instantVy = dt > 0 ? (my / dt) * 1000 : 0;
+          pd.velocityX = VELOCITY_ALPHA * instantVx + (1 - VELOCITY_ALPHA) * pd.velocityX;
+          pd.velocityY = VELOCITY_ALPHA * instantVy + (1 - VELOCITY_ALPHA) * pd.velocityY;
+          pd.distance += Math.sqrt(mx * mx + my * my);
+        }
+      }
+      return;
+    }
     if (Number.isFinite(data.x) && Number.isFinite(data.y)) {
       this._position.x = data.x;
       this._position.y = data.y;

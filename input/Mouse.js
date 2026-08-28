@@ -13,6 +13,7 @@ export class Mouse extends Device {
     this._prevButtons = new Uint8Array(BUTTON_COUNT);
     this._position = { x: 0, y: 0 };
     this._hoverPosition = { x: 0, y: 0 };
+    this._hasPosition = false;
     this._wheel = 0;
     this._wheelH = 0;
     this._doubleClicked = false;
@@ -32,7 +33,10 @@ export class Mouse extends Device {
   get doubleClicked() { return this._doubleClicked; }
   get hoverPosition() { return { x: this._hoverPosition.x, y: this._hoverPosition.y }; }
   get isHovering() { return this._isHovering; }
+  get hasPosition() { return this._hasPosition; }
   get isPointerLocked() { return this._pointerLocked; }
+
+  _setLocked(v) { this._pointerLocked = !!v; }
 
   requestPointerLock() {
     this._pointerLocked = true;
@@ -97,11 +101,15 @@ export class Mouse extends Device {
   }
 
   _onPointerDown(data) {
+    if (data.type && data.type !== "mouse") return;
     this._isHovering = true;
-    this._position.x = data.x;
-    this._position.y = data.y;
-    this._hoverPosition.x = data.x;
-    this._hoverPosition.y = data.y;
+    if (Number.isFinite(data.x) && Number.isFinite(data.y)) {
+      this._position.x = data.x;
+      this._position.y = data.y;
+      this._hoverPosition.x = data.x;
+      this._hoverPosition.y = data.y;
+      this._hasPosition = true;
+    }
 
     const btn = data.button ?? 0;
     if (btn >= 0 && btn < BUTTON_COUNT) {
@@ -121,6 +129,7 @@ export class Mouse extends Device {
   }
 
   _onPointerUp(data) {
+    if (data.type && data.type !== "mouse") return;
     const btn = data.button ?? 0;
     if (btn >= 0 && btn < BUTTON_COUNT) {
       this._buttons[btn] = 0;
@@ -128,13 +137,26 @@ export class Mouse extends Device {
   }
 
   _onPointerMove(data) {
+    if (data.type && data.type !== "mouse") return;
     this._isHovering = true;
-    this._deltaX = data.x - this._position.x;
-    this._deltaY = data.y - this._position.y;
-    this._position.x = data.x;
-    this._position.y = data.y;
-    this._hoverPosition.x = data.x;
-    this._hoverPosition.y = data.y;
+    if (this._pointerLocked) {
+      // While locked, absolute x/y is frozen; delta is relative movement.
+      const mx = typeof data.movementX === "number" ? data.movementX : 0;
+      const my = typeof data.movementY === "number" ? data.movementY : 0;
+      this._deltaX = mx;
+      this._deltaY = my;
+      // Do not update _position while locked; retain last known absolute.
+      return;
+    }
+    if (Number.isFinite(data.x) && Number.isFinite(data.y)) {
+      this._deltaX = data.x - this._position.x;
+      this._deltaY = data.y - this._position.y;
+      this._position.x = data.x;
+      this._position.y = data.y;
+      this._hoverPosition.x = data.x;
+      this._hoverPosition.y = data.y;
+      this._hasPosition = true;
+    }
   }
 
   _onWheel(data) {

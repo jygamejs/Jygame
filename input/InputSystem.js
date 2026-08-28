@@ -3,6 +3,8 @@ import { InputEventQueue } from "./InputEventQueue.js";
 import { HistoryBuffer } from "./HistoryBuffer.js";
 import { EventType } from "./EventType.js";
 import { PointerManager } from "./PointerManager.js";
+import { CursorManager } from "./CursorManager.js";
+import { PointerLockManager } from "./PointerLockManager.js";
 
 export class InputSystem {
   constructor(options = {}) {
@@ -20,6 +22,10 @@ export class InputSystem {
     // input layer keeps no dependency on the debug layer.
     this._keyEventCount = 0;
     this._pointerEventCount = 0;
+    this._domElement = null;
+    this._host = null;
+    this._cursorManager = new CursorManager(this);
+    this._pointerLockManager = new PointerLockManager(this, this._cursorManager);
   }
 
   get keyEventCount() { return this._keyEventCount; }
@@ -45,6 +51,19 @@ export class InputSystem {
   get backend() { return this._backend; }
   get contextStack() { return this._contextStack; }
   get coordinateSystem() { return this._coordinateSystem; }
+  get domElement() { return this._domElement; }
+  set domElement(el) {
+    this._domElement = el;
+    if (this._cursorManager) this._cursorManager.setElement(el);
+    if (this._pointerLockManager) this._pointerLockManager.setElement(el);
+  }
+  get host() { return this._host; }
+  set host(h) {
+    this._host = h;
+    if (this._pointerLockManager) this._pointerLockManager.setHost(h);
+  }
+  get cursorManager() { return this._cursorManager; }
+  get pointerLockManager() { return this._pointerLockManager; }
 
   set contextStack(cs) {
     this._contextStack = cs;
@@ -124,5 +143,16 @@ export class InputSystem {
     this._snapshotEvents = this._events.snapshot();
     this._history.pushAll(this._snapshotEvents);
     this._events.clear();
+  }
+
+  destroy() {
+    if (this._pointerLockManager) this._pointerLockManager.destroy();
+    if (this._cursorManager) this._cursorManager.destroy();
+    if (this._backend) {
+      try { this._backend.stop(); } catch {}
+      this._backend = null;
+    }
+    this._domElement = null;
+    this._host = null;
   }
 }

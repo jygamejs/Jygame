@@ -2,6 +2,7 @@ import { StringResolver } from "./facade/StringResolver.js";
 import { PointerFacade } from "./facade/PointerFacade.js";
 import { TouchFacade } from "./facade/TouchFacade.js";
 import { GamepadFacade } from "./facade/GamepadFacade.js";
+import { MouseFacade } from "./facade/MouseFacade.js";
 import { GestureDispatcher } from "./GestureDispatcher.js";
 import { GestureType } from "./GestureType.js";
 import { Mouse } from "./Mouse.js";
@@ -25,6 +26,7 @@ let _resolver = null;
 let _pointerFacade = null;
 let _touchFacade = null;
 let _gamepadFacade = null;
+let _mouseFacade = null;
 let _gestures = new GestureDispatcher(null);
 const _rawRepeatStates = new Map();
 
@@ -46,6 +48,21 @@ function getTouch() {
 function getGamepad() {
   if (!_gamepadFacade) _gamepadFacade = new GamepadFacade(_system);
   return _gamepadFacade;
+}
+
+function getMouse() {
+  if (!_mouseFacade) {
+    const cm = _system ? (_system.cursorManager || null) : null;
+    const pl = _system ? (_system.pointerLockManager || null) : null;
+    _mouseFacade = new MouseFacade(_system, cm, pl);
+  } else if (_mouseFacade._system !== _system) {
+    _mouseFacade._attachSystem(_system);
+    if (_system) {
+      if (_system.cursorManager) _mouseFacade.setCursorManager(_system.cursorManager);
+      if (_system.pointerLockManager) _mouseFacade.setPointerLockManager(_system.pointerLockManager);
+    }
+  }
+  return _mouseFacade;
 }
 
 function getSnapshot() {
@@ -343,6 +360,8 @@ export const Input = {
     _pointerFacade = new PointerFacade(system);
     _touchFacade = new TouchFacade(system);
     _gamepadFacade = new GamepadFacade(system);
+    // recreate mouse facade to bind to new system / managers
+    _mouseFacade = null;
     _gestures.setSystem(system);
     _queues.clear();
     _queuesSeen.clear();
@@ -581,6 +600,10 @@ export const Input = {
 
   get pointer() {
     return getPointer();
+  },
+
+  get mouse() {
+    return getMouse();
   },
 
   get touch() {

@@ -99,6 +99,11 @@ export class Game {
       canvasRect: { x: 0, y: 0, width, height },
       devicePixelRatio: this.host.devicePixelRatio,
     });
+    // Wire DOM element and host for cursor / pointer-lock managers
+    // Prefer the canvas for cursor/pointerLock so styling stays on the presentation surface
+    const canvasEl = this.rendererHost ? this.rendererHost.canvas : null;
+    this.inputSystem.domElement = canvasEl || container;
+    this.inputSystem.host = this.host;
 
     // Register standard input devices
     this.inputSystem.devices.register(new Keyboard());
@@ -198,6 +203,9 @@ export class Game {
   _syncInputCanvasRect() {
     const canvas = this.canvas;
     const cs = this.inputSystem && this.inputSystem.coordinateSystem;
+    if (this.inputSystem && canvas && this.inputSystem.domElement !== canvas) {
+      this.inputSystem.domElement = canvas;
+    }
     if (!canvas || !cs || typeof canvas.getBoundingClientRect !== "function") return;
     const r = canvas.getBoundingClientRect();
     const prev = cs.canvasRect;
@@ -605,9 +613,9 @@ export class Game {
     }
     this.scenes.reset();
     if (this.inputSystem) {
-      const backend = this.inputSystem.backend;
-      if (backend && typeof backend.stop === "function") backend.stop();
+      try { this.inputSystem.destroy(); } catch {}
     }
+    Input.setSystem(null);
     Input.gestures.clear();
     if (this.debugSession) { this.debugSession.close(); this.debugSession = null; }
     if (this._debug && this._debugOverlay) this._debugOverlay.destroy();
