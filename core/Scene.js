@@ -12,6 +12,7 @@ import { Text } from "../display/Text.js";
 import { InputContext } from "../input/actions/InputContext.js";
 import { ActionMap } from "../input/actions/ActionMap.js";
 import { BindingCompiler } from "../input/facade/BindingCompiler.js";
+import { ComboMap } from "../input/ComboMap.js";
 import { RenderQueue } from "../ecs/render/RenderQueue.js";
 import { AudioListener } from "../audio/AudioListener.js";
 import { ParticleEffect } from "../particles/ParticleEffect.js";
@@ -171,13 +172,17 @@ export class Scene extends EcsScene {
 
       if (this._context.inputSystem && this._context.inputSystem.contextStack) {
         this._compileInputBindings();
+        this._compileCombos();
         if (!this._actionMap) {
           this._actionMap = new ActionMap();
+        }
+        if (!this._comboMap) {
+          this._comboMap = new ComboMap();
         }
         this._inputContext = new InputContext(
           this.constructor.name,
           this._actionMap,
-          { priority: this._inputPriority },
+          { priority: this._inputPriority, comboMap: this._comboMap },
         );
         this._context.inputSystem.contextStack.push(this._inputContext);
       }
@@ -222,6 +227,24 @@ export class Scene extends EcsScene {
     const map = compiler.compile(rawInput);
 
     this._actionMap = map;
+  }
+
+  _compileCombos() {
+    const rawCombo = this.combo;
+    if (!rawCombo || typeof rawCombo !== "object" || Array.isArray(rawCombo)) return;
+    const cmap = new ComboMap();
+    for (const [name, def] of Object.entries(rawCombo)) {
+      try {
+        if (Array.isArray(def)) {
+          cmap.set(name, { sequence: def });
+        } else if (def && typeof def === "object" && Array.isArray(def.sequence)) {
+          cmap.set(name, { sequence: def.sequence, within: def.within, consume: def.consume });
+        }
+      } catch (e) {
+        if (typeof console !== "undefined") console.warn(`[jygame] invalid combo "${name}": ${e.message}`);
+      }
+    }
+    this._comboMap = cmap;
   }
 
   // Re-point the world's renderer-bound resources at the game's current

@@ -330,6 +330,28 @@ physical mouse → Mouse device ─┐
 
 * **Compatibility** — `Input.pointer`, `Input.wheel/wheelX`, `Input.pressed("LEFT_MOUSE")`, `Input.events/history/queue/next/buffer/repeated`, gestures, keyboard repeat remain intact. No new event types; mouse motion/wheel flow through `BrowserBackend` (`movementX/Y` now forwarded) → `InputEvent` → `InputSystem` → devices.
 
+### Input — Sequences & Combos
+
+`input` turns physical inputs into semantic actions; `combo` turns ordered actions into named sequences. Jygame provides the mechanism, not fighting-game semantics (no Forward/Back, quarter-circle, facing).
+
+```
+physical input → input (ActionMap via BindingCompiler) → action → combo (ComboMap) → ordered sequence → Input.sequence()
+```
+
+* **Scene declaration** (`core/Scene.js:220`) — `input = { punch: "KeyJ", down: "KeyS" }` compiled to `ActionMap`; `combo = { hadoken: ["down","right","punch"] }` or `{ hadoken: { sequence:[...], within:300, consume:true } }` compiled to `ComboMap` (`input/ComboMap.js:1`). Both stored on `InputContext` (`_actionMap` + `_comboMap`), pushed to `ContextStack` (`input/actions/ContextStack.js:1`) with priority; `Scene.exit` pops, so stale combos disappear.
+
+* **Resolution** (`input/SequenceManager.js:27` + `input/EventMatcher.js:82`) — `Input.sequence("hadoken")` first looks for combo `hadoken` in highest-priority context; if found expands to its `sequence/within/consume`. Otherwise treats string as single-step `[name]`. `Input.sequence(["down","right"])` is direct. Steps resolve via `doesEventMatchName`: highest-priority action that defines the name (via `bindingMatchesEvent`) else raw (`resolveKeyboardIdentifier` physical → `resolveGamepadIdentifier` → `resolveMouseButton` → logical fallback). No duplicate resolver.
+
+* **Timing** — uses `InputEvent.timestamp` (`performance.now()` monotonic, `input/InputEvent.js:36`). `within` is per-step max gap; history may contain gaps (empty ticks) but timestamps drive checks, not frame counts. Exact `gap == within` passes.
+
+* **History** — `InputSystem.historySnapshot` (`HistoryBuffer` 128) is source, sorted by `timestamp` before search to handle tier reordering, never mutated. Bounded eviction drops oldest, so old sequences naturally expire.
+
+* **Matching** — brute-force subsequence search with backtracking, allowing unrelated events between steps, supporting multiple events per tick. Bounded (`n=128, m≤~5`) so cheap. `WeakSet` per matcher tracks consumed events when `consume:true`; history never deleted, so `Input.history()` stable and overlapping `["A","B"]` / `["B","A"]` can both be true on `A B A`. Effective `consume = perCall.consume ?? combo.consume ?? false`, `within = perCall.within ?? combo.within ?? ∞`.
+
+* **State** — `SequenceManager` (`input/SequenceManager.js:1`) holds `Map<key, {consumed:WeakSet}>` where `key` is `combo:ctxName:name` or `seq:json` or `single:name`. `Input.setSystem(null)` clears. No unbounded global history.
+
+* **Existing APIs untouched** — `history/queue/next/buffer/repeated/events/presses` remain separate consumers.
+
 ### AnimationSystem
 
 ```

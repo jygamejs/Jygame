@@ -55,6 +55,22 @@ Input.gestures.on("pinch", (e) => camera.zoom *= e.scale);
 
 Bind once in a scene's declarative `input` block, and mix keyboards, gamepads, and touch without writing a single `if (event.key === ...)`.
 
+### 🥊 Input sequences & combos
+Ordered inputs give raw history meaning — `input` names physical inputs, `combo` names their order:
+
+```js
+class FightingScene extends Scene {
+  input = { punch: "KeyJ", down: "KeyS", right: "KeyD" };
+  combo = { hadoken: ["down","right","punch"] }; // or { hadoken: { sequence: [...], within:300, consume:true } }
+  update(){ if (Input.sequence("hadoken")) this.player.hadoken(); }
+}
+Input.sequence(["KeyW","KeyD","Space"]); // raw
+Input.sequence(["down","right","punch"], {within:300, consume:true});
+Input.sequence("hadoken", {within:300}); // combo name resolves via active context priority
+```
+
+`within` is per-step max gap using `performance.now()` timestamps; history is bounded and never mutated by `consume` (per-matcher `WeakSet`), so overlapping `["A","B"]` and `["B","A"]` can both be true.
+
 ### 🖱️ Mouse, pointer, cursor and pointer lock
 Mouse-specific controls live under `Input.mouse` — unified pointer stays under `Input.pointer`:
 

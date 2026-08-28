@@ -13,6 +13,7 @@ import { Keyboard } from "./Keyboard.js";
 import { ActionKind } from "./ActionKind.js";
 import { HistoryBuffer } from "./HistoryBuffer.js";
 import { RepeatConfig } from "./RepeatConfig.js";
+import { SequenceManager } from "./SequenceManager.js";
 
 // The single input facade. Everything here resolves through the InputSystem
 // (devices, context stack, action maps).
@@ -28,7 +29,15 @@ let _touchFacade = null;
 let _gamepadFacade = null;
 let _mouseFacade = null;
 let _gestures = new GestureDispatcher(null);
+let _sequenceManager = null;
 const _rawRepeatStates = new Map();
+
+function getSequenceManager() {
+  if (!_sequenceManager || _sequenceManager._system !== _system) {
+    _sequenceManager = new SequenceManager(_system);
+  }
+  return _sequenceManager;
+}
 
 function getResolver() {
   if (!_resolver) _resolver = new StringResolver(_system);
@@ -135,15 +144,11 @@ function bindingMatchesEvent(binding, e) {
 function eventMatchesRawIdentifier(e, name) {
   const upper = name.toUpperCase();
   const kbResolved = resolveKeyboardIdentifier(name);
-  if (kbResolved) {
-    if (kbResolved.kind === "physical") {
-      if (!isKeyboardPress(e)) return false;
-      const code = KeyCode.fromDOMCode(e.data.code);
-      return code === kbResolved.keyCode;
-    } else {
-      if (!isKeyboardPress(e)) return false;
-      return e.data.key === kbResolved.key;
-    }
+  // Physical keyboard takes precedence over mouse/gamepad for known physical codes (KeyA etc.)
+  if (kbResolved && kbResolved.kind === "physical") {
+    if (!isKeyboardPress(e)) return false;
+    const code = KeyCode.fromDOMCode(e.data.code);
+    return code === kbResolved.keyCode;
   }
   const gpad = resolveGamepadIdentifier(upper);
   if (gpad) {
@@ -155,6 +160,10 @@ function eventMatchesRawIdentifier(e, name) {
   const mb = resolveMouseButton(upper);
   if (mb !== null) {
     return e.type === EventType.POINTER_DOWN && e.data.button === mb;
+  }
+  if (kbResolved) {
+    if (!isKeyboardPress(e)) return false;
+    return e.data.key === kbResolved.key;
   }
   return false;
 }
@@ -365,6 +374,10 @@ export const Input = {
     _gestures.setSystem(system);
     _queues.clear();
     _queuesSeen.clear();
+    if (_sequenceManager) {
+      _sequenceManager.clear();
+      _sequenceManager._attachSystem(system);
+    }
   },
 
   getSystem() {
@@ -550,6 +563,10 @@ export const Input = {
       }
     }
     return rawRepeated(name, delay, rate);
+  },
+
+  sequence(seqOrName, options) {
+    return getSequenceManager().sequence(seqOrName, options);
   },
 
   get keyboard() {
