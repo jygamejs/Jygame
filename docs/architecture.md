@@ -350,6 +350,8 @@ physical input → input (ActionMap via BindingCompiler) → action → combo (C
 
 * **State** — `SequenceManager` (`input/SequenceManager.js:1`) holds `Map<key, {consumed:WeakSet}>` where `key` is `combo:ctxName:name` or `seq:json` or `single:name`. `Input.setSystem(null)` clears. No unbounded global history.
 
+* **Matcher** (`input/Matcher.js:1`, `input/SequenceManager.js:48`) — `Input.match(predicate)` validates `typeof predicate==="function"` else `TypeError`, returns opaque `{[Symbol(InputMatcher)]:true, predicate}`. `isMatcher` checks symbol, no duck typing. `Input.sequence` accepts `string|Matcher` per element, validates `string|Matcher` else `TypeError`. For matcher steps `SequenceManager._enrichEvent(event)` builds `{type,device,timestamp,data,action,name,actions,matches(name)}` where `action` is primary matching action via `doesEventMatchName` scan, `actions` is all matching actions, `matches` helper reuses resolver. Predicate receives enriched historical event (frozen timestamp), errors propagate. Combo declarations remain declarative strings, not matchers; programmatic `Input.sequence([..., Input.match(...), ...])` is the escape hatch for facing-dependent `"forward"` etc. Matcher is stateless; per-matcher `WeakSet` and `within` handling reused via same DFS, key incorporates matcher identity (`WeakMap` id) so distinct matchers don’t share consumption.
+
 * **Existing APIs untouched** — `history/queue/next/buffer/repeated/events/presses` remain separate consumers.
 
 ### AnimationSystem

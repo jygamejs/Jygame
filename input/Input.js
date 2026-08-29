@@ -14,6 +14,7 @@ import { ActionKind } from "./ActionKind.js";
 import { HistoryBuffer } from "./HistoryBuffer.js";
 import { RepeatConfig } from "./RepeatConfig.js";
 import { SequenceManager } from "./SequenceManager.js";
+import { createMatcher } from "./Matcher.js";
 
 // The single input facade. Everything here resolves through the InputSystem
 // (devices, context stack, action maps).
@@ -567,6 +568,10 @@ export const Input = {
 
   sequence(seqOrName, options) {
     return getSequenceManager().sequence(seqOrName, options);
+  },
+
+  match(predicate) {
+    return createMatcher(predicate);
   },
 
   get keyboard() {

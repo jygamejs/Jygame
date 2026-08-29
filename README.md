@@ -55,8 +55,8 @@ Input.gestures.on("pinch", (e) => camera.zoom *= e.scale);
 
 Bind once in a scene's declarative `input` block, and mix keyboards, gamepads, and touch without writing a single `if (event.key === ...)`.
 
-### 🥊 Input sequences & combos
-Ordered inputs give raw history meaning — `input` names physical inputs, `combo` names their order:
+### 🥊 Input sequences, combos & matchers
+Ordered inputs give raw history meaning — `input` names physical inputs, `combo` names their order, `match` bridges runtime semantics:
 
 ```js
 class FightingScene extends Scene {
@@ -67,9 +67,13 @@ class FightingScene extends Scene {
 Input.sequence(["KeyW","KeyD","Space"]); // raw
 Input.sequence(["down","right","punch"], {within:300, consume:true});
 Input.sequence("hadoken", {within:300}); // combo name resolves via active context priority
+
+// Escape hatch for facing-dependent or stateful semantics — no fighting-game knowledge in engine
+const forward = Input.match(ev => ev.action==="right" ? fighter.facing===1 : ev.action==="left" ? fighter.facing===-1 : false);
+if (Input.sequence(["down", forward, "punch"])) fighter.hadoken();
 ```
 
-`within` is per-step max gap using `performance.now()` timestamps; history is bounded and never mutated by `consume` (per-matcher `WeakSet`), so overlapping `["A","B"]` and `["B","A"]` can both be true.
+`within` is per-step max gap using `performance.now()` timestamps; history is bounded and never mutated by `consume` (per-matcher `WeakSet`), so overlapping `["A","B"]` and `["B","A"]` can both be true. Matchers are opaque `Symbol`-tagged objects; predicate receives enriched historical `event` (`{type,device,timestamp,data,action,name,actions,matches()}`) and errors propagate.
 
 ### 🖱️ Mouse, pointer, cursor and pointer lock
 Mouse-specific controls live under `Input.mouse` — unified pointer stays under `Input.pointer`:

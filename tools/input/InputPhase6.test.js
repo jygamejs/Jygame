@@ -389,3 +389,239 @@ describe("Phase6 — consumption", () => {
     assert.strictEqual(Input.sequence(["b","a"], { consume: true }), true);
   });
 });
+
+describe("Phase6A — Input.match construction", () => {
+  it("Input.match(fn) returns matcher", () => {
+    const m = Input.match(() => true);
+    assert.ok(m);
+    assert.strictEqual(typeof m.predicate, "function");
+  });
+  it("matcher distinguishable from plain object", () => {
+    const m = Input.match(() => true);
+    const plain = { predicate: () => true };
+    // matcher has internal symbol
+    const syms = Object.getOwnPropertySymbols(m);
+    assert.ok(syms.length === 1);
+    assert.strictEqual(m[syms[0]], true);
+    assert.strictEqual(Object.getOwnPropertySymbols(plain).length, 0);
+    // sequence with plain object throws
+    const { sys } = setup();
+    assert.throws(() => Input.sequence([plain]), /sequence elements/);
+  });
+  it("invalid predicates throw TypeError", () => {
+    assert.throws(() => Input.match("forward"), TypeError);
+    assert.throws(() => Input.match(null), TypeError);
+    assert.throws(() => Input.match({}), TypeError);
+    assert.throws(() => Input.match(123), TypeError);
+    assert.throws(() => Input.match(), TypeError);
+  });
+});
+
+describe("Phase6A — matcher sequence integration", () => {
+  it("matcher matches", () => {
+    const { sys, backend } = setup();
+    const map = new ActionMap(); map.bind("a", new KeyBinding(KeyCode.KEY_A));
+    sys.contextStack.push(new InputContext("t", map));
+    now = 1000; pressKey(backend, "a", "KeyA"); sys.update();
+    const m = Input.match(() => true);
+    assert.strictEqual(Input.sequence([m]), true);
+  });
+  it("matcher does not match", () => {
+    const { sys, backend } = setup();
+    const map = new ActionMap(); map.bind("a", new KeyBinding(KeyCode.KEY_A));
+    sys.contextStack.push(new InputContext("t", map));
+    now = 1000; pressKey(backend, "a", "KeyA"); sys.update();
+    const m = Input.match(() => false);
+    assert.strictEqual(Input.sequence([m]), false);
+  });
+  it("multiple matchers", () => {
+    const { sys, backend } = setup();
+    const map = new ActionMap(); map.bind("a", new KeyBinding(KeyCode.KEY_A)); map.bind("b", new KeyBinding(KeyCode.KEY_B));
+    sys.contextStack.push(new InputContext("t", map));
+    now = 1000; pressKey(backend, "a", "KeyA"); sys.update();
+    now = 1100; pressKey(backend, "b", "KeyB"); sys.update();
+    const m1 = Input.match(ev => ev.action === "a");
+    const m2 = Input.match(ev => ev.action === "b");
+    assert.strictEqual(Input.sequence([m1, m2]), true);
+    assert.strictEqual(Input.sequence([m2, m1]), false);
+  });
+  it("matcher mixed with strings and raw", () => {
+    const { sys, backend } = setup();
+    const map = new ActionMap(); map.bind("down", new KeyBinding(KeyCode.KEY_S)); map.bind("punch", new KeyBinding(KeyCode.KEY_J));
+    sys.contextStack.push(new InputContext("t", map));
+    const fighter = { facing: 1 };
+    const forward = Input.match(ev => {
+      if (ev.action !== "left" && ev.action !== "right") return false;
+      const dir = ev.action === "right" ? 1 : -1;
+      return dir === fighter.facing;
+    });
+    // need right action
+    const map2 = new ActionMap(); map2.bind("right", new KeyBinding(KeyCode.KEY_D)); map2.bind("left", new KeyBinding(KeyCode.KEY_A));
+    sys.contextStack.push(new InputContext("dirs", map2, { priority: 5 }));
+    now = 1000; pressKey(backend, "s", "KeyS"); sys.update();
+    now = 1100; pressKey(backend, "d", "KeyD"); sys.update();
+    now = 1200; pressKey(backend, "j", "KeyJ"); sys.update();
+    assert.strictEqual(Input.sequence(["down", forward, "punch"]), true);
+    assert.strictEqual(Input.sequence(["down", forward, "KeyJ"]), true);
+  });
+  it("matcher in first/middle/final", () => {
+    const { sys, backend } = setup();
+    const map = new ActionMap(); map.bind("a", new KeyBinding(KeyCode.KEY_A)); map.bind("b", new KeyBinding(KeyCode.KEY_B)); map.bind("c", new KeyBinding(KeyCode.KEY_C));
+    sys.contextStack.push(new InputContext("t", map));
+    const ma = Input.match(ev => ev.action === "a");
+    const mb = Input.match(ev => ev.action === "b");
+    const mc = Input.match(ev => ev.action === "c");
+    now = 1000; pressKey(backend, "a", "KeyA"); sys.update();
+    now = 1100; pressKey(backend, "b", "KeyB"); sys.update();
+    now = 1200; pressKey(backend, "c", "KeyC"); sys.update();
+    assert.strictEqual(Input.sequence([ma, "b", "c"]), true);
+    assert.strictEqual(Input.sequence(["a", mb, "c"]), true);
+    assert.strictEqual(Input.sequence(["a", "b", mc]), true);
+  });
+});
+
+describe("Phase6A — historical events", () => {
+  it("predicate receives timestamp/device/code", () => {
+    const { sys, backend } = setup();
+    const map = new ActionMap(); map.bind("a", new KeyBinding(KeyCode.KEY_A));
+    sys.contextStack.push(new InputContext("t", map));
+    now = 1234; pressKey(backend, "a", "KeyA"); sys.update();
+    let seen = null;
+    const m = Input.match(ev => { seen = ev; return true; });
+    Input.sequence([m]);
+    assert.ok(seen);
+    assert.strictEqual(seen.timestamp, 1234);
+    assert.strictEqual(seen.device, "keyboard");
+    assert.strictEqual(seen.data.code, "KeyA");
+    assert.strictEqual(seen.data.key, "a");
+  });
+  it("predicate receives correct ordering and multiple candidates", () => {
+    const { sys, backend } = setup();
+    const map = new ActionMap(); map.bind("a", new KeyBinding(KeyCode.KEY_A)); map.bind("b", new KeyBinding(KeyCode.KEY_B));
+    sys.contextStack.push(new InputContext("t", map));
+    now = 1000; pressKey(backend, "a", "KeyA"); sys.update();
+    now = 1100; pressKey(backend, "b", "KeyB"); sys.update();
+    const seen = [];
+    const m = Input.match(ev => { seen.push(ev.action); return ev.action === "b"; });
+    assert.strictEqual(Input.sequence(["a", m]), true);
+    // seen should include at least b (and possibly a if predicate called for both, but our DFS only calls for candidate at step 1)
+    assert.ok(seen.includes("b"));
+  });
+});
+
+describe("Phase6A — temporal", () => {
+  it("matcher across multiple ticks", () => {
+    const { sys, backend } = setup();
+    const map = new ActionMap(); map.bind("a", new KeyBinding(KeyCode.KEY_A)); map.bind("b", new KeyBinding(KeyCode.KEY_B));
+    sys.contextStack.push(new InputContext("t", map));
+    const m = Input.match(ev => ev.action === "b");
+    now = 1000; pressKey(backend, "a", "KeyA"); sys.update();
+    now = 1500; pressKey(backend, "b", "KeyB"); sys.update();
+    assert.strictEqual(Input.sequence(["a", m]), true);
+  });
+  it("matcher participates in within", () => {
+    const { sys, backend } = setup();
+    const map = new ActionMap(); map.bind("a", new KeyBinding(KeyCode.KEY_A)); map.bind("b", new KeyBinding(KeyCode.KEY_B)); map.bind("c", new KeyBinding(KeyCode.KEY_C));
+    sys.contextStack.push(new InputContext("t", map));
+    const mb = Input.match(ev => ev.action === "b");
+    now = 1000; pressKey(backend, "a", "KeyA"); sys.update();
+    now = 1100; pressKey(backend, "b", "KeyB"); sys.update();
+    now = 1300; pressKey(backend, "c", "KeyC"); sys.update();
+    assert.strictEqual(Input.sequence(["a", mb, "c"], { within: 300 }), true);
+    assert.strictEqual(Input.sequence(["a", mb, "c"], { within: 100 }), false);
+  });
+  it("old events expire via bounded history", () => {
+    const sys = new InputSystem({ historyCapacity: 3 }); const backend = new TestBackend();
+    sys.setBackend(backend); sys.devices.register(new Keyboard()); sys.contextStack = new ContextStack(); Input.setSystem(sys);
+    const map = new ActionMap(); map.bind("a", new KeyBinding(KeyCode.KEY_A));
+    sys.contextStack.push(new InputContext("t", map));
+    const m = Input.match(ev => ev.action === "a");
+    now = 1000; pressKey(backend, "a", "KeyA"); sys.update();
+    now = 1100; pressKey(backend, "b", "KeyB"); sys.update();
+    now = 1200; pressKey(backend, "c", "KeyC"); sys.update();
+    now = 1300; pressKey(backend, "d", "KeyD"); sys.update();
+    // history capacity 3, first a evicted, matcher for a should now be false
+    assert.strictEqual(Input.sequence([m]), false);
+  });
+  it("irregular tick timing deterministic via timestamp", () => {
+    const { sys, backend } = setup();
+    const map = new ActionMap(); map.bind("a", new KeyBinding(KeyCode.KEY_A)); map.bind("b", new KeyBinding(KeyCode.KEY_B));
+    sys.contextStack.push(new InputContext("t", map));
+    const m = Input.match(ev => ev.action === "b");
+    now = 1000; pressKey(backend, "a", "KeyA"); sys.update();
+    now = 1016; sys.update();
+    now = 1033; sys.update();
+    now = 1150; pressKey(backend, "b", "KeyB"); sys.update();
+    assert.strictEqual(Input.sequence(["a", m], { within: 300 }), true);
+  });
+});
+
+describe("Phase6A — action integration", () => {
+  it("matcher can inspect action via enriched event", () => {
+    const { sys, backend } = setup();
+    const map = new ActionMap(); map.bind("right", new KeyBinding(KeyCode.KEY_D)); map.bind("down", new KeyBinding(KeyCode.KEY_S)); map.bind("punch", new KeyBinding(KeyCode.KEY_J));
+    sys.contextStack.push(new InputContext("t", map));
+    const forward = Input.match(ev => ev.action === "right");
+    now = 1000; pressKey(backend, "s", "KeyS"); sys.update();
+    now = 1100; pressKey(backend, "d", "KeyD"); sys.update();
+    now = 1200; pressKey(backend, "j", "KeyJ"); sys.update();
+    assert.strictEqual(Input.sequence(["down", forward, "punch"]), true);
+  });
+  it("forward semantic with facing", () => {
+    const { sys, backend } = setup();
+    const map = new ActionMap(); map.bind("left", new KeyBinding(KeyCode.KEY_A)); map.bind("right", new KeyBinding(KeyCode.KEY_D)); map.bind("down", new KeyBinding(KeyCode.KEY_S)); map.bind("punch", new KeyBinding(KeyCode.KEY_J));
+    sys.contextStack.push(new InputContext("t", map));
+    const fighter = { facing: 1 };
+    const forward = Input.match(ev => {
+      if (ev.action !== "left" && ev.action !== "right") return false;
+      const dir = ev.action === "right" ? 1 : -1;
+      return dir === fighter.facing;
+    });
+    now = 1000; pressKey(backend, "s", "KeyS"); sys.update();
+    now = 1100; pressKey(backend, "d", "KeyD"); sys.update();
+    now = 1200; pressKey(backend, "j", "KeyJ"); sys.update();
+    assert.strictEqual(Input.sequence(["down", forward, "punch"]), true);
+    fighter.facing = -1;
+    assert.strictEqual(Input.sequence(["down", forward, "punch"]), false);
+  });
+});
+
+describe("Phase6A — non-destructive", () => {
+  it("matcher does not mutate history/events", () => {
+    const { sys, backend } = setup();
+    const map = new ActionMap(); map.bind("a", new KeyBinding(KeyCode.KEY_A));
+    sys.contextStack.push(new InputContext("t", map));
+    now = 1000; pressKey(backend, "a", "KeyA"); sys.update();
+    const len = Input.history().length;
+    const evLen = Input.events().length;
+    const m = Input.match(() => true);
+    Input.sequence([m]);
+    assert.strictEqual(Input.history().length, len);
+    assert.strictEqual(Input.events().length, evLen);
+  });
+  it("does not interfere with queue/next/buffer/repeated", () => {
+    const { sys, backend } = setup();
+    const map = new ActionMap(); map.bind("a", new KeyBinding(KeyCode.KEY_A));
+    sys.contextStack.push(new InputContext("t", map));
+    now = 1000; pressKey(backend, "a", "KeyA"); sys.update();
+    const m = Input.match(() => true);
+    Input.sequence([m]);
+    assert.strictEqual(typeof Input.next, "function");
+    assert.strictEqual(typeof Input.queue, "function");
+    assert.strictEqual(typeof Input.buffered, "function");
+    assert.strictEqual(typeof Input.repeated, "function");
+    // queue still works
+    assert.ok(Array.isArray(Input.queue("a")));
+  });
+});
+
+describe("Phase6A — predicate errors", () => {
+  it("thrown errors propagate", () => {
+    const { sys, backend } = setup();
+    const map = new ActionMap(); map.bind("a", new KeyBinding(KeyCode.KEY_A));
+    sys.contextStack.push(new InputContext("t", map));
+    now = 1000; pressKey(backend, "a", "KeyA"); sys.update();
+    const bad = Input.match(() => { throw new Error("game bug"); });
+    assert.throws(() => Input.sequence([bad]), /game bug/);
+  });
+});

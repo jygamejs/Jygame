@@ -1,10 +1,14 @@
 import { doesEventMatchName } from "./EventMatcher.js";
+import { isMatcher } from "./Matcher.js";
 
 export class SequenceManager {
   constructor(system) {
     this._system = system;
     // key -> { consumed: WeakSet<InputEvent> }
     this._states = new Map();
+    // matcher instance -> id for key generation
+    this._matcherIds = new WeakMap();
+    this._nextMatcherId = 1;
   }
 
   _attachSystem(system) {
@@ -22,6 +26,67 @@ export class SequenceManager {
       this._states.set(key, st);
     }
     return st;
+  }
+
+  _matcherId(m) {
+    let id = this._matcherIds.get(m);
+    if (!id) {
+      id = this._nextMatcherId++;
+      this._matcherIds.set(m, id);
+    }
+    return id;
+  }
+
+  _sequenceKey(sequence) {
+    // For sequences containing matchers, key must incorporate matcher identity
+    return sequence.map(el => {
+      if (isMatcher(el)) return `m:${this._matcherId(el)}`;
+      return `s:${String(el)}`;
+    }).join("|");
+  }
+
+  _enrichEvent(event) {
+    const system = this._system;
+    // Compute matching actions for this event under current context
+    const actions = [];
+    if (system && system.contextStack) {
+      const sorted = [...system.contextStack._contexts].sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+      const seen = new Set();
+      for (const ctx of sorted) {
+        for (const entry of ctx.actionMap.entries()) {
+          if (seen.has(entry.name)) continue;
+          seen.add(entry.name);
+          if (doesEventMatchName(event, entry.name, system)) {
+            actions.push(entry.name);
+          }
+        }
+      }
+    }
+    const primary = actions[0] || null;
+    // Build enriched view; keep original fields plus helpers
+    const enriched = {
+      type: event.type,
+      device: event.device,
+      timestamp: event.timestamp,
+      data: event.data,
+      action: primary,
+      name: primary,
+      actions,
+      // helper to test arbitrary name against this historical event
+      matches: (name) => doesEventMatchName(event, name, system),
+      // reference to raw event
+      _raw: event,
+    };
+    return enriched;
+  }
+
+  _matchesStep(event, step) {
+    if (isMatcher(step)) {
+      const enriched = this._enrichEvent(event);
+      // predicate receives enriched event; allow error to propagate
+      return !!step.predicate(enriched);
+    }
+    return doesEventMatchName(event, step, this._system);
   }
 
   _resolveCombo(name) {
@@ -44,8 +109,6 @@ export class SequenceManager {
   sequence(seqOrName, options = {}) {
     const system = this._system;
     if (!system) return false;
-    const history = system.historySnapshot; // already Object.freeze array
-    if (!history || history.length === 0) return false;
 
     let sequence = null;
     let within = null;
@@ -66,11 +129,20 @@ export class SequenceManager {
       }
     } else if (Array.isArray(seqOrName)) {
       if (seqOrName.length === 0) return false;
+      // Validate elements: string or matcher (before history check so invalid throws even when empty)
+      for (const el of seqOrName) {
+        if (typeof el !== "string" && !isMatcher(el)) {
+          throw new TypeError("sequence elements must be strings or Input.match() matchers");
+        }
+      }
       sequence = seqOrName;
-      key = `seq:${JSON.stringify(sequence)}`;
+      key = `seq:${this._sequenceKey(sequence)}`;
     } else {
       return false;
     }
+
+    const history = system.historySnapshot; // already Object.freeze array
+    if (!history || history.length === 0) return false;
 
     // per-call overrides
     if (options && typeof options.within === "number") {
@@ -99,7 +171,6 @@ export class SequenceManager {
   }
 
   _findMatch(sequence, history, within, consumedSet, system) {
-    // History may be tier-ordered; sort by timestamp to preserve monotonic order
     const sortedHistory = [...history].sort((a, b) => a.timestamp - b.timestamp);
     const n = sortedHistory.length;
     const m = sequence.length;
@@ -109,7 +180,15 @@ export class SequenceManager {
       for (let i = histIdx; i < n; i++) {
         const e = sortedHistory[i];
         if (consumedSet && consumedSet.has(e)) continue;
-        if (!doesEventMatchName(e, sequence[seqIdx], system)) continue;
+        const step = sequence[seqIdx];
+        let ok = false;
+        if (isMatcher(step)) {
+          const enriched = this._enrichEvent(e);
+          ok = !!step.predicate(enriched);
+        } else {
+          ok = doesEventMatchName(e, step, system);
+        }
+        if (!ok) continue;
         if (seqIdx > 0) {
           if (within != null && within !== undefined) {
             const gap = e.timestamp - lastTime;
