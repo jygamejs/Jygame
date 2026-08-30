@@ -24,12 +24,13 @@ import { RendererHost } from "../renderer/RendererHost.js";
 import { BrowserHost } from "./Host.js";
 import { SceneStack } from "./SceneStack.js";
 import { SceneContext } from "./SceneContext.js";
+import { RenderConfig } from "../view/RenderConfig.js";
 
 export class Game {
   // `debug` is opt-in. It installs the diagnostics overlay, the Ctrl+F3
   // workspace binding and the snapshot backend; a shipped game should not be
   // carrying any of that by default.
-  constructor({ parent, width = 800, height = 600, fps = 60, maxTicks = 5, autoPause = true, scaleToFit = null, debug = false, interpolation = true, imageSmoothing = true,    renderer = "canvas", host = null } = {}) {
+  constructor({ parent, width = 800, height = 600, fps = 60, maxTicks = 5, autoPause = true, scaleToFit = null, debug = false, interpolation = true, imageSmoothing = true,    renderer = "canvas", host = null, backgroundColor = null } = {}) {
     // Every environment touch goes through the host, so the engine can run
     // under Node with no DOM. Defaults to the real browser.
     this.host = host || new BrowserHost();
@@ -40,6 +41,8 @@ export class Game {
       ? (this.host.querySelector(parent) || this.host.defaultParent)
       : (parent && typeof parent.appendChild === "function" ? parent : this.host.defaultParent);
 
+    this._backgroundColor = backgroundColor;
+
     // Canvas, renderer resolution and the fallback chain live in RendererHost.
     this.rendererHost = new RendererHost({
       host: this.host,
@@ -48,6 +51,7 @@ export class Game {
       width,
       height,
       imageSmoothing,
+      backgroundColor: this._backgroundColor,
       onRendererChanged: () => {
         if (this.scenes) this.scenes.refreshRendererResources();
         this._syncInputCanvasRect();
@@ -170,8 +174,11 @@ export class Game {
       uiLayer: this.domLayer,
       imageSmoothing,
       interpolation,
+      backgroundColor: this._backgroundColor,
       game: this,
     });
+    // Apply to any worlds already created (none yet, but keeps method useful after setter)
+    this._applyBackgroundColor();
     this.scenes.setContext(this.sceneContext);
     this.scenes.setUiLayer(this.domLayer);
 
@@ -184,6 +191,37 @@ export class Game {
   get ctx() { return this.rendererHost ? this.rendererHost.ctx : null; }
   get canvas() { return this.rendererHost ? this.rendererHost.canvas : null; }
   get _viewport() { return this.rendererHost ? this.rendererHost.viewport : null; }
+
+  get backgroundColor() { return this._backgroundColor; }
+  set backgroundColor(v) {
+    this._backgroundColor = v;
+    if (this.rendererHost) {
+      this.rendererHost.backgroundColor = v;
+    }
+    this._applyBackgroundColor();
+  }
+
+  _applyBackgroundColor() {
+    const color = this._backgroundColor;
+    // Update existing worlds (top scene and any stacked scenes)
+    if (this.scenes) {
+      for (const scene of this.scenes.all()) {
+        if (scene && scene._world) {
+          let cfg = scene._world.getResource(RenderConfig);
+          if (!cfg) {
+            cfg = new RenderConfig({ clearColor: color });
+            scene._world.setResource(RenderConfig, cfg);
+          } else {
+            cfg.clearColor = color;
+          }
+        }
+      }
+    }
+    // Also ensure future scenes get it via SceneContext
+    if (this.sceneContext) {
+      this.sceneContext.backgroundColor = color;
+    }
+  }
 
   resize(width, height) {
     this.width = width;

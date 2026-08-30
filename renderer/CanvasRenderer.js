@@ -29,16 +29,28 @@ export class CanvasRenderer extends Renderer {
       this._ctx.imageSmoothingEnabled = options.imageSmoothing;
     }
 
+    this._backgroundColor = options.backgroundColor ?? null;
     this._frameCount = 0;
     this._diagIds = null;
     this._trailRenderer = null;
   }
 
+  get backgroundColor() { return this._backgroundColor; }
+  set backgroundColor(v) { this._backgroundColor = v; }
+  setBackgroundColor(v) { this._backgroundColor = v; }
+
   beginFrame() {}
 
   clear() {
     if (!this._ctx) return;
-    this._ctx.clearRect(0, 0, this._width, this._height);
+    if (this._backgroundColor) {
+      this._ctx.save();
+      this._ctx.fillStyle = this._backgroundColor;
+      this._ctx.fillRect(0, 0, this._width, this._height);
+      this._ctx.restore();
+    } else {
+      this._ctx.clearRect(0, 0, this._width, this._height);
+    }
   }
 
   endFrame() {}

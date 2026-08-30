@@ -161,6 +161,7 @@ export class WebGLRenderer extends Renderer {
     this._immediateBg = new ImmediateCanvas(width, height);
     this._immediateFg = new ImmediateCanvas(width, height);
     this._applyImmediateSmoothing();
+    this._backgroundColor = options.backgroundColor ?? null;
     this._clearColor = [0, 0, 0, 0];
     this._trailBatch = null;
     this._tmpParticle = {};
@@ -521,12 +522,17 @@ export class WebGLRenderer extends Renderer {
   }
 
   _applyClearColor(cfg) {
-    if (!cfg || cfg.clearColor == null) {
+    const src = cfg && cfg.clearColor != null ? cfg.clearColor : this._backgroundColor;
+    if (src == null) {
       this._clearColor = [0, 0, 0, 0];
       return;
     }
-    this._clearColor = this._parseColor(cfg.clearColor);
+    this._clearColor = this._parseColor(src);
   }
+
+  get backgroundColor() { return this._backgroundColor; }
+  set backgroundColor(v) { this._backgroundColor = v; }
+  setBackgroundColor(v) { this._backgroundColor = v; }
 
   _parseColor(color) {
     if (typeof color !== "string") return [0, 0, 0, 0];

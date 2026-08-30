@@ -35,6 +35,7 @@ export class RendererHost {
     width = 800,
     height = 600,
     imageSmoothing = true,
+    backgroundColor = null,
     onRendererChanged = null,
   }) {
     this._host = host;
@@ -42,6 +43,7 @@ export class RendererHost {
     this._width = width;
     this._height = height;
     this._imageSmoothing = imageSmoothing;
+    this._backgroundColor = backgroundColor;
     this._onRendererChanged = onRendererChanged;
     this._destroyed = false;
     this._noRendererWarned = false;
@@ -72,11 +74,16 @@ export class RendererHost {
       canvas: this.canvas,
       width,
       height,
-      options: { imageSmoothing },
+      options: { imageSmoothing, backgroundColor: this._backgroundColor },
     });
 
     this.renderer = initial;
     this._index = Math.max(0, this._chain.indexOf(RendererResolver.kindOf(initial)));
+
+    // Apply initial backgroundColor to the resolved renderer
+    if (this._backgroundColor != null && this.renderer) {
+      this.backgroundColor = this._backgroundColor;
+    }
 
     if (this.renderer && typeof this.renderer.initialize === "function") {
       this._initRenderer(this.renderer);
@@ -92,6 +99,22 @@ export class RendererHost {
   get width() { return this._width; }
   get height() { return this._height; }
   get imageSmoothing() { return this._imageSmoothing; }
+  get backgroundColor() { return this._backgroundColor; }
+  set backgroundColor(v) {
+    this._backgroundColor = v;
+    // Propagate to current renderer if it supports a background
+    if (this.renderer) {
+      if (typeof this.renderer.setBackgroundColor === "function") {
+        this.renderer.setBackgroundColor(v);
+      } else if ("backgroundColor" in this.renderer) {
+        this.renderer.backgroundColor = v;
+      } else if (this.renderer._backgroundColor !== undefined) {
+        this.renderer._backgroundColor = v;
+      }
+      // WebGL/WebGPU also use RenderConfig per world; Game will set that directly.
+      // For Canvas without a world, keep the host value as fallback.
+    }
+  }
   get chain() { return this._chain; }
   get kind() { return this._chain[this._index] || null; }
   get viewport() { return this._viewport; }
@@ -144,7 +167,7 @@ export class RendererHost {
           canvas: fresh,
           width: this._width,
           height: this._height,
-          options: { imageSmoothing: this._imageSmoothing },
+          options: { imageSmoothing: this._imageSmoothing, backgroundColor: this._backgroundColor },
         });
       } catch (err) {
         this._logFallback(kind, _errorMessage(err), chain[i + 1]);
@@ -181,6 +204,15 @@ export class RendererHost {
     this.ctx = next ? next.immediateContext : null;
     if (this.ctx) {
       this.ctx.imageSmoothingEnabled = this._imageSmoothing;
+    }
+    if (this._backgroundColor != null && next) {
+      if (typeof next.setBackgroundColor === "function") {
+        next.setBackgroundColor(this._backgroundColor);
+      } else if ("backgroundColor" in next) {
+        next.backgroundColor = this._backgroundColor;
+      } else if (next._backgroundColor !== undefined) {
+        next._backgroundColor = this._backgroundColor;
+      }
     }
     this._notifyChanged();
     console.info(`[jygame] Using ${_rendererLabel(this._chain[index])} renderer.`);

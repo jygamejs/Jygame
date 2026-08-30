@@ -24,6 +24,7 @@ export class SceneContext {
     uiLayer = null,
     imageSmoothing = true,
     interpolation = true,
+    backgroundColor = null,
     game = null,
   } = {}) {
     this._host = host;
@@ -33,6 +34,7 @@ export class SceneContext {
     this._uiLayer = uiLayer;
     this._imageSmoothing = imageSmoothing;
     this._interpolation = interpolation;
+    this._backgroundColor = backgroundColor;
     this.game = game;
   }
 
@@ -52,6 +54,8 @@ export class SceneContext {
 
   get imageSmoothing() { return this._imageSmoothing; }
   get interpolation() { return this._interpolation; }
+  get backgroundColor() { return this._backgroundColor; }
+  set backgroundColor(v) { this._backgroundColor = v; }
 
   createElement(tag) {
     if (this._host) return this._host.createElement(tag);

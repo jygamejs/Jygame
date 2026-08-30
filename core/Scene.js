@@ -197,6 +197,19 @@ export class Scene extends EcsScene {
       if (this.view && this.view.config) {
         this._world.setResource(RenderConfig, this.view.config);
       }
+      // Apply Game-level backgroundColor at the rendering pipeline level
+      // so every scene inherits it by default. Scene-specific RenderConfig
+      // (via view.config) takes precedence only if it already defines clearColor.
+      const bg = this._context ? this._context.backgroundColor : null;
+      if (bg != null) {
+        let cfg = this._world.getResource(RenderConfig);
+        if (!cfg) {
+          cfg = new RenderConfig({ clearColor: bg });
+          this._world.setResource(RenderConfig, cfg);
+        } else if (cfg.clearColor == null) {
+          cfg.clearColor = bg;
+        }
+      }
       if (!this._world.getResource(AudioListener)) {
         this._world.setResource(AudioListener, this._listener);
       }
